@@ -2,8 +2,8 @@
 # Outlaw Game OS — automated ISO build
 # ----------------------------------------------------------------------------
 # Fires on:
-#   * Tag push  matching v*       (publishes ISO to the matching Release)
-#   * workflow_dispatch            (manual builds — produces an artifact only)
+#   * Tag push  matching v* or V*  (publishes ISO to the matching Release)
+#   * workflow_dispatch             (manual builds — produces an artifact only)
 #
 # Builds inside the official archlinux container so mkarchiso has the exact
 # environment it expects. The job takes ~15–25 minutes; mostly pacstrap +
@@ -12,6 +12,10 @@
 # On a tag push, the resulting outlaw-os-v<version>.iso and the matching
 # .sha256 file are attached to the GitHub Release. Users go to your Releases
 # page, click the .iso link, and they have everything they need.
+#
+# Repo layout note: the installer tree lives under Outlaw-OS-main/Outlaw-OS-main/
+# (artefact of how the original .zip extracted). Paths throughout this file
+# honour that. CodeMaker lives at the repo root as a normal directory.
 # ============================================================================
 
 name: build-iso
@@ -24,6 +28,19 @@ on:
 
 permissions:
   contents: write   # uploading release assets requires this
+
+env:
+  # Opt every JavaScript action into Node 24. Several v4/v2 actions still ship
+  # with a Node 20 runtime, which GitHub is forcing to Node 24 on 2026-06-16
+  # anyway — set this now so we're explicit, not relying on the auto-flip.
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+
+  # The repo nests the installer tree under Outlaw-OS-main/Outlaw-OS-main/.
+  # Defining this once keeps the paths below readable.
+  INSTALLER_DIR: Outlaw-OS-main/Outlaw-OS-main/outlaw-installer
+  # build.sh writes the ISO to $REPO_ROOT/out, where REPO_ROOT is the parent
+  # of outlaw-installer/. So the ISO lands at Outlaw-OS-main/Outlaw-OS-main/out/.
+  OUTPUT_DIR: Outlaw-OS-main/Outlaw-OS-main/out
 
 jobs:
   build:
@@ -60,12 +77,12 @@ jobs:
       - name: Make the build script executable
         run: |
           # Defensive: GitHub-hosted repos sometimes lose +x on checkout.
-          chmod +x outlaw-installer/build.sh
-          chmod +x outlaw-installer/bundle-codemaker.sh
+          chmod +x "$INSTALLER_DIR/build.sh"
+          chmod +x "$INSTALLER_DIR/bundle-codemaker.sh"
           # Mark every helper in the airootfs/usr/local/bin executable too —
           # mkarchiso copies bits straight from the working tree, so the +x
           # flag on the host filesystem matters.
-          find outlaw-installer/airootfs/usr/local/bin -type f -exec chmod +x {} +
+          find "$INSTALLER_DIR/airootfs/usr/local/bin" -type f -exec chmod +x {} +
 
       - name: Derive ISO version from tag (if this is a tag build)
         id: ver
@@ -86,31 +103,38 @@ jobs:
 
       - name: Build the ISO
         env:
-          # build.sh looks for CodeMaker via OUTLAW_CODEMAKER_SRC first, then
-          # several sibling paths. The repo lays CodeMaker out beside the
-          # installer, so we point at "../Outlaw CodeMaker" relative to
-          # outlaw-installer/ (which is where build.sh runs from).
+          # build.sh looks for CodeMaker via OUTLAW_CODEMAKER_SRC first. Point
+          # it at the top-level CodeMaker directory in the repo.
           OUTLAW_CODEMAKER_SRC: ${{ github.workspace }}/Outlaw CodeMaker
           # When this is a tag build, override the version. Otherwise empty,
           # which build.sh treats as "keep your default".
           OUTLAW_ISO_VERSION: ${{ steps.ver.outputs.iso_version }}
         run: |
-          cd outlaw-installer
+          cd "$INSTALLER_DIR"
           ./build.sh
 
       - name: Locate built artifacts
         id: artifacts
         run: |
-          ISO=$(ls -1 out/outlaw-os-v*.iso | head -n1)
-          SHA="$ISO.sha256"
-          if [[ ! -f "$ISO" ]]; then
-            echo "ISO not produced — check the build log above." >&2
+          # Resolve to absolute paths so downstream steps don't depend on cwd.
+          ISO_ABS=$(ls -1 "$GITHUB_WORKSPACE/$OUTPUT_DIR"/outlaw-os-v*.iso 2>/dev/null | head -n1 || true)
+          if [[ -z "$ISO_ABS" || ! -f "$ISO_ABS" ]]; then
+            echo "::error::ISO not produced under $OUTPUT_DIR — check the build log above." >&2
+            ls -lh "$GITHUB_WORKSPACE/$OUTPUT_DIR" 2>&1 || true
             exit 1
           fi
-          echo "iso_path=$ISO" >> "$GITHUB_OUTPUT"
-          echo "sha_path=$SHA" >> "$GITHUB_OUTPUT"
-          echo "iso_name=$(basename "$ISO")" >> "$GITHUB_OUTPUT"
-          ls -lh "$ISO" "$SHA"
+          SHA_ABS="$ISO_ABS.sha256"
+          ISO_NAME=$(basename "$ISO_ABS")
+          # upload-artifact + softprops/action-gh-release want workspace-
+          # relative paths. Strip the workspace prefix.
+          ISO_REL="${ISO_ABS#$GITHUB_WORKSPACE/}"
+          SHA_REL="${SHA_ABS#$GITHUB_WORKSPACE/}"
+          echo "iso_abs=$ISO_ABS"   >> "$GITHUB_OUTPUT"
+          echo "sha_abs=$SHA_ABS"   >> "$GITHUB_OUTPUT"
+          echo "iso_rel=$ISO_REL"   >> "$GITHUB_OUTPUT"
+          echo "sha_rel=$SHA_REL"   >> "$GITHUB_OUTPUT"
+          echo "iso_name=$ISO_NAME" >> "$GITHUB_OUTPUT"
+          ls -lh "$ISO_ABS" "$SHA_ABS"
 
       # Manual builds and main-branch builds keep the ISO as a workflow
       # artifact (downloadable from the Actions tab). Tag-driven builds also
@@ -120,8 +144,8 @@ jobs:
         with:
           name: ${{ steps.artifacts.outputs.iso_name }}
           path: |
-            outlaw-installer/${{ steps.artifacts.outputs.iso_path }}
-            outlaw-installer/${{ steps.artifacts.outputs.sha_path }}
+            ${{ steps.artifacts.outputs.iso_rel }}
+            ${{ steps.artifacts.outputs.sha_rel }}
           retention-days: 30
           if-no-files-found: error
 
@@ -131,8 +155,8 @@ jobs:
         with:
           # Auto-creates the Release if it doesn't exist; updates if it does.
           files: |
-            outlaw-installer/${{ steps.artifacts.outputs.iso_path }}
-            outlaw-installer/${{ steps.artifacts.outputs.sha_path }}
+            ${{ steps.artifacts.outputs.iso_rel }}
+            ${{ steps.artifacts.outputs.sha_rel }}
           generate_release_notes: true
           body: |
             ## Outlaw Game OS ${{ github.ref_name }}
