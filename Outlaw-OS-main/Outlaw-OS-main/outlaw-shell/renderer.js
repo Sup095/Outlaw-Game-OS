@@ -1,0 +1,1027 @@
+// ============================================================================
+// Outlaw OS - renderer
+// No inline handlers (CSP-safe). Everything talks to the main process through
+// the audited `window.outlaw` bridge defined in preload.js.
+// ============================================================================
+'use strict';
+
+const api = window.outlaw;
+const $ = (sel) => document.querySelector(sel);
+const $$ = (sel) => Array.from(document.querySelectorAll(sel));
+
+// The sponsor URL is configurable in Settings → Support Development.
+
+let statsTimer = null;
+let confirmResolver = null;
+let pendingUpdate = null;   // most recent successful shell-update check result
+
+// ---------------------------------------------------------------------------
+// Toast
+// ---------------------------------------------------------------------------
+let toastTimer = null;
+function toast(msg) {
+    const t = $('#toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => t.classList.remove('show'), 2600);
+}
+
+// ---------------------------------------------------------------------------
+// Boot sequence
+// ---------------------------------------------------------------------------
+async function runBoot() {
+    const log = $('#boot-log');
+    const lines = ['INITIALIZING OUTLAW OS…'];
+    log.textContent = lines.join('\n') + '\n';
+    try {
+        const i = await api.system.info();
+        lines.push(`HOST     ${i.hostname}`);
+        lines.push(`KERNEL   ${i.kernel}`);
+        lines.push(`CPU      ${i.cpu} (${i.cores} cores)`);
+        lines.push(`MEMORY   ${i.ramUsed} / ${i.ramTotal}`);
+    } catch {
+        lines.push('SYSTEM PROBE UNAVAILABLE (preview mode)');
+    }
+    lines.push('MOUNTING PAYLOAD VAULT… OK');
+    lines.push('SECURITY GUARD ACTIVE… OK');
+    lines.push('SYSTEM READY.');
+    // Type the new lines out.
+    for (let n = 5; n < lines.length; n++) {
+        log.textContent = lines.slice(0, n + 1).join('\n') + '\n';
+        await new Promise((r) => setTimeout(r, 120));
+    }
+    $('#boot-skip').focus();
+}
+
+function enterOS() {
+    $('#boot').style.display = 'none';
+    $('#app').classList.add('ready');
+    startStats();
+    refreshAiStatus();
+    checkSafeMode();
+}
+
+// Show a persistent toast banner if outlaw-session-watchdog flipped us into
+// safe mode after a crash loop. The IPC consumes the marker, so the banner
+// fires once per X session.
+async function checkSafeMode() {
+    try {
+        const r = await api.safeMode.check();
+        if (r && r.active) {
+            const reason = r.reason || 'A previous session was crash-looping.';
+            // Toast for ~12 seconds — longer than a normal toast since the
+            // user really should see this.
+            const t = $('#toast');
+            if (t) {
+                t.textContent = '⚠ Safe mode: ' + reason.slice(0, 160);
+                t.classList.add('show');
+                setTimeout(() => t.classList.remove('show'), 12_000);
+            }
+        }
+    } catch {
+        /* shell still works without this */
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Navigation
+// ---------------------------------------------------------------------------
+function showScreen(name) {
+    $$('.screen').forEach((s) => s.classList.remove('active'));
+    const el = $('#screen-' + name);
+    if (el) el.classList.add('active');
+    $$('.nav-item[data-screen]').forEach((n) => n.classList.toggle('active', n.dataset.screen === name));
+    if (name === 'files') loadFiles(currentDir || null);
+    if (name === 'tasks') refreshTasks();
+    if (name === 'gaming') refreshGaming();
+    if (name === 'apps') loadAppsCatalog();
+    if (name === 'ai') $('#ai-in').focus();
+    if (name === 'terminal') $('#term-in').focus();
+    // System Core lifecycle — init when navigating to it, teardown otherwise.
+    // The module is self-contained so this is the only hook the rest of the
+    // shell needs to know about. SC2+ slices plug into the same init/teardown.
+    if (window.outlawCore) {
+        if (name === 'syscore') window.outlawCore.init();
+        else window.outlawCore.teardown();
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Dashboard + app tiles
+// ---------------------------------------------------------------------------
+// Tiles rendered on each screen. A tile that maps to a not-yet-installed app
+// still appears — clicking it toasts "X is not installed" and the user can
+// pop over to Apps to install it. Tiles that can NEVER be installed from
+// official repos (e.g. Heroic — AUR only) are intentionally omitted.
+const TILE_GROUPS = {
+    launchers: [['browser', '🌐'], ['steam', '🎮'], ['godot', '🤖'], ['files', '📁'], ['terminal', '>_']],
+    'gaming-apps': [['steam', '🎮'], ['lutris', '🍷']],
+    'gamedev-apps': [['godot', '🤖'], ['blender', '🧊'], ['gimp', '🎨'], ['code', '💻']],
+};
+
+async function renderTiles() {
+    let registry = [];
+    try { registry = await api.apps.list(); } catch {}
+    const labelOf = (id) => (registry.find((r) => r.id === id) || {}).label || id;
+    for (const [containerId, items] of Object.entries(TILE_GROUPS)) {
+        const box = document.getElementById(containerId);
+        if (!box) continue;
+        box.innerHTML = '';
+        for (const [id, ico] of items) {
+            const b = document.createElement('button');
+            b.className = 'tile';
+            b.dataset.launch = id;
+            b.innerHTML = `<span class="t-ico">${ico}</span><span class="t-label">${labelOf(id)}</span><span class="t-sub">launch</span>`;
+            box.appendChild(b);
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Apps panel (on-demand installer over the curated catalog)
+// ---------------------------------------------------------------------------
+const CATEGORY_ICONS = {
+    'Game Dev':     '🛠',
+    'Gaming':       '🎮',
+    'Browsers':     '🌐',
+    'Productivity': '📑',
+    'Security':     '🛡',
+};
+
+// Built once, then mutated in-place when install state changes. `filter` is
+// either a category name from the catalog ("Game Dev", "Security", …),
+// the special tokens "all" / "installed", or an empty search string.
+let _appsState = {
+    catalog: [],
+    installed: new Set(),
+    busy: new Set(),
+    filter: 'all',
+    search: '',
+};
+
+function _escapeHtml(s) {
+    return String(s || '').replace(/[&<>"']/g, (c) =>
+        ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+function _renderAppsList() {
+    const root = $('#apps-list');
+    if (!root) return;
+    const { catalog, installed, busy, filter, search } = _appsState;
+    if (!catalog.length) {
+        root.innerHTML = '<div class="muted" style="padding:24px;text-align:center;">No apps in catalog.</div>';
+        return;
+    }
+    const q = (search || '').trim().toLowerCase();
+    const matches = (a) => {
+        if (filter === 'installed' && !installed.has(a.id)) return false;
+        if (filter !== 'all' && filter !== 'installed' && a.category !== filter) return false;
+        if (!q) return true;
+        return (a.label + ' ' + a.description).toLowerCase().includes(q);
+    };
+    const filtered = catalog.filter(matches);
+    if (!filtered.length) {
+        root.innerHTML = '<div class="muted" style="padding:24px;text-align:center;">' +
+            'No matches. Try a different filter or clear the search.</div>';
+        return;
+    }
+    const byCat = new Map();
+    for (const a of filtered) {
+        if (!byCat.has(a.category)) byCat.set(a.category, []);
+        byCat.get(a.category).push(a);
+    }
+    const html = [];
+    for (const [category, apps] of byCat) {
+        const icon = CATEGORY_ICONS[category] || '📦';
+        html.push(`<h3 style="margin-top:18px;">${icon}  ${_escapeHtml(category)}</h3>`);
+        html.push('<div class="grid cols-2">');
+        for (const a of apps) {
+            const isInstalled = installed.has(a.id);
+            const isBusy = busy.has(a.id);
+            const btnLabel = isBusy
+                ? (isInstalled ? 'Removing…' : 'Installing…')
+                : (isInstalled ? 'Uninstall' : 'Install');
+            const btnClass = isInstalled ? 'danger' : 'primary';
+            const dataAttr = isInstalled
+                ? `data-uninstall-id="${_escapeHtml(a.id)}"`
+                : `data-install-id="${_escapeHtml(a.id)}"`;
+            const launchBtn = (isInstalled && a.launchable)
+                ? `<button data-launch="${_escapeHtml(a.id)}">Launch</button>`
+                : '';
+            html.push(`
+                <div class="card">
+                    <div class="row" style="align-items:flex-start;gap:10px;">
+                        <div style="flex:1;min-width:0;">
+                            <div style="font-weight:600;">${_escapeHtml(a.label)}</div>
+                            <div class="muted" style="font-size:11px;margin-top:3px;">${_escapeHtml(a.description)}</div>
+                        </div>
+                        <div class="row" style="gap:6px;flex:0 0 auto;">
+                            ${launchBtn}
+                            <button class="${btnClass}" ${isBusy ? 'disabled' : ''} ${dataAttr}>${btnLabel}</button>
+                        </div>
+                    </div>
+                </div>
+            `);
+        }
+        html.push('</div>');
+    }
+    root.innerHTML = html.join('');
+}
+
+function setAppsFilter(filter) {
+    _appsState.filter = filter || 'all';
+    document.querySelectorAll('[data-apps-filter]').forEach((el) => {
+        el.classList.toggle('active', el.dataset.appsFilter === _appsState.filter);
+    });
+    _renderAppsList();
+}
+
+function setAppsSearch(q) {
+    _appsState.search = q || '';
+    _renderAppsList();
+}
+
+async function loadAppsCatalog() {
+    try {
+        const [catalog, installedList] = await Promise.all([
+            api.apps.catalog(),
+            api.apps.installedList(),
+        ]);
+        _appsState.catalog = catalog || [];
+        _appsState.installed = new Set((installedList || []).filter((x) => x.installed).map((x) => x.id));
+    } catch {
+        _appsState.catalog = [];
+        _appsState.installed = new Set();
+    }
+    _renderAppsList();
+}
+
+async function refreshAppsInstalledOnly() {
+    // Cheaper refresh — only the install-state set, used after install/uninstall.
+    try {
+        const list = await api.apps.installedList();
+        _appsState.installed = new Set((list || []).filter((x) => x.installed).map((x) => x.id));
+    } catch {}
+    _renderAppsList();
+}
+
+async function handleAppsInstall(id) {
+    const app = _appsState.catalog.find((a) => a.id === id);
+    if (!app) return;
+    _appsState.busy.add(id);
+    _renderAppsList();
+    toast(`Installing ${app.label}… you may see a password prompt.`);
+    try {
+        const r = await api.apps.install(id);
+        if (r.ok) {
+            toast(`${app.label} installed.`);
+        } else {
+            toast(`Install failed: ${(r.error || '').split('\n')[0].slice(0, 140) || 'unknown error'}`);
+        }
+    } catch (e) {
+        toast(`Install failed: ${e.message}`);
+    }
+    _appsState.busy.delete(id);
+    await refreshAppsInstalledOnly();
+}
+
+async function handleAppsUninstall(id) {
+    const app = _appsState.catalog.find((a) => a.id === id);
+    if (!app) return;
+    const ok = window.confirm(
+        `Uninstall ${app.label}?\n\n` +
+        `This removes the package and any of its dependencies that nothing else needs. ` +
+        `You can reinstall it later from the Apps panel.`,
+    );
+    if (!ok) return;
+    _appsState.busy.add(id);
+    _renderAppsList();
+    try {
+        const r = await api.apps.uninstall(id);
+        if (r.ok) {
+            toast(`${app.label} removed.`);
+        } else {
+            toast(`Uninstall failed: ${(r.error || '').split('\n')[0].slice(0, 140) || 'unknown error'}`);
+        }
+    } catch (e) {
+        toast(`Uninstall failed: ${e.message}`);
+    }
+    _appsState.busy.delete(id);
+    await refreshAppsInstalledOnly();
+}
+
+async function loadSysInfo() {
+    try {
+        const i = await api.system.info();
+        const gpu = await api.system.gpu();
+        $('#sysinfo').textContent =
+            `${i.hostname}  •  ${i.cpu} (${i.cores} cores)\nRAM ${i.ramUsed}/${i.ramTotal}  •  kernel ${i.kernel}\nGPU ${gpu}`;
+        const v = $('#app-version'); if (v) v.textContent = 'v' + (i.appVersion || '?');
+    } catch {
+        $('#sysinfo').textContent = 'Preview mode — full telemetry available on Outlaw OS.';
+    }
+}
+
+async function checkShellUpdate() {
+    const status = $('#shell-update-status');
+    const btn = $('#install-shell-btn');
+    status.textContent = 'checking GitHub…';
+    btn.disabled = true;
+    const r = await api.updates.checkShell();
+    if (!r.ok) { status.textContent = r.error; pendingUpdate = null; return; }
+    if (!r.available) {
+        status.textContent = `up to date (v${r.currentVersion})`;
+        pendingUpdate = null;
+        return;
+    }
+    pendingUpdate = r;
+    status.textContent = `v${r.remoteVersion} available (you have v${r.currentVersion})`;
+    btn.disabled = false;
+}
+
+async function installShellUpdate() {
+    if (!pendingUpdate || !pendingUpdate.assetUrl) { toast('Run "Check for shell updates" first.'); return; }
+    const status = $('#shell-update-status');
+    status.textContent = 'downloading + verifying…';
+    $('#install-shell-btn').disabled = true;
+    const r = await api.updates.installShell({
+        assetUrl: pendingUpdate.assetUrl,
+        shaUrl: pendingUpdate.shaUrl,
+    });
+    if (!r.ok) {
+        status.textContent = r.error;
+        $('#install-shell-btn').disabled = false;
+        return;
+    }
+    status.textContent = 'installed — restart the shell to load it.';
+    toast('Update installed. Restart the shell to finish.');
+    pendingUpdate = null;
+    // A successful update leaves a .prev behind; flip the Rollback button on.
+    refreshRollbackAvailability();
+}
+
+// Probe whether /usr/share/outlaw-os.prev exists so the Rollback button is
+// only enabled when there's actually something to roll back to.
+async function refreshRollbackAvailability() {
+    const btn = $('#rollback-shell-btn');
+    const status = $('#rollback-status');
+    if (!btn) return;
+    try {
+        const r = await api.updates.checkRollback();
+        btn.disabled = !r.available;
+        if (status) status.textContent = r.available ? '' : (r.note || 'no previous version on disk');
+    } catch (err) {
+        btn.disabled = true;
+        if (status) status.textContent = 'check failed';
+    }
+}
+
+async function rollbackShell() {
+    const btn = $('#rollback-shell-btn');
+    const status = $('#rollback-status');
+    if (!btn || btn.disabled) return;
+    const ok = window.confirm(
+        'Roll back to the previous Outlaw shell?\n\n' +
+        'This swaps /usr/share/outlaw-os with /usr/share/outlaw-os.prev. ' +
+        'You can roll forward again by clicking the same button after the swap.\n\n' +
+        'You\'ll need to restart the shell (or reboot) to see the change.',
+    );
+    if (!ok) return;
+    btn.disabled = true;
+    if (status) status.textContent = 'rolling back — enter your password if prompted…';
+    try {
+        const r = await api.updates.rollback();
+        if (!r.ok) {
+            if (status) status.textContent = r.error || 'rollback failed';
+            btn.disabled = false;
+            return;
+        }
+        if (status) status.textContent = 'rolled back — restart the shell to load it.';
+        toast('Rolled back. Restart the shell to finish.');
+    } catch (err) {
+        if (status) status.textContent = 'rollback failed: ' + err.message;
+        btn.disabled = false;
+    }
+    refreshRollbackAvailability();
+}
+
+async function launchApp(id) {
+    const r = await api.apps.launch(id);
+    toast(r.ok ? `Launching ${r.label}…` : (r.error || 'Could not launch.'));
+}
+
+// ---------------------------------------------------------------------------
+// Files
+// ---------------------------------------------------------------------------
+let currentDir = null;
+let parentDir = null;
+async function loadFiles(dir) {
+    const res = await api.files.list(dir);
+    if (res.error) { toast(res.error); }
+    currentDir = res.path; parentDir = res.parent;
+    $('#fs-path').textContent = res.path;
+    const list = $('#fs-list');
+    list.innerHTML = '';
+    if (!res.entries || !res.entries.length) {
+        list.innerHTML = '<div class="muted" style="padding:10px;">(empty or unreadable)</div>';
+        return;
+    }
+    for (const e of res.entries) {
+        const row = document.createElement('button');
+        row.className = 'fs-row';
+        row.dataset.name = e.name;
+        row.dataset.type = e.type;
+        const ico = e.type === 'dir' ? '📁' : '📄';
+        const size = e.type === 'file' ? humanSize(e.size) : '';
+        row.innerHTML = `<span>${ico}</span><span>${escapeHtml(e.name)}</span><span class="sz">${size}</span>`;
+        list.appendChild(row);
+    }
+}
+function humanSize(b) {
+    if (!b) return '';
+    const u = ['B', 'K', 'M', 'G']; let i = 0;
+    while (b >= 1024 && i < u.length - 1) { b /= 1024; i++; }
+    return b.toFixed(b < 10 && i > 0 ? 1 : 0) + u[i];
+}
+
+// ---------------------------------------------------------------------------
+// Tasks
+// ---------------------------------------------------------------------------
+async function refreshTasks() {
+    const procs = await api.system.processes();
+    const body = $('#proc-body');
+    body.innerHTML = '';
+    for (const p of procs) {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td>${p.pid}</td><td>${escapeHtml(p.comm)}</td><td class="right">${p.cpu}</td><td class="right">${p.mem}</td>`;
+        body.appendChild(tr);
+    }
+    updateBars();
+}
+async function updateBars() {
+    const s = await api.system.stats();
+    $('#cpu-bar').style.width = Math.min(100, s.cpu).toFixed(0) + '%';
+    $('#ram-bar').style.width = Math.min(100, s.ramPct).toFixed(0) + '%';
+    $('#cpu-val').textContent = s.cpu.toFixed(0) + '%';
+    $('#ram-val').textContent = `${s.ramUsed} / ${s.ramTotal} (${s.ramPct.toFixed(0)}%)`;
+}
+
+// ---------------------------------------------------------------------------
+// Live top-bar stats
+// ---------------------------------------------------------------------------
+function startStats() {
+    const tick = async () => {
+        try {
+            const s = await api.system.stats();
+            $('#stat-cpu').textContent = `CPU ${s.cpu.toFixed(0)}%`;
+            $('#stat-ram').textContent = `RAM ${s.ramUsed}`;
+            $('#stat-clock').textContent = s.time;
+        } catch {}
+    };
+    tick();
+    statsTimer = setInterval(tick, 2000);
+}
+
+// ---------------------------------------------------------------------------
+// Terminal (guarded)
+// ---------------------------------------------------------------------------
+async function inspectCommand(cmd) {
+    const hint = $('#term-hint');
+    if (!cmd.trim()) { hint.textContent = ''; hint.classList.remove('warn'); return; }
+    try {
+        const c = await api.terminal.inspect(cmd);
+        if (c.danger) { hint.textContent = '⚠ ' + c.reason + ' — confirmation required.'; hint.classList.add('warn'); }
+        else { hint.textContent = ''; hint.classList.remove('warn'); }
+    } catch {}
+}
+
+async function runTerminal(cmd) {
+    const out = $('#term-out');
+    out.value += `> ${cmd}\n`;
+    const c = await api.terminal.inspect(cmd);
+    let confirmDangerous = false;
+    if (c.danger) {
+        const ok = await askConfirm({ title: 'Dangerous command', reason: c.reason, cmd });
+        if (!ok) { out.value += '(cancelled)\n\n'; out.scrollTop = out.scrollHeight; return; }
+        confirmDangerous = true;
+    }
+    const r = await api.terminal.run(cmd, { confirmDangerous });
+    if (r.blocked) out.value += `[blocked] ${r.reason}\n\n`;
+    else out.value += `${(r.stdout || r.stderr || `(exit ${r.code})`)}\n\n`;
+    out.scrollTop = out.scrollHeight;
+}
+
+// ---------------------------------------------------------------------------
+// Confirm modal (shared by terminal + AI run_command)
+// ---------------------------------------------------------------------------
+function askConfirm({ title, reason, cmd }) {
+    $('#confirm-title').textContent = title || 'Confirm dangerous action';
+    $('#confirm-reason').textContent = reason || '';
+    $('#confirm-cmd').textContent = cmd || '';
+    $('#confirm-input').value = '';
+    $('#confirm-go').disabled = true;
+    $('#confirm-modal').classList.add('show');
+    $('#confirm-input').focus();
+    return new Promise((resolve) => { confirmResolver = resolve; });
+}
+function closeConfirm(result) {
+    $('#confirm-modal').classList.remove('show');
+    if (confirmResolver) { confirmResolver(result); confirmResolver = null; }
+}
+
+// ---------------------------------------------------------------------------
+// AI chat
+// ---------------------------------------------------------------------------
+function addMsg(kind, text) {
+    const log = $('#ai-log');
+    const div = document.createElement('div');
+    div.className = 'msg ' + kind;
+    div.textContent = text;
+    log.appendChild(div);
+    log.scrollTop = log.scrollHeight;
+}
+
+async function sendAI() {
+    const input = $('#ai-in');
+    const text = input.value.trim();
+    if (!text) return;
+    input.value = '';
+    addMsg('user', text);
+    const thinking = document.createElement('div');
+    thinking.className = 'msg ai'; thinking.textContent = '…';
+    $('#ai-log').appendChild(thinking);
+    const res = await api.ai.ask(text);
+    thinking.remove();
+    if (res.error) { addMsg('sys', res.error); return; }
+    if (res.needsConfirm) {
+        addMsg('ai', res.text);
+        const danger = res.classify && res.classify.danger;
+        const ok = await askConfirm({
+            title: danger ? 'AI wants to run a dangerous command' : 'Run this command?',
+            reason: danger ? res.classify.reason : 'The assistant proposed a shell command.',
+            cmd: res.action.arg,
+        });
+        if (!ok) { addMsg('sys', 'Cancelled.'); return; }
+        const r = await api.ai.confirmAction(res.action);
+        addMsg('ai', r.text || '(done)');
+        return;
+    }
+    addMsg('ai', res.text || '(no answer)');
+}
+
+async function refreshAiStatus() {
+    let s = { enabled: false, available: false };
+    try { s = await api.ai.status(); } catch {}
+    const pill = $('#stat-ai');
+    pill.textContent = 'AI ' + (s.enabled ? (s.available ? 'ON' : 'STARTING') : 'OFF');
+    const badge = $('#ai-badge');
+    if (badge) {
+        badge.textContent = s.enabled ? (s.available ? 'online' : 'starting') : 'offline';
+        badge.className = 'badge ' + (s.enabled && s.available ? 'on' : 'off');
+    }
+    const toggle = $('#ai-toggle');
+    if (toggle) toggle.checked = !!s.enabled;
+    const sub = $('#ai-sub');
+    if (sub) sub.textContent = s.enabled
+        ? (s.available
+            ? 'Active · routing prompts to LM Studio'
+            : 'Waiting for LM Studio — open it, load a model, click Start Server (port 1234).')
+        : 'Off · routes prompts to LM Studio on this machine';
+    const modelSub = $('#ai-model-sub');
+    if (modelSub) {
+        if (s.enabled && s.available) {
+            const loaded = (s.models && s.models[0]) || s.model || '(no model loaded)';
+            modelSub.textContent = 'Loaded in LM Studio: ' + loaded + ' — swap models there.';
+        } else {
+            modelSub.textContent = 'Loaded in LM Studio — change the model there to swap it everywhere.';
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Calculator (safe expression evaluator — no eval)
+// ---------------------------------------------------------------------------
+let calcExpr = '';
+function calcRender() { $('#calc-display').value = calcExpr || '0'; }
+function calcKey(k) {
+    if (k === 'C') { calcExpr = ''; calcRender(); return; }
+    if (k === '=') {
+        try { calcExpr = String(safeEval(calcExpr)); }
+        catch { calcExpr = ''; $('#calc-display').value = 'ERROR'; return; }
+        calcRender(); return;
+    }
+    if ('+-*/.'.includes(k)) {
+        if (!calcExpr && k !== '-') return;            // don't start with an operator (except minus)
+        if (/[+\-*/.]$/.test(calcExpr)) calcExpr = calcExpr.slice(0, -1); // replace trailing operator
+    }
+    calcExpr += k;
+    calcRender();
+}
+function safeEval(expr) {
+    const tokens = (expr.match(/(\d+\.?\d*|\.\d+|[+\-*/()])/g) || []);
+    if (tokens.join('') !== expr.replace(/\s+/g, '')) throw new Error('bad');
+    // Shunting-yard to RPN
+    const out = [], ops = [];
+    const prec = { '+': 1, '-': 1, '*': 2, '/': 2, 'u-': 3 };
+    let prev = null;
+    for (const t of tokens) {
+        if (/^[\d.]/.test(t)) { out.push(parseFloat(t)); }
+        else if (t === '(') { ops.push(t); }
+        else if (t === ')') { while (ops.length && ops[ops.length - 1] !== '(') out.push(ops.pop()); if (!ops.length) throw new Error('paren'); ops.pop(); }
+        else {
+            let op = t;
+            if (t === '-' && (prev === null || prev === '(' || '+-*/'.includes(prev))) op = 'u-';
+            while (ops.length && ops[ops.length - 1] !== '(' && prec[ops[ops.length - 1]] >= prec[op]) out.push(ops.pop());
+            ops.push(op);
+        }
+        prev = t;
+    }
+    while (ops.length) { const o = ops.pop(); if (o === '(') throw new Error('paren'); out.push(o); }
+    const st = [];
+    for (const tk of out) {
+        if (typeof tk === 'number') st.push(tk);
+        else if (tk === 'u-') st.push(-st.pop());
+        else { const b = st.pop(), a = st.pop(); if (a === undefined || b === undefined) throw new Error('expr');
+            st.push(tk === '+' ? a + b : tk === '-' ? a - b : tk === '*' ? a * b : a / b); }
+    }
+    if (st.length !== 1 || !isFinite(st[0])) throw new Error('expr');
+    return Math.round(st[0] * 1e10) / 1e10;
+}
+
+// ---------------------------------------------------------------------------
+// Settings
+// ---------------------------------------------------------------------------
+async function loadSettings() {
+    let s = {};
+    try { s = await api.settings.get(); } catch {}
+    document.body.classList.toggle('crt', !!s.crtFx);
+    document.body.classList.toggle('glow', !!s.glow);
+    $('#crt-toggle').checked = !!s.crtFx;
+    $('#glow-toggle').checked = !!s.glow;
+    // LM Studio handles model selection itself — no dropdown to seed.
+    $('#perf-toggle').checked = !!s.performanceMode;
+    $('#update-repo').value = s.updateRepo || '';
+    $('#auto-check').checked = !!s.autoCheck;
+    $('#sponsor-url').value = s.sponsorUrl || '';
+    // SC5 — System Core voice toggle. Probe TTS engine availability in
+    // parallel with reading the setting so the sub-text reflects reality
+    // (e.g., "On · piper" vs "On · not installed").
+    const voiceEl = $('#voice-toggle');
+    if (voiceEl) {
+        voiceEl.checked = !!s.coreVoiceEnabled;
+        refreshVoiceSubText(!!s.coreVoiceEnabled);
+    }
+    // SC7 — VRAM saver mode dropdown.
+    const vramEl = $('#vram-mode');
+    if (vramEl) {
+        vramEl.value = s.vramSaverMode || 'auto';
+        refreshVramSubText();
+    }
+}
+
+async function refreshVramSubText() {
+    const sub = $('#vram-mode-sub');
+    if (!sub || !api.vram) return;
+    try {
+        const st = await api.vram.status();
+        const lines = [];
+        lines.push('Currently: ' + (st.label || st.tier));
+        if (st.available && st.totalMb > 0) {
+            lines.push(st.freeMb + ' / ' + st.totalMb + ' MB free');
+        }
+        sub.textContent = lines.join(' · ');
+    } catch {
+        sub.textContent = 'probe failed';
+    }
+}
+
+async function refreshVoiceSubText(enabledHint) {
+    const sub = $('#voice-sub');
+    if (!sub || !api.tts) return;
+    try {
+        const st = await api.tts.status();
+        const enabled = enabledHint != null ? !!enabledHint : !!st.enabled;
+        if (!st.available) {
+            sub.textContent = enabled
+                ? 'On · ' + (st.note || 'no engine installed')
+                : 'Off · ' + (st.note || 'no engine installed');
+        } else if (enabled) {
+            sub.textContent = 'On · speaking via ' + st.engine;
+        } else {
+            sub.textContent = 'Off · text-only bubble';
+        }
+    } catch {
+        sub.textContent = 'Off · text-only bubble';
+    }
+}
+
+async function setSetting(patch) { try { await api.settings.set(patch); } catch {} }
+
+async function refreshGaming() {
+    try {
+        const g = await api.gaming.status();
+        $('#gaming-status').textContent =
+            `GPU ${g.gpu || 'unknown'}  •  GameMode ${g.gamemode ? 'available' : 'not installed'}  •  MangoHud ${g.mangohud ? 'available' : 'not installed'}`;
+    } catch { $('#gaming-status').textContent = 'GPU info available on Outlaw OS.'; }
+}
+
+// ---------------------------------------------------------------------------
+// Power / hotswap
+// ---------------------------------------------------------------------------
+function openPower() { $('#power-modal').classList.add('show'); }
+function closePower() { $('#power-modal').classList.remove('show'); }
+async function hotswap() {
+    closePower();
+    const r = await api.power.hotswap();
+    toast(r.ok ? 'Opening hotswap…' : (r.error || 'Hotswap unavailable.'));
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+// ---------------------------------------------------------------------------
+// Event wiring (delegation)
+// ---------------------------------------------------------------------------
+function wire() {
+    // Boot
+    $('#boot-skip').addEventListener('click', enterOS);
+    $('#boot-noai').addEventListener('click', async () => { await setSetting({ aiEnabled: false }); await refreshAiStatus(); enterOS(); toast('Started without AI.'); });
+
+    // Sidebar nav
+    $('#nav').addEventListener('click', (e) => {
+        const item = e.target.closest('.nav-item[data-screen]');
+        if (item) showScreen(item.dataset.screen);
+    });
+
+    // Global click delegation for data-action + data-launch
+    document.body.addEventListener('click', async (e) => {
+        const launch = e.target.closest('[data-launch]');
+        if (launch) { launchApp(launch.dataset.launch); return; }
+        const installBtn = e.target.closest('[data-install-id]');
+        if (installBtn) { handleAppsInstall(installBtn.dataset.installId); return; }
+        const uninstallBtn = e.target.closest('[data-uninstall-id]');
+        if (uninstallBtn) { handleAppsUninstall(uninstallBtn.dataset.uninstallId); return; }
+        const filterChip = e.target.closest('[data-apps-filter]');
+        if (filterChip) { setAppsFilter(filterChip.dataset.appsFilter); return; }
+        if (e.target.id === 'apps-refresh-db') {
+            toast('Refreshing package list… enter your password if prompted.');
+            try {
+                const r = await api.apps.refreshDb();
+                toast(r.ok ? 'Package list refreshed.' : 'Refresh failed.');
+                if (r.ok) refreshAppsInstalledOnly();
+            } catch (err) {
+                toast('Refresh failed: ' + err.message);
+            }
+            return;
+        }
+        const fileRow = e.target.closest('.fs-row');
+        if (fileRow) {
+            if (fileRow.dataset.type === 'dir') loadFiles((currentDir.endsWith('/') ? currentDir : currentDir + '/') + fileRow.dataset.name);
+            else { const r = await api.files.open((currentDir.endsWith('/') ? currentDir : currentDir + '/') + fileRow.dataset.name); if (!r.ok) toast(r.error); }
+            return;
+        }
+        const calcBtn = e.target.closest('#calc-pad [data-k]');
+        if (calcBtn) { calcKey(calcBtn.dataset.k); return; }
+
+        const act = e.target.closest('[data-action]');
+        if (!act) return;
+        switch (act.dataset.action) {
+            case 'files-up': if (parentDir) loadFiles(parentDir); break;
+            case 'files-home': loadFiles(await api.files.home()); break;
+            case 'tasks-refresh': refreshTasks(); break;
+            case 'ai-send': sendAI(); break;
+            case 'updates-check': {
+                $('#update-status').textContent = 'checking…';
+                const r = await api.updates.check();
+                $('#update-status').textContent = r.note || `${r.updates} update(s) available`;
+                break;
+            }
+            case 'updates-apply': {
+                $('#update-status').textContent = 'applying (enter password if prompted)…';
+                const r = await api.updates.apply();
+                $('#update-status').textContent = r.ok ? 'system updated' : (r.error || 'update failed');
+                break;
+            }
+            case 'check-shell': checkShellUpdate(); break;
+            case 'install-shell': installShellUpdate(); break;
+            case 'rollback-shell': rollbackShell(); break;
+            case 'installer': { const r = await api.installer.launch(); toast(r.ok ? 'Opening installer…' : r.error); break; }
+            case 'hotswap': hotswap(); break;
+            case 'power-menu': openPower(); break;
+            case 'power-cancel': closePower(); break;
+            case 'reboot': closePower(); api.power.reboot(); break;
+            case 'shutdown': closePower(); api.power.shutdown(); break;
+            case 'donate': {
+                const url = ($('#sponsor-url').value || '').trim();
+                if (!/^https?:\/\//i.test(url)) { toast('Add a sponsor URL first.'); break; }
+                window.open(url, '_blank');
+                break;
+            }
+            case 'confirm-cancel': closeConfirm(false); break;
+        }
+    });
+
+    // Terminal
+    const ti = $('#term-in');
+    ti.addEventListener('input', () => inspectCommand(ti.value));
+    ti.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') { const c = ti.value.trim(); if (c) { ti.value = ''; $('#term-hint').textContent = ''; runTerminal(c); } }
+    });
+
+    // AI input
+    $('#ai-in').addEventListener('keydown', (e) => { if (e.key === 'Enter') sendAI(); });
+
+    // Apps panel search — type-as-you-go, no debounce needed (catalog is tiny).
+    const appsSearchEl = $('#apps-search');
+    if (appsSearchEl) {
+        appsSearchEl.addEventListener('input', (e) => setAppsSearch(e.target.value));
+    }
+
+    // Confirm modal
+    $('#confirm-input').addEventListener('input', (e) => { $('#confirm-go').disabled = e.target.value.trim() !== 'CONFIRM'; });
+    $('#confirm-go').addEventListener('click', () => closeConfirm(true));
+
+    // Settings toggles
+    $('#crt-toggle').addEventListener('change', (e) => { document.body.classList.toggle('crt', e.target.checked); setSetting({ crtFx: e.target.checked }); });
+    $('#glow-toggle').addEventListener('change', (e) => { document.body.classList.toggle('glow', e.target.checked); setSetting({ glow: e.target.checked }); });
+    $('#perf-toggle').addEventListener('change', async (e) => { await api.gaming.setPerformance(e.target.checked); toast('Performance mode ' + (e.target.checked ? 'ON' : 'OFF')); });
+    // SC7 — Aggressive VRAM saver dropdown. setMode immediately invalidates
+    // the probe cache + fires the tier-changed event, so the System Core
+    // badge updates in the same beat the user picks a new mode.
+    const vramModeEl = $('#vram-mode');
+    if (vramModeEl) {
+        vramModeEl.addEventListener('change', async (e) => {
+            const mode = e.target.value;
+            try {
+                const r = await api.vram.setMode(mode);
+                if (!r.ok) {
+                    toast('VRAM mode change failed: ' + (r.error || 'unknown'));
+                    return;
+                }
+                await refreshVramSubText();
+                if (window.outlawCore && window.outlawCore.refreshVramTier) {
+                    window.outlawCore.refreshVramTier();
+                }
+                toast('VRAM saver: ' + (r.status && r.status.label || mode));
+            } catch (err) {
+                toast('VRAM mode error: ' + err.message);
+            }
+        });
+    }
+
+    // SC5 — System Core voice toggle. Persist the setting, then re-probe TTS
+    // status so the sub-text and the System Core footer both catch up without
+    // requiring a screen revisit.
+    const voiceToggleEl = $('#voice-toggle');
+    if (voiceToggleEl) {
+        voiceToggleEl.addEventListener('change', async (e) => {
+            const on = !!e.target.checked;
+            await setSetting({ coreVoiceEnabled: on });
+            refreshVoiceSubText(on);
+            // Force re-probe the engine in case the user just installed one
+            // (caches were valid for up to 30s otherwise).
+            try { await api.tts.status({ force: true }); } catch {}
+            if (window.outlawCore && window.outlawCore.refreshVoiceStatus) {
+                window.outlawCore.refreshVoiceStatus();
+            }
+            // Friendly nudge if they toggled on but no engine is installed.
+            try {
+                const st = await api.tts.status();
+                if (on && !st.available) {
+                    toast('Voice toggle on, but no TTS engine installed (piper / espeak-ng).');
+                } else if (on) {
+                    toast('Core voice on — speaking via ' + st.engine + '.');
+                } else {
+                    toast('Core voice off.');
+                }
+            } catch {}
+        });
+    }
+
+    $('#ai-toggle').addEventListener('change', async (e) => {
+        if (e.target.checked) {
+            const r = await api.ai.enable();
+            toast(r.available ? 'AI enabled.' : 'AI enabled — start LM Studio and click "Start Server".');
+        } else {
+            await api.ai.disable();
+            toast('AI disabled.');
+        }
+        refreshAiStatus();
+    });
+    // Convenience: launch LM Studio from the AI settings card.
+    const openLmBtn = $('#ai-open-lmstudio');
+    if (openLmBtn) {
+        openLmBtn.addEventListener('click', async () => {
+            try {
+                const r = await api.apps.launch('lmstudio');
+                if (!r.ok) toast(r.error || 'Could not open LM Studio.');
+            } catch {
+                toast('Could not open LM Studio.');
+            }
+        });
+    }
+
+    // Session preference reset — flips ~/.outlaw-session-pref back to "ask"
+    // so the greeter shows again on next boot.
+    const sessResetBtn = $('#session-reset-pref');
+    if (sessResetBtn) {
+        sessResetBtn.addEventListener('click', async () => {
+            try {
+                const r = await api.session.resetGreeterPref();
+                toast(r.ok ? 'Greeter will show on next boot.' : ('Reset failed: ' + (r.error || 'unknown')));
+            } catch (err) {
+                toast('Reset failed: ' + err.message);
+            }
+        });
+    }
+
+    // Session switcher: jump straight from the desktop into a Dev session.
+    const sessSwitchBtn = $('#session-switch-dev');
+    if (sessSwitchBtn) {
+        sessSwitchBtn.addEventListener('click', async () => {
+            const ok = window.confirm(
+                'Switch to the Dev session now?\n\n' +
+                'This closes the desktop and opens Outlaw CodeMaker. ' +
+                'The screen will go black for a few seconds while X restarts.',
+            );
+            if (!ok) return;
+            sessSwitchBtn.disabled = true;
+            toast('Switching to Dev session…');
+            try {
+                const r = await api.session.switchToDev();
+                if (!r.ok) {
+                    toast('Could not switch: ' + (r.error || 'unknown error'));
+                    sessSwitchBtn.disabled = false;
+                }
+                // On success the main process closes the window — nothing more to do.
+            } catch (err) {
+                toast('Switch failed: ' + err.message);
+                sessSwitchBtn.disabled = false;
+            }
+        });
+    }
+
+    // Updater settings — persist on change.
+    let repoSaveTimer = null;
+    $('#update-repo').addEventListener('input', (e) => {
+        clearTimeout(repoSaveTimer);
+        repoSaveTimer = setTimeout(() => setSetting({ updateRepo: e.target.value.trim() }), 400);
+    });
+    $('#auto-check').addEventListener('change', (e) => {
+        setSetting({ autoCheck: e.target.checked });
+        toast('Auto-check ' + (e.target.checked ? 'enabled' : 'disabled') + '.');
+    });
+    let sponsorSaveTimer = null;
+    $('#sponsor-url').addEventListener('input', (e) => {
+        clearTimeout(sponsorSaveTimer);
+        sponsorSaveTimer = setTimeout(() => setSetting({ sponsorUrl: e.target.value.trim() }), 400);
+    });
+
+    // Toast events from the main process (used by background update checks).
+    api.on('toast', (msg) => toast(String(msg)));
+
+    // Keyboard: physical calculator + escape closes modals
+    document.addEventListener('keydown', (e) => {
+        // Emergency stop: Ctrl+Alt+K → kill every tracked subprocess in main.
+        // Works even when modal dialogs / hung handlers are blocking the rest
+        // of the UI — last-resort escape hatch.
+        if (e.key && e.key.toLowerCase() === 'k' && e.ctrlKey && e.altKey) {
+            e.preventDefault();
+            (async () => {
+                try {
+                    const r = await api.emergency.stop();
+                    toast(`🛑 Emergency stop — killed ${r.killed} process(es).`);
+                } catch (err) {
+                    toast('Emergency stop failed: ' + err.message);
+                }
+            })();
+            return;
+        }
+        if (e.key === 'Escape') { closePower(); if (confirmResolver) closeConfirm(false); }
+        if ($('#screen-calc').classList.contains('active') && $('#app').classList.contains('ready')) {
+            if (/[0-9.+\-*/]/.test(e.key)) calcKey(e.key);
+            else if (e.key === 'Enter' || e.key === '=') calcKey('=');
+            else if (e.key === 'Escape' || e.key.toLowerCase() === 'c') calcKey('C');
+        }
+    });
+}
+
+// ---------------------------------------------------------------------------
+// Init
+// ---------------------------------------------------------------------------
+window.addEventListener('DOMContentLoaded', async () => {
+    wire();
+    await loadSettings();
+    await renderTiles();
+    await loadSysInfo();
+    // Probe whether a previous shell version exists on disk so the Rollback
+    // button reflects reality on Settings open instead of waiting for a click.
+    refreshRollbackAvailability().catch(() => {});
+    calcRender();
+    runBoot();
+});

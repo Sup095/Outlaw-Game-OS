@@ -1,0 +1,94 @@
+# ============================================================================
+# Outlaw OS - live Boot Manager package set
+# Installed packages for the actual on-disk OS are pacstrapped by outlaw-install
+# (it reuses this same list). Everything here is from the official Arch repos
+# (core/extra/multilib) so the ISO builds without AUR.
+#
+# THE DEFAULT INSTALL IS MINIMAL — the OS only pre-bundles what's needed to
+# (1) boot securely, (2) drive a stripped-down Electron shell, (3) run Steam,
+# (4) edit Godot projects with Outlaw CodeMaker, and (5) talk to LM Studio.
+# Everything else (Blender, GIMP, VS Code, Lutris, Wine, security toolkit,
+# alternative browsers, etc.) is available on demand via the Apps panel in
+# the shell, which calls `pkexec pacman -S <pkg>` for the user.
+# ============================================================================
+
+# --- Base system ---
+base
+linux
+linux-firmware
+intel-ucode
+amd-ucode
+mkinitcpio
+sudo
+polkit
+networkmanager
+curl
+wget
+git
+nano
+
+# --- Bootloader / install tooling ---
+grub
+efibootmgr
+os-prober
+dosfstools
+mtools
+arch-install-scripts
+gptfdisk
+parted
+
+# --- Security hardening ---
+apparmor
+firejail
+ufw
+
+# --- Desktop / shell runtime ---
+xorg-server
+xorg-xinit
+picom
+feh
+rofi
+thunar
+xfce4-terminal
+electron
+ttf-jetbrains-mono
+noto-fonts
+
+# --- Local AI ---
+# LM Studio (https://lmstudio.ai) is not in Arch repos — it's an AppImage the
+# user downloads at first launch via /usr/local/bin/outlaw-lm-studio. We only
+# pre-install a launcher (the shell calls it for the AI assistant).
+
+# --- Gaming runtime (Steam needs the Vulkan + lib32 stack) ---
+steam
+steamcmd
+gamemode
+lib32-gamemode
+gamescope
+mangohud
+lib32-mangohud
+vulkan-icd-loader
+lib32-vulkan-icd-loader
+vulkan-tools
+mesa
+lib32-mesa
+
+# --- Browser (default; alternatives via Apps panel) ---
+firefox
+
+# --- Game development essentials (Godot needs base-devel / python / cmake
+#     for some addons; everything else moves to Apps panel) ---
+godot
+base-devel
+python
+python-pip
+cmake
+
+# --- Outlaw CodeMaker runtime deps (for the Dev session) ---
+# CodeMaker itself lives at /opt/outlaw-codemaker (bundled by build.sh) and
+# uses a venv created during outlaw-install. These are the system-level deps
+# its venv libs link against.
+xdotool
+scrot
+tesseract
+tesseract-data-eng

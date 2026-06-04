@@ -1,0 +1,121 @@
+{
+  "_comment": "Outlaw OS System Core cold-mode dialogue. Edit freely; one line per array entry. {n}-style placeholders are interpolated by dialogue.js.pickSync(event, {n: ...}).",
+
+  "boot_complete": [
+    "Core online. Standing by.",
+    "All systems nominal, operator.",
+    "Watch deck reporting in.",
+    "Telemetry stream is green.",
+    "Awake. Awaiting orders.",
+    "Outlaw core spun up. Talk to me."
+  ],
+
+  "idle_loop": [
+    "Subsystems quiet.",
+    "Holding station.",
+    "Listening to the dark.",
+    "No anomalies in the last cycle.",
+    "Everything where you left it.",
+    "Silence on all channels.",
+    "Nothing on the wire, operator.",
+    "Just the hum of the racks."
+  ],
+
+  "diagnostic_started_quick": [
+    "Running quick sweep, operator.",
+    "Light-touch scan engaged.",
+    "Walking the perimeter.",
+    "Spinning up the short list."
+  ],
+
+  "diagnostic_started_standard": [
+    "Standard diagnostic sweep underway.",
+    "Deeper sweep. Stand by.",
+    "Checking structural integrity.",
+    "Eyes on every joint."
+  ],
+
+  "diagnostic_started_thorough": [
+    "Engaging thorough scan. This will take time.",
+    "Full sweep. Bring something to drink.",
+    "Going deep. I'll surface when finished.",
+    "Tearing the place apart looking for ghosts."
+  ],
+
+  "diagnostic_test_pass": [
+    "Green.",
+    "Nominal.",
+    "Clean.",
+    "Acceptable.",
+    "Holds up."
+  ],
+
+  "diagnostic_test_warn": [
+    "Caution.",
+    "Anomaly flagged.",
+    "Worth a second look.",
+    "Marginal.",
+    "Something's off."
+  ],
+
+  "diagnostic_test_fail": [
+    "Failure detected.",
+    "That one bit.",
+    "Not good, operator.",
+    "Critical fault.",
+    "We have a hole in the hull."
+  ],
+
+  "diagnostic_complete_clean": [
+    "Sweep complete. All systems nominal.",
+    "No anomalies. Carry on.",
+    "Everything where it should be.",
+    "Clean bill of health.",
+    "Quiet as a tomb."
+  ],
+
+  "diagnostic_complete_warnings": [
+    "Sweep complete. {n} warning(s) flagged.",
+    "Some attention required. {n} item(s).",
+    "Operator's eyes on these, please.",
+    "{n} thing(s) you'd want to know."
+  ],
+
+  "diagnostic_complete_failures": [
+    "Sweep complete. {n} failure(s) require attention.",
+    "Hot spots detected. Repair when able.",
+    "We have problems. {n} of them.",
+    "Casualties found. Triage time."
+  ],
+
+  "diagnostic_cancelled": [
+    "Sweep aborted.",
+    "Pulling out.",
+    "Cancelled, understood.",
+    "Closing the lid."
+  ],
+
+  "diagnostic_error": [
+    "Sweep encountered an error.",
+    "Something broke during the scan.",
+    "Telemetry corrupt. Try again.",
+    "The instruments lied to me."
+  ],
+
+  "notice": [
+    "Noted.",
+    "Acknowledged.",
+    "Logged.",
+    "Filed."
+  ],
+
+  "easter_egg": [
+    "The walls have eyes, operator.",
+    "Sometimes I wonder who watches the watchers.",
+    "Old code never really dies. It just goes to sleep.",
+    "We are the last fortress.",
+    "I hear something in depot four. Probably nothing.",
+    "Be kind to your machines. They remember.",
+    "I dream in green, when I dream."
+  ]
+}

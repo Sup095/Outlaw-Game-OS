@@ -1,0 +1,374 @@
+#!/usr/bin/env bash
+# ============================================================================
+# outlaw-install — guided installer for Outlaw OS
+# ----------------------------------------------------------------------------
+# SAFETY FIRST. By default it installs into a single EMPTY partition you pick,
+# leaving every other partition (Windows, your data, other Linux installs)
+# completely untouched. Wiping a whole disk is a separate, clearly-marked
+# option that requires you to type the device name AND the word ERASE.
+#
+# It also supports removing Outlaw OS again ("--uninstall") so you can switch
+# back to Windows or another OS without losing other data.
+#
+# Bootloader: GRUB with os-prober enabled, so your other operating systems are
+# detected and added to the boot menu — which is what powers `outlaw-hotswap`.
+# ============================================================================
+set -uo pipefail
+
+# Default install is minimal. Everything else (Blender, GIMP, VS Code, Lutris,
+# Wine, security toolkit, chromium, etc.) is available on demand via the shell's
+# Apps panel, which runs `pkexec pacman -S <pkg>` after the user clicks Install.
+# Keep this list in sync with outlaw-installer/packages.x86_64.
+PKGS=(
+  base linux linux-firmware intel-ucode amd-ucode mkinitcpio
+  sudo polkit networkmanager curl wget git nano
+  grub efibootmgr os-prober dosfstools mtools gptfdisk parted
+  apparmor firejail ufw
+  xorg-server xorg-xinit picom feh rofi thunar xfce4-terminal electron
+  ttf-jetbrains-mono noto-fonts
+  steam steamcmd gamemode lib32-gamemode gamescope
+  mangohud lib32-mangohud vulkan-icd-loader lib32-vulkan-icd-loader vulkan-tools
+  mesa lib32-mesa firefox
+  godot base-devel python python-pip cmake
+  # Outlaw CodeMaker runtime deps (X11 input + OCR backend for pyautogui /
+  # pytesseract). The Python packages themselves live in a venv created in
+  # /opt/outlaw-codemaker/.venv during this install (see post-pacstrap step).
+  xdotool scrot tesseract tesseract-data-eng
+)
+
+red()  { printf '\033[31m%s\033[0m\n' "$*"; }
+grn()  { printf '\033[32m%s\033[0m\n' "$*"; }
+ylw()  { printf '\033[33m%s\033[0m\n' "$*"; }
+hr()   { printf '%s\n' "=================================================="; }
+die()  { red "ERROR: $*"; exit 1; }
+
+[[ $EUID -eq 0 ]] || exec sudo "$0" "$@"
+is_efi() { [[ -d /sys/firmware/efi/efivars ]]; }
+
+TARGET=/mnt
+
+cleanup() { umount -R "$TARGET" 2>/dev/null || true; }
+trap cleanup EXIT
+
+# ---------------------------------------------------------------------------
+banner() {
+    clear
+    hr
+    grn "            OUTLAW OS INSTALLER v2.0"
+    hr
+    if is_efi; then echo "Firmware: UEFI"; else echo "Firmware: BIOS/Legacy"; fi
+    echo
+}
+
+pick_from_lsblk() {
+    # $1 = prompt; echoes the chosen /dev path on fd 3
+    echo >&2
+    lsblk -o NAME,SIZE,TYPE,FSTYPE,LABEL,MOUNTPOINTS >&2
+    echo >&2
+    read -rp "$1 (e.g. /dev/sda2): " dev
+    echo "$dev"
+}
+
+confirm_word() {
+    # $1 = the exact word the user must type
+    local typed
+    read -rp "Type '$1' to proceed: " typed
+    [[ "$typed" == "$1" ]]
+}
+
+# ---------------------------------------------------------------------------
+do_install() {
+    banner
+    ylw "Choose an installation strategy:"
+    echo "  1) Install into an existing EMPTY partition (recommended, keeps other OSes & data)"
+    echo "  2) ERASE an entire disk and use all of it (DESTRUCTIVE)"
+    echo "  0) Back"
+    read -rp "> " strat
+    case "$strat" in
+        1) install_into_partition ;;
+        2) install_wipe_disk ;;
+        *) return ;;
+    esac
+}
+
+prepare_common() {
+    # Mounts ESP (EFI only) and asks for credentials. Sets globals ESP, USERNAME.
+    if is_efi; then
+        ylw "Select the EFI System Partition (ESP)."
+        echo "On a Windows dual-boot this already exists (FAT32, ~100-500M). It will NOT be formatted."
+        ESP="$(pick_from_lsblk 'EFI System Partition')"
+        [[ -b "$ESP" ]] || die "Not a block device: $ESP"
+        blkid "$ESP" | grep -qi 'TYPE="vfat"' || ylw "Warning: $ESP is not FAT32 — make sure this is really the ESP."
+        mkdir -p "$TARGET/boot/efi"
+        mount "$ESP" "$TARGET/boot/efi" || die "Could not mount ESP."
+    fi
+    echo
+    read -rp "Username for the operator account: " USERNAME
+    [[ "$USERNAME" =~ ^[a-z_][a-z0-9_-]*$ ]] || die "Invalid username."
+}
+
+install_into_partition() {
+    banner
+    local root
+    root="$(pick_from_lsblk 'Target ROOT partition for Outlaw OS')"
+    [[ -b "$root" ]] || die "Not a block device: $root"
+
+    red "This will FORMAT only $root. Everything currently on $root will be lost."
+    ylw "All OTHER partitions and disks stay untouched."
+    confirm_word "FORMAT" || { echo "Cancelled."; return; }
+
+    grn "Formatting $root as ext4…"
+    mkfs.ext4 -F "$root" || die "mkfs failed."
+    mount "$root" "$TARGET" || die "mount failed."
+
+    prepare_common
+    pacstrap_and_configure "$root"
+}
+
+install_wipe_disk() {
+    banner
+    red "DESTRUCTIVE MODE — this erases an ENTIRE disk, including any Windows install or data on it."
+    local disk
+    disk="$(pick_from_lsblk 'Disk to ERASE COMPLETELY')"
+    [[ -b "$disk" ]] || die "Not a block device: $disk"
+    [[ "$disk" =~ [0-9]$ && "$disk" =~ (sd|vd) ]] && ylw "Note: that looks like a partition, not a whole disk."
+
+    red "You are about to DESTROY ALL DATA on $disk:"
+    lsblk "$disk"
+    echo
+    confirm_word "$disk" || { echo "Device name did not match. Cancelled."; return; }
+    red "Final confirmation."
+    confirm_word "ERASE" || { echo "Cancelled."; return; }
+
+    grn "Partitioning $disk…"
+    if is_efi; then
+        sgdisk --zap-all "$disk"
+        sgdisk -n1:0:+512M -t1:ef00 -c1:"EFI" "$disk"
+        sgdisk -n2:0:0     -t2:8300 -c2:"OutlawRoot" "$disk"
+        partprobe "$disk"; sleep 1
+        local p1 p2
+        p1="$(lsblk -nrpo NAME "$disk" | sed -n 2p)"
+        p2="$(lsblk -nrpo NAME "$disk" | sed -n 3p)"
+        mkfs.fat -F32 "$p1"
+        mkfs.ext4 -F "$p2"
+        mount "$p2" "$TARGET"
+        mkdir -p "$TARGET/boot/efi"
+        ESP="$p1"
+        mount "$ESP" "$TARGET/boot/efi"
+        read -rp "Username for the operator account: " USERNAME
+        [[ "$USERNAME" =~ ^[a-z_][a-z0-9_-]*$ ]] || die "Invalid username."
+        pacstrap_and_configure "$p2"
+    else
+        sgdisk --zap-all "$disk" 2>/dev/null || true
+        parted -s "$disk" mklabel msdos
+        parted -s "$disk" mkpart primary ext4 1MiB 100%
+        parted -s "$disk" set 1 boot on
+        partprobe "$disk"; sleep 1
+        local p1; p1="$(lsblk -nrpo NAME "$disk" | sed -n 2p)"
+        mkfs.ext4 -F "$p1"
+        mount "$p1" "$TARGET"
+        ESP=""
+        read -rp "Username for the operator account: " USERNAME
+        [[ "$USERNAME" =~ ^[a-z_][a-z0-9_-]*$ ]] || die "Invalid username."
+        BIOS_DISK="$disk"
+        pacstrap_and_configure "$p1"
+    fi
+}
+
+pacstrap_and_configure() {
+    local rootdev="$1"
+    grn "Installing base system (this can take a while)…"
+    pacstrap -K "$TARGET" "${PKGS[@]}" || die "pacstrap failed (check your network/mirrors)."
+
+    genfstab -U "$TARGET" >> "$TARGET/etc/fstab"
+
+    # Bring the shell + helper tools into the installed system.
+    mkdir -p "$TARGET/usr/share/outlaw-os"
+    cp -rT /usr/share/outlaw-os "$TARGET/usr/share/outlaw-os" 2>/dev/null || true
+    rm -rf "$TARGET/usr/share/outlaw-os/node_modules" 2>/dev/null || true
+
+    # Greeter Electron app + Outlaw CodeMaker bundle (both baked into the live
+    # ISO by build.sh). Either may be absent if the build skipped them; the
+    # launcher scripts handle missing-bundle gracefully.
+    if [[ -d /usr/share/outlaw-greeter ]]; then
+        mkdir -p "$TARGET/usr/share/outlaw-greeter"
+        cp -rT /usr/share/outlaw-greeter "$TARGET/usr/share/outlaw-greeter"
+    fi
+    if [[ -d /opt/outlaw-codemaker ]]; then
+        mkdir -p "$TARGET/opt/outlaw-codemaker"
+        cp -rT /opt/outlaw-codemaker "$TARGET/opt/outlaw-codemaker"
+    fi
+
+    install -Dm755 /usr/local/bin/outlaw-hotswap      "$TARGET/usr/local/bin/outlaw-hotswap"
+    install -Dm755 /usr/local/bin/outlaw-perf         "$TARGET/usr/local/bin/outlaw-perf"
+    install -Dm755 /usr/local/bin/outlaw-install      "$TARGET/usr/local/bin/outlaw-install"
+    install -Dm755 /usr/local/bin/outlaw-update-apply "$TARGET/usr/local/bin/outlaw-update-apply"
+    # New launchers (these can be absent on older live ISOs — copy if present).
+    for helper in outlaw-greeter outlaw-codemaker outlaw-lm-studio outlaw-session-watchdog outlaw-update-rollback outlaw-diagnose; do
+        if [[ -x "/usr/local/bin/$helper" ]]; then
+            install -Dm755 "/usr/local/bin/$helper" "$TARGET/usr/local/bin/$helper"
+        fi
+    done
+
+    # Propagate /etc/skel from the live system so new accounts inherit Outlaw's
+    # .bash_profile + .xinitrc (boot routing) and ~/.config/systemd/user/
+    # (SC4 scheduled diagnostic timers, disabled by default). pacstrap pulls in
+    # an Arch-base /etc/skel that lacks all of these; we layer our overrides on
+    # top, preserving any base files we don't override.
+    if [[ -d /etc/skel ]]; then
+        mkdir -p "$TARGET/etc/skel"
+        cp -rT /etc/skel "$TARGET/etc/skel" 2>/dev/null || true
+    fi
+
+    # Ask for the password here so it is passed into the chroot securely.
+    local pw1 pw2
+    while :; do
+        read -rsp "Password for $USERNAME (and disk): " pw1; echo
+        read -rsp "Confirm password: " pw2; echo
+        [[ "$pw1" == "$pw2" && -n "$pw1" ]] && break
+        red "Passwords did not match (or were empty). Try again."
+    done
+
+    # For BIOS, GRUB is written to the parent disk's MBR (never a partition).
+    local BOOT_TARGET="${BIOS_DISK:-}"
+    if [[ -z "$BOOT_TARGET" ]]; then
+        BOOT_TARGET="/dev/$(lsblk -nro PKNAME "$rootdev" | head -n1)"
+    fi
+
+    grn "Configuring the installed system…"
+    cat > "$TARGET/root/outlaw-chroot.sh" <<CHROOT
+#!/usr/bin/env bash
+set -e
+ln -sf /usr/share/zoneinfo/UTC /etc/localtime
+hwclock --systohc || true
+sed -i 's/^#\(en_US.UTF-8 UTF-8\)/\1/' /etc/locale.gen
+locale-gen
+echo 'LANG=en_US.UTF-8' > /etc/locale.conf
+echo 'outlaw' > /etc/hostname
+cat > /etc/hosts <<HOSTS
+127.0.0.1   localhost
+::1         localhost
+127.0.1.1   outlaw.localdomain outlaw
+HOSTS
+
+# Operator account (member of wheel; sudo requires the password — no NOPASSWD).
+useradd -m -G wheel,video,audio,input,storage,network -s /bin/bash "$USERNAME"
+install -d /etc/sudoers.d
+echo '%wheel ALL=(ALL:ALL) ALL' > /etc/sudoers.d/10-wheel
+# Let the operator manage ONLY the local AI service + perf governor without a prompt loop.
+chmod 440 /etc/sudoers.d/10-wheel
+
+# Autologin the operator on tty1 (their .bash_profile then starts the shell).
+install -d /etc/systemd/system/getty@tty1.service.d
+cat > /etc/systemd/system/getty@tty1.service.d/autologin.conf <<GETTY
+[Service]
+ExecStart=
+ExecStart=-/usr/bin/agetty --autologin $USERNAME --noclear %I 38400 linux
+GETTY
+
+systemctl enable NetworkManager apparmor
+# AI is provided by LM Studio (a user-installed desktop app, not a systemd
+# service). The shell talks to it on 127.0.0.1:1234 only when the user toggles
+# the AI on. Nothing to enable/disable here.
+
+# GRUB with OTHER-OS detection enabled (powers dual boot + hotswap).
+sed -i 's/^#\?GRUB_DISABLE_OS_PROBER=.*/GRUB_DISABLE_OS_PROBER=false/' /etc/default/grub
+grep -q GRUB_DISABLE_OS_PROBER /etc/default/grub || echo 'GRUB_DISABLE_OS_PROBER=false' >> /etc/default/grub
+sed -i 's/^GRUB_DEFAULT=.*/GRUB_DEFAULT=saved/' /etc/default/grub
+grep -q '^GRUB_SAVEDEFAULT' /etc/default/grub || echo 'GRUB_SAVEDEFAULT=true' >> /etc/default/grub
+
+if [[ -d /sys/firmware/efi/efivars ]]; then
+    grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id=OutlawOS --recheck
+else
+    grub-install --target=i386-pc --recheck "$BOOT_TARGET"
+fi
+grub-mkconfig -o /boot/grub/grub.cfg
+mkinitcpio -P
+
+# --- Outlaw CodeMaker venv (Dev session runtime) ---------------------------
+# CodeMaker source was copied to /opt/outlaw-codemaker before the chroot. If
+# the bundle is present we create a venv and install its pinned Linux deps so
+# the launcher (/usr/local/bin/outlaw-codemaker) finds .venv/bin/python on the
+# first Dev session and starts cleanly. Skip on failure — the launcher's
+# fallback opens the desktop shell with a notification.
+if [[ -f /opt/outlaw-codemaker/main.py ]]; then
+    REQS=/opt/outlaw-codemaker/requirements-linux.txt
+    [[ -f "$REQS" ]] || REQS=/opt/outlaw-codemaker/requirements.txt
+    if [[ -f "$REQS" ]]; then
+        echo "Provisioning Outlaw CodeMaker venv at /opt/outlaw-codemaker/.venv (this may take a few minutes)…"
+        python -m venv /opt/outlaw-codemaker/.venv || true
+        /opt/outlaw-codemaker/.venv/bin/pip install --upgrade pip || true
+        # --no-cache-dir keeps the on-disk footprint smaller; some wheels are big.
+        /opt/outlaw-codemaker/.venv/bin/pip install --no-cache-dir -r "$REQS" \
+            || echo "WARNING: some Outlaw CodeMaker dependencies failed to install — Dev session may degrade."
+    fi
+fi
+CHROOT
+
+    chmod +x "$TARGET/root/outlaw-chroot.sh"
+    arch-chroot "$TARGET" /root/outlaw-chroot.sh || die "Configuration failed."
+    rm -f "$TARGET/root/outlaw-chroot.sh"
+
+    # Set passwords via stdin so they are never written to a file or argv.
+    printf '%s:%s\n' "$USERNAME" "$pw1" | arch-chroot "$TARGET" chpasswd
+    printf 'root:%s\n' "$pw1"           | arch-chroot "$TARGET" chpasswd
+    unset pw1 pw2
+
+    echo
+    grn "✅ Outlaw OS installed successfully."
+    echo "Remove the USB and reboot. Your other operating systems remain in the boot menu."
+    echo "Switch between them any time with the HOTSWAP button or 'outlaw-hotswap'."
+}
+
+# ---------------------------------------------------------------------------
+do_uninstall() {
+    banner
+    ylw "Remove Outlaw OS — your other operating systems and their data stay intact."
+    echo
+    if is_efi && command -v efibootmgr >/dev/null; then
+        echo "Current UEFI boot entries:"
+        efibootmgr | grep -Ei 'outlaw' || echo "  (no Outlaw entry found)"
+        echo
+        read -rp "Remove the OutlawOS UEFI boot entry? [y/N] " a
+        if [[ "$a" =~ ^[Yy]$ ]]; then
+            for n in $(efibootmgr | sed -n 's/^Boot\([0-9A-Fa-f]\{4\}\)\*\?.*[Oo]utlaw.*/\1/p'); do
+                efibootmgr -b "$n" -B && grn "Removed Boot$n."
+            done
+        fi
+    fi
+    echo
+    ylw "Optionally free the partition Outlaw OS lived on (this erases ONLY that partition)."
+    read -rp "Format an Outlaw partition now? [y/N] " a
+    if [[ "$a" =~ ^[Yy]$ ]]; then
+        local p; p="$(pick_from_lsblk 'Outlaw OS root partition to free')"
+        [[ -b "$p" ]] || die "Not a block device: $p"
+        red "This formats ONLY $p. Other partitions are untouched."
+        confirm_word "FORMAT" || { echo "Cancelled."; return; }
+        mkfs.ext4 -F "$p" && grn "Freed $p."
+    fi
+    grn "Done. Reboot and your other OS will start as normal."
+    ylw "Tip: in Windows you can reclaim the freed space with Disk Management."
+}
+
+# ---------------------------------------------------------------------------
+banner
+case "${1:-}" in
+    --uninstall) do_uninstall; exit 0 ;;
+esac
+
+while :; do
+    banner
+    echo "  1) Install Outlaw OS"
+    echo "  2) Remove Outlaw OS (switch back to another OS)"
+    echo "  3) Open a shell"
+    echo "  0) Reboot"
+    read -rp "> " main
+    case "$main" in
+        1) do_install ;;
+        2) do_uninstall ;;
+        3) bash ;;
+        0) systemctl reboot ;;
+        *) ;;
+    esac
+    echo; read -rp "Press Enter to return to the menu…" _
+done

@@ -1,0 +1,90 @@
+#!/bin/bash
+# ============================================================================
+# outlaw-lm-studio — open LM Studio, or point the user at the download page.
+# ----------------------------------------------------------------------------
+# LM Studio is not in the Arch repos (it's a vendor AppImage from
+# https://lmstudio.ai). The OS pre-bundles this thin launcher so the shell can
+# treat "LM Studio" as just another allowlisted app.
+#
+# Behavior:
+#   * Already installed? Launch it.
+#   * Not installed?     Open the download page in the default browser, with a
+#                        one-line desktop notification explaining what to do.
+#
+# We intentionally DO NOT auto-download the AppImage — it's hundreds of MB and
+# the vendor's license terms should be presented by their own page.
+# ============================================================================
+
+set -u
+
+# Known places LM Studio might live, in order of preference.
+CANDIDATES=(
+    "$HOME/.local/bin/lm-studio"
+    "$HOME/.local/bin/lmstudio"
+    "$HOME/Applications/LM Studio.AppImage"
+    "$HOME/Applications/LMStudio.AppImage"
+    "$HOME/Applications/lm-studio.AppImage"
+    "/opt/lm-studio/lm-studio"
+    "/opt/lmstudio/lmstudio"
+    "/usr/local/bin/lm-studio"
+    "/usr/bin/lm-studio"
+)
+
+# Also try PATH-resolved names.
+PATH_NAMES=(lm-studio lmstudio LM-Studio)
+
+DOWNLOAD_URL="https://lmstudio.ai/download"
+
+notify() {
+    if command -v notify-send >/dev/null 2>&1; then
+        notify-send "Outlaw OS" "$1" 2>/dev/null || true
+    fi
+    echo "$1"
+}
+
+open_url() {
+    local url="$1"
+    if command -v xdg-open >/dev/null 2>&1; then
+        xdg-open "$url" >/dev/null 2>&1 &
+        disown 2>/dev/null || true
+        return 0
+    fi
+    for b in firefox chromium opera; do
+        if command -v "$b" >/dev/null 2>&1; then
+            "$b" "$url" >/dev/null 2>&1 &
+            disown 2>/dev/null || true
+            return 0
+        fi
+    done
+    return 1
+}
+
+launch() {
+    # Pass through any args so power users can do `outlaw-lm-studio --server`, etc.
+    "$1" "${@:2}" >/dev/null 2>&1 &
+    disown 2>/dev/null || true
+}
+
+# 1) Try fixed locations.
+for path in "${CANDIDATES[@]}"; do
+    if [[ -x "$path" ]]; then
+        launch "$path" "$@"
+        exit 0
+    fi
+done
+
+# 2) Try PATH.
+for name in "${PATH_NAMES[@]}"; do
+    if command -v "$name" >/dev/null 2>&1; then
+        launch "$(command -v "$name")" "$@"
+        exit 0
+    fi
+done
+
+# 3) Not installed — open the download page and explain.
+notify "LM Studio isn't installed. Opening the download page — install the AppImage, then click the AI toggle in Settings again."
+if open_url "$DOWNLOAD_URL"; then
+    exit 0
+fi
+echo "Could not open $DOWNLOAD_URL automatically. Visit it in any browser to install LM Studio." >&2
+exit 1

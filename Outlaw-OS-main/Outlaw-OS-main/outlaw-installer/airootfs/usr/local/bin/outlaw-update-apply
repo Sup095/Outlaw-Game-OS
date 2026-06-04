@@ -1,0 +1,64 @@
+#!/usr/bin/env bash
+# ============================================================================
+# outlaw-update-apply — atomically swap the on-disk Outlaw shell with a new
+# tarball downloaded by the shell's self-updater. Invoked via pkexec so the
+# user gets one Windows-style admin prompt per install (no passwordless root).
+#
+# Args: <tarball-path> <expected-sha256-hex>
+# ============================================================================
+set -euo pipefail
+
+TARBALL="${1:-}"
+EXPECTED="${2:-}"
+TARGET="/usr/share/outlaw-os"
+BACKUP="/usr/share/outlaw-os.prev"
+
+[[ $EUID -eq 0 ]] || { echo "Must run as root (use pkexec)." >&2; exit 1; }
+[[ -n "$TARBALL" && -f "$TARBALL" ]] || { echo "Tarball not found: $TARBALL" >&2; exit 2; }
+
+# Defence in depth: verify the SHA256 again even though the downloader did.
+if [[ -n "$EXPECTED" ]]; then
+    ACTUAL="$(sha256sum -- "$TARBALL" | awk '{print $1}')"
+    if [[ "$ACTUAL" != "$EXPECTED" ]]; then
+        echo "SHA256 mismatch (expected $EXPECTED, got $ACTUAL)" >&2
+        exit 3
+    fi
+fi
+
+TMP="$(mktemp -d /tmp/outlaw-update.XXXXXX)"
+trap 'rm -rf "$TMP"' EXIT
+
+# Reject anything that isn't a real tarball.
+file -b "$TARBALL" | grep -qi 'gzip compressed\|POSIX tar\|tar archive' \
+    || { echo "Not a tar.gz: $TARBALL" >&2; exit 2; }
+
+tar --no-same-owner -xzf "$TARBALL" -C "$TMP"
+
+# The tarball may extract flat or under a top-level folder; find package.json.
+NEW="$TMP"
+if [[ ! -f "$TMP/package.json" ]]; then
+    PJ="$(find "$TMP" -maxdepth 2 -name package.json -type f | head -n1 || true)"
+    [[ -n "$PJ" ]] || { echo "Update payload has no package.json." >&2; exit 4; }
+    NEW="$(dirname "$PJ")"
+fi
+[[ -f "$NEW/main.js" && -f "$NEW/preload.js" ]] \
+    || { echo "Update payload is missing required files." >&2; exit 4; }
+
+# Refuse to install anything not named "outlaw-os" — guards against the wrong
+# tarball being mis-attached to a release.
+NAME="$(sed -n 's/.*"name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$NEW/package.json" | head -n1)"
+[[ "$NAME" == "outlaw-os" ]] \
+    || { echo "Refusing to install: package name is '$NAME', expected 'outlaw-os'." >&2; exit 5; }
+
+VERSION="$(sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$NEW/package.json" | head -n1)"
+
+# Atomic swap: keep the previous shell as $BACKUP so a bad release can be
+# rolled back with `mv /usr/share/outlaw-os.prev /usr/share/outlaw-os`.
+rm -rf "$BACKUP"
+[[ -d "$TARGET" ]] && mv "$TARGET" "$BACKUP"
+install -d "$(dirname "$TARGET")"
+mv "$NEW" "$TARGET"
+chown -R root:root "$TARGET"
+chmod -R go-w "$TARGET"
+
+echo "Outlaw shell updated to v${VERSION:-?}. Previous version kept at $BACKUP."

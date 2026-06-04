@@ -1,0 +1,75 @@
+# ============================================================================
+# Outlaw Game OS — repo-wide ignores
+# ============================================================================
+
+# ----- Node / Electron ------------------------------------------------------
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ----- Python ---------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.tox/
+
+# ----- Build / dist outputs -------------------------------------------------
+build/
+dist/
+out/
+*.tar.gz
+*.iso
+*.sha256
+*.AppImage
+
+# ----- IDE / editor noise ---------------------------------------------------
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ----- Local data the user generated, NOT source ----------------------------
+# CodeMaker's local sqlite DBs (sessions, vault index, projects registry, evolution).
+# These are populated by the dev's own use of CodeMaker — never source of truth.
+Outlaw CodeMaker/db/*.db
+Outlaw CodeMaker/db/*.db-journal
+Outlaw CodeMaker/db/*.db-wal
+Outlaw CodeMaker/db/*.db-shm
+outlaw-codemaker/db/*.db
+outlaw-codemaker/db/*.db-journal
+outlaw-codemaker/db/*.db-wal
+outlaw-codemaker/db/*.db-shm
+
+# Auto-backups / per-project workspaces
+Outlaw CodeMaker/backups/
+Outlaw CodeMaker/workspace/
+outlaw-codemaker/backups/
+outlaw-codemaker/workspace/
+
+# Tesseract binary distribution (Windows-only, large, can be re-downloaded).
+Outlaw CodeMaker/tools/tesseract/
+outlaw-codemaker/tools/tesseract/
+
+# ----- Logs + diagnostic bundles --------------------------------------------
+*.log
+**/.launch_state
+
+# ----- OS-level state files (only present after running the OS / shell) -----
+.outlaw-session
+.outlaw-session-pref
+.outlaw-session-fails
+.outlaw-safe-mode
+.outlaw-session.honor-once
+.outlaw-diagnostics/
+.outlaw-codemaker/

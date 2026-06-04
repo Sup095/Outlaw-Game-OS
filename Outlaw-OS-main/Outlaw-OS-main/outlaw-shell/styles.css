@@ -1,0 +1,722 @@
+/* ===========================================================================
+   Outlaw OS shell theme
+   Green-phosphor terminal identity, but crisp and readable by default.
+   No scanlines, no flicker, no text glow unless the user opts in
+   (body.crt / body.glow) from Settings -> Appearance.
+   =========================================================================== */
+:root {
+    --term: #33ff00;
+    --term-dim: #1a8000;
+    --term-faint: #0d3d00;
+    --bg: #050705;
+    --panel: #0a0e0a;
+    --panel-2: #0d130d;
+    --line: #143d0d;
+    --danger: #ff3b3b;
+    --warn: #ffd23b;
+    --ok: #33ff00;
+    --text: #b9ffb0;
+    --radius: 6px;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+    margin: 0; padding: 0; height: 100%; width: 100%;
+    background: var(--bg); color: var(--text);
+    font-family: 'JetBrains Mono', 'Cascadia Code', 'Consolas', 'Courier New', monospace;
+    font-size: 14px; line-height: 1.5; overflow: hidden;
+    -webkit-font-smoothing: antialiased;
+}
+
+/* Optional retro effects (off by default) */
+body.glow, body.glow .mono { text-shadow: 0 0 4px rgba(51, 255, 0, 0.45); }
+body.crt::after {
+    content: ""; position: fixed; inset: 0; pointer-events: none; z-index: 9999;
+    background: repeating-linear-gradient(0deg, rgba(0,0,0,0.18) 0px, rgba(0,0,0,0.18) 1px, transparent 2px, transparent 3px);
+    mix-blend-mode: multiply;
+}
+body.crt .screen { animation: crtflicker 6s linear infinite; }
+@keyframes crtflicker { 0%,100% { opacity: 1; } 7% { opacity: 0.92; } 8% { opacity: 1; } 52% { opacity: 0.96; } }
+
+button {
+    background: rgba(51, 255, 0, 0.04); color: var(--term);
+    border: 1px solid var(--term-dim); border-radius: var(--radius);
+    padding: 9px 14px; font: inherit; cursor: pointer;
+    text-transform: uppercase; letter-spacing: 0.04em; transition: background .12s, color .12s, border-color .12s;
+}
+button:hover { background: var(--term); color: #001400; }
+button:focus-visible { outline: 2px solid var(--term); outline-offset: 2px; }
+button.danger { border-color: var(--danger); color: var(--danger); }
+button.danger:hover { background: var(--danger); color: #150000; }
+button.primary { background: var(--term); color: #001400; border-color: var(--term); font-weight: 700; }
+button:disabled { opacity: .4; cursor: not-allowed; }
+
+input, textarea, select {
+    background: #000; color: var(--term); border: 1px solid var(--line);
+    border-radius: var(--radius); padding: 10px 12px; font: inherit; width: 100%;
+}
+input:focus, textarea:focus, select:focus { outline: none; border-color: var(--term); }
+
+.mono { font-family: inherit; }
+.dim { color: var(--term-dim); }
+.muted { opacity: .7; }
+.right { text-align: right; }
+.row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.spacer { flex: 1; }
+h2, h3 { color: var(--term); font-weight: 600; letter-spacing: .05em; margin: 0 0 12px; }
+h3 { font-size: 13px; text-transform: uppercase; color: var(--term-dim); }
+
+/* ---- Layout ---- */
+#app { display: none; height: 100vh; grid-template-columns: 210px 1fr; grid-template-rows: 44px 1fr; }
+#app.ready { display: grid; }
+
+.topbar {
+    grid-column: 1 / -1; display: flex; align-items: center; gap: 14px;
+    padding: 0 14px; border-bottom: 1px solid var(--line); background: var(--panel);
+    font-size: 12px; letter-spacing: .06em;
+}
+.topbar .brand { color: var(--term); font-weight: 700; }
+.topbar .stat { color: var(--term-dim); }
+.topbar .pill { border: 1px solid var(--line); border-radius: 999px; padding: 2px 10px; }
+
+.sidebar { border-right: 1px solid var(--line); background: var(--panel); padding: 10px 8px; overflow-y: auto; }
+.nav-item {
+    display: flex; align-items: center; gap: 10px; width: 100%; text-align: left;
+    text-transform: none; letter-spacing: 0; border: 1px solid transparent; background: transparent;
+    color: var(--text); padding: 9px 10px; margin-bottom: 2px; border-radius: var(--radius);
+}
+.nav-item:hover { background: rgba(51,255,0,0.06); color: var(--term); }
+.nav-item.active { background: rgba(51,255,0,0.10); border-color: var(--term-dim); color: var(--term); }
+.nav-item .ico { width: 18px; text-align: center; }
+
+.content { overflow: auto; padding: 18px 22px; }
+.screen { display: none; }
+.screen.active { display: block; animation: fade .15s ease; }
+@keyframes fade { from { opacity: 0; } to { opacity: 1; } }
+
+.card { background: var(--panel-2); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; margin-bottom: 16px; }
+.grid { display: grid; gap: 12px; }
+.grid.cols-2 { grid-template-columns: 1fr 1fr; }
+.grid.cols-3 { grid-template-columns: repeat(3, 1fr); }
+.grid.apps { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+
+.tile {
+    display: flex; flex-direction: column; gap: 6px; align-items: flex-start;
+    padding: 16px; text-transform: none; letter-spacing: 0; text-align: left;
+    background: var(--panel-2); border: 1px solid var(--line); color: var(--text);
+}
+.tile:hover { background: rgba(51,255,0,0.08); color: var(--term); border-color: var(--term-dim); }
+.tile .t-ico { font-size: 22px; }
+.tile .t-label { font-weight: 600; }
+.tile .t-sub { font-size: 11px; opacity: .6; }
+
+/* ---- Chip (Apps filter pills) ---- */
+.chip {
+    padding: 4px 12px;
+    border-radius: 12px;
+    border: 1px solid var(--line);
+    background: var(--panel-2);
+    color: var(--text);
+    font-size: 11px;
+    letter-spacing: 0.5px;
+    cursor: pointer;
+    text-transform: uppercase;
+}
+.chip:hover { border-color: var(--term-dim); color: var(--term); }
+.chip.active {
+    background: var(--term-dim);
+    color: var(--bg);
+    border-color: var(--term);
+}
+
+/* ============================================================================
+   System Core (SC1)
+   ----------------------------------------------------------------------------
+   Layered SVG rings + center mark, all animated via `transform` and `opacity`
+   only — the cheapest possible CSS animations (compositor-only, no layout, no
+   paint). Animations are PAUSED by default; only run when the screen has the
+   `.is-active` class, which `syscore.js` adds when something is actually
+   happening (Cold-mode line, AI speaking, diagnostic running).
+
+   Idle state = static still image. Hidden state (.screen NOT .active) = `display:none`,
+   so the browser doesn't tick anything at all.
+   ============================================================================ */
+
+.syscore-header {
+    display: flex;
+    align-items: baseline;
+    gap: 14px;
+    padding-bottom: 4px;
+    border-bottom: 1px solid var(--line);
+    margin-bottom: 18px;
+}
+.syscore-header h2 {
+    margin: 0;
+    color: var(--term);
+    letter-spacing: 6px;
+    font-weight: 600;
+}
+.syscore-mode {
+    color: var(--term-dim);
+    font-size: 11px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+}
+.syscore-tier {
+    font-size: 10px;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    border: 1px solid currentColor;
+    border-radius: 3px;
+    padding: 2px 8px;
+    cursor: default;
+}
+.sc-tier-free    { color: var(--ok); }
+.sc-tier-lean    { color: var(--warn); }
+.sc-tier-minimal { color: var(--danger); }
+
+/* SC6 — Live mode toggle in the header. Bright green when active so a
+   glance at the header tells the user whether prompts go to LM Studio. */
+.syscore-mode-toggle {
+    background: transparent;
+    border: 1px solid var(--term-dim);
+    color: var(--term-dim);
+    padding: 3px 12px;
+    border-radius: 3px;
+    font-size: 10px;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    cursor: pointer;
+}
+.syscore-mode-toggle:hover { border-color: var(--term); color: var(--term); }
+.syscore-mode-toggle.live {
+    background: var(--term-dim);
+    color: var(--bg);
+    border-color: var(--term);
+}
+.syscore-mode-toggle:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+}
+
+/* SC6 — Input row beneath the bubble. Same dystopian palette; flex layout
+   so the Send button doesn't push the page width. */
+.core-input {
+    margin: 12px auto 0;
+    max-width: 640px;
+    display: flex;
+    gap: 6px;
+    align-items: center;
+}
+.core-input input[type="text"] {
+    flex: 1;
+    background: var(--panel-2);
+    border: 1px solid var(--line);
+    color: var(--term);
+    padding: 6px 10px;
+    font-size: 13px;
+    border-radius: 3px;
+    font-family: inherit;
+}
+.core-input input[type="text"]:focus {
+    outline: none;
+    border-color: var(--term);
+}
+.core-input button {
+    background: var(--panel-2);
+    border: 1px solid var(--term-dim);
+    color: var(--term);
+    padding: 6px 14px;
+    border-radius: 3px;
+    font-size: 11px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    cursor: pointer;
+}
+.core-input button:hover:not(:disabled) {
+    border-color: var(--term);
+    background: rgba(51, 255, 0, 0.06);
+}
+.core-input button:disabled { opacity: 0.4; cursor: not-allowed; }
+#core-input-reset {
+    border-color: var(--line);
+    color: var(--term-dim);
+}
+/* When the user is in emergency mode (lean/minimal manually pinned OR auto
+   detected low VRAM), suppress the spin/pulse animations entirely. This sits
+   on top of SC1's .is-active gate, so .core-suppressed always wins. */
+#screen-syscore.core-suppressed .core-ring,
+#screen-syscore.core-suppressed .core-aura,
+#screen-syscore.core-suppressed .core-mark {
+    animation-play-state: paused !important;
+}
+
+.core-stage {
+    position: relative;
+    width: 360px;
+    height: 360px;
+    margin: 8px auto 0;
+}
+.core-stage > svg,
+.core-stage > .core-aura {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    will-change: transform, opacity;
+    animation-play-state: paused;  /* Default — only runs when the parent has .is-active */
+}
+
+/* The three rotating rings + a soft aura behind them */
+.core-ring.outer  { animation: core-spin     12s linear infinite;          opacity: 0.85; }
+.core-ring.middle { animation: core-spin      7s linear infinite reverse;  opacity: 0.70; }
+.core-ring.inner  { animation: core-pulse     4s ease-in-out infinite;     opacity: 0.55; }
+.core-aura {
+    background: radial-gradient(circle at center,
+        rgba(51, 255, 0, 0.10) 0%,
+        rgba(51, 255, 0, 0.04) 40%,
+        transparent 70%);
+    animation: core-pulse 4s ease-in-out infinite;
+    opacity: 0.5;
+}
+.core-mark {
+    position: absolute;
+    inset: 0;
+    width: 28%;
+    height: 28%;
+    margin: auto;
+    z-index: 2;
+    color: var(--term);
+    filter: drop-shadow(0 0 6px rgba(51, 255, 0, 0.6));
+    animation: core-pulse 4s ease-in-out infinite;
+    animation-play-state: paused;
+    will-change: opacity, filter;
+}
+
+/* Animations only run while the user is *looking at* an active core */
+#screen-syscore.is-active .core-ring,
+#screen-syscore.is-active .core-aura,
+#screen-syscore.is-active .core-mark {
+    animation-play-state: running;
+}
+
+/* State modifiers — amplify specific layers depending on what the core is doing.
+   These are still cheap (animation-duration and filter changes only). */
+#screen-syscore.is-listening .core-ring.inner { animation-duration: 1.6s; opacity: 0.85; }
+#screen-syscore.is-listening .core-mark { filter: drop-shadow(0 0 12px rgba(51, 255, 0, 0.85)); }
+#screen-syscore.is-speaking  .core-ring.inner { animation-duration: 0.9s; opacity: 1.0; }
+#screen-syscore.is-speaking  .core-mark { filter: drop-shadow(0 0 18px rgba(51, 255, 0, 1.0)); }
+#screen-syscore.is-working   .core-ring.outer { animation-duration: 3.5s; opacity: 1.0; }
+#screen-syscore.is-working   .core-ring.middle { animation-duration: 2.2s; }
+
+/* Bubble — appears below the core with a quick fade. JS sets/clears `.show`. */
+.core-bubble {
+    margin: 18px auto 0;
+    min-height: 24px;
+    max-width: 640px;
+    text-align: center;
+    color: var(--term);
+    font-size: 13px;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    padding: 6px 14px;
+    border-left: 2px solid var(--term);
+    border-right: 2px solid var(--term);
+    opacity: 0;
+    transform: translateY(-4px);
+    transition: opacity 220ms ease, transform 220ms ease;
+}
+.core-bubble.show {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+/* Readouts grid (SC2 will populate). Empty placeholders shown dimmed in SC1. */
+.core-readouts {
+    margin: 28px auto 0;
+    max-width: 920px;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 10px;
+}
+.core-readout {
+    background: var(--panel-2);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 10px 12px;
+}
+.core-readout .label {
+    color: var(--term-dim);
+    font-size: 10px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+}
+.core-readout .value {
+    margin-top: 4px;
+    color: var(--term);
+    font-size: 18px;
+    font-family: 'JetBrains Mono', 'Cascadia Code', 'Consolas', monospace;
+}
+.core-readout.empty { opacity: 0.35; }
+.core-readout.empty .value { color: var(--term-dim); }
+.core-readout .sub {
+    margin-top: 2px;
+    color: var(--term-dim);
+    font-size: 10px;
+    letter-spacing: 1px;
+}
+/* SC2 — brief flash when a poll lands. Animates background only (no layout),
+   one-shot. The 'fresh' class is added on value change and removed by JS. */
+.core-readout.fresh {
+    animation: core-readout-flash 600ms ease-out;
+}
+@keyframes core-readout-flash {
+    0%   { background-color: rgba(51, 255, 0, 0.22); }
+    100% { background-color: var(--panel-2); }
+}
+
+/* SC2 — inventory card (static system catalogue, populated once per visit). */
+.syscore-subhead {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    margin-bottom: 10px;
+}
+.syscore-subhead h3 {
+    margin: 0;
+    color: var(--term);
+    letter-spacing: 4px;
+    font-weight: 600;
+    font-size: 14px;
+}
+.core-inventory {
+    margin: 28px auto 0;
+    max-width: 920px;
+    background: var(--panel-2);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 14px 16px;
+}
+.inv-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 6px 24px;
+}
+.inv-grid > div {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    padding: 5px 0;
+    border-bottom: 1px solid rgba(20, 61, 13, 0.5);
+    gap: 12px;
+    min-width: 0;
+}
+.inv-label {
+    color: var(--term-dim);
+    font-size: 10px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    flex-shrink: 0;
+}
+.inv-value {
+    color: var(--text);
+    font-size: 12px;
+    text-align: right;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+/* Status pips for AppArmor / firewall — green/amber/red without altering
+   layout. The JS adds one of these classes via _styleStatus(). */
+.inv-value.status-ok   { color: var(--ok); }
+.inv-value.status-warn { color: var(--warn); }
+.inv-value.status-bad  { color: var(--danger); }
+
+/* SC3 — Diagnostics card. Same "core" panel idiom as Inventory, plus a
+   button row, a slim progress bar (scaleX-only animation), and result rows
+   colored by status. The bar uses transform on a child span so growing it
+   never invalidates layout. */
+.core-diagnostics {
+    margin: 28px auto 0;
+    max-width: 920px;
+    background: var(--panel-2);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 14px 16px;
+}
+.diag-controls {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-bottom: 10px;
+}
+.diag-controls button[data-diag-profile] {
+    background: var(--panel);
+    border: 1px solid var(--term-dim);
+    color: var(--term);
+    padding: 6px 14px;
+    border-radius: 4px;
+    letter-spacing: 1.5px;
+    font-size: 11px;
+    cursor: pointer;
+}
+.diag-controls button[data-diag-profile]:hover:not(:disabled) {
+    border-color: var(--term);
+    background: rgba(51, 255, 0, 0.06);
+}
+.diag-controls button[data-diag-profile]:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+.diag-controls .spacer { flex: 1; }
+#diag-cancel {
+    background: transparent;
+    border: 1px solid var(--danger);
+    color: var(--danger);
+    padding: 6px 14px;
+    border-radius: 4px;
+    font-size: 11px;
+    letter-spacing: 1.5px;
+    cursor: pointer;
+}
+#diag-cancel:hover { background: rgba(255, 59, 59, 0.08); }
+
+.diag-progress { margin: 10px 0 14px; }
+.diag-bar-track {
+    height: 4px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 2px;
+    overflow: hidden;
+    margin-bottom: 6px;
+}
+#diag-bar {
+    display: block;
+    height: 100%;
+    width: 100%;
+    background: linear-gradient(90deg, var(--term-dim), var(--term));
+    transform: scaleX(0);
+    transform-origin: left center;
+    transition: transform 220ms ease-out;
+    will-change: transform;
+}
+#diag-progress-msg { font-size: 11px; }
+
+/* Result rows. Left-border color encodes status without changing layout. */
+.diag-results { margin-top: 4px; }
+.diag-row {
+    border-left: 3px solid var(--line);
+    padding: 8px 12px;
+    margin-bottom: 4px;
+    background: rgba(20, 61, 13, 0.12);
+    border-radius: 0 4px 4px 0;
+}
+.diag-row.diag-pass      { border-left-color: var(--ok); }
+.diag-row.diag-warn      { border-left-color: var(--warn); }
+.diag-row.diag-fail      { border-left-color: var(--danger); }
+.diag-row.diag-skip      { border-left-color: var(--term-dim); opacity: 0.65; }
+.diag-row.diag-cancelled { border-left-color: var(--warn); opacity: 0.7; }
+.diag-row-head {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+}
+.diag-pip {
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: currentColor;
+    flex-shrink: 0;
+}
+.diag-pass .diag-pip      { color: var(--ok); }
+.diag-warn .diag-pip      { color: var(--warn); }
+.diag-fail .diag-pip      { color: var(--danger); }
+.diag-skip .diag-pip      { color: var(--term-dim); }
+.diag-cancelled .diag-pip { color: var(--warn); }
+.diag-name {
+    flex: 1;
+    color: var(--text);
+    font-size: 12px;
+}
+.diag-status {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+}
+.diag-pass .diag-status      { color: var(--ok); }
+.diag-warn .diag-status      { color: var(--warn); }
+.diag-fail .diag-status      { color: var(--danger); }
+.diag-skip .diag-status      { color: var(--term-dim); }
+.diag-cancelled .diag-status { color: var(--warn); }
+.diag-dur {
+    font-size: 10px;
+    color: var(--term-dim);
+    font-family: 'JetBrains Mono', monospace;
+}
+.diag-detail {
+    margin-top: 4px;
+    color: var(--text);
+    font-size: 11px;
+    opacity: 0.85;
+}
+.diag-hint {
+    margin-top: 4px;
+    color: var(--term-dim);
+    font-size: 10px;
+    letter-spacing: 1px;
+}
+.diag-history,
+.diag-schedule {
+    margin-top: 12px;
+    border-top: 1px dashed var(--line);
+    padding-top: 8px;
+}
+.diag-history summary,
+.diag-schedule summary {
+    cursor: pointer;
+    color: var(--term-dim);
+    font-size: 11px;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+}
+
+/* SC4 — schedule rows. Flex layout so meta + info + actions stay on one
+   line on a typical desktop, wrapping cleanly on narrow viewports. */
+.diag-sched-rows {
+    margin-top: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+.diag-sched-row {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 8px 12px;
+    background: rgba(20, 61, 13, 0.10);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+}
+.diag-sched-label  { flex: 1 1 200px; min-width: 0; }
+.diag-sched-name   { color: var(--text); font-size: 12px; }
+.diag-sched-meta   { font-size: 10px; letter-spacing: 1px; margin-top: 2px; }
+.diag-sched-info   { flex: 1 1 220px; min-width: 0; }
+.diag-sched-info > div { font-size: 10px; letter-spacing: 1px; }
+.diag-sched-actions {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-shrink: 0;
+}
+.diag-sched-runnow {
+    background: transparent;
+    border: 1px solid var(--term-dim);
+    color: var(--term);
+    padding: 4px 10px;
+    border-radius: 4px;
+    font-size: 10px;
+    letter-spacing: 1px;
+    cursor: pointer;
+}
+.diag-sched-runnow:hover:not(:disabled) {
+    border-color: var(--term);
+    background: rgba(51, 255, 0, 0.06);
+}
+.diag-sched-runnow:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+}
+
+.core-footer {
+    margin: 24px auto 0;
+    max-width: 920px;
+    text-align: center;
+    font-size: 11px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+}
+
+/* Reduced-motion preference — strip animations entirely. The core still shows,
+   just doesn't move. */
+@media (prefers-reduced-motion: reduce) {
+    .core-ring, .core-mark, .core-aura { animation: none !important; }
+}
+
+@keyframes core-spin {
+    from { transform: rotate(0deg); }
+    to   { transform: rotate(360deg); }
+}
+@keyframes core-pulse {
+    0%, 100% { opacity: 0.35; }
+    50%      { opacity: 1.0; }
+}
+
+/* ---- Boot screen ---- */
+#boot { position: fixed; inset: 0; background: var(--bg); padding: 28px; display: flex; flex-direction: column; }
+#boot .log { white-space: pre-wrap; line-height: 1.6; font-size: 14px; color: var(--term); flex: 1; }
+#boot .actions { display: flex; gap: 10px; }
+.cursor { display: inline-block; width: 9px; height: 1.1em; background: var(--term); vertical-align: text-bottom; animation: blink 1s step-end infinite; }
+@keyframes blink { 0%,100% { opacity: 1; } 50% { opacity: 0; } }
+
+/* ---- Files / Tasks / Terminal ---- */
+.fs-path { color: var(--term-dim); margin-bottom: 8px; word-break: break-all; }
+.fs-list { display: flex; flex-direction: column; }
+.fs-row { display: flex; gap: 10px; padding: 6px 8px; border-radius: 4px; cursor: pointer; text-transform: none; letter-spacing: 0; text-align: left; background: transparent; border: none; color: var(--text); }
+.fs-row:hover { background: rgba(51,255,0,0.07); color: var(--term); }
+.fs-row .sz { margin-left: auto; opacity: .5; font-size: 12px; }
+
+table.proc { width: 100%; border-collapse: collapse; font-size: 13px; }
+table.proc th { text-align: left; color: var(--term-dim); border-bottom: 1px solid var(--line); padding: 6px 8px; }
+table.proc td { padding: 5px 8px; border-bottom: 1px solid rgba(20,61,13,0.4); }
+.bar { height: 10px; background: #001400; border: 1px solid var(--line); border-radius: 999px; overflow: hidden; }
+.bar > span { display: block; height: 100%; background: var(--term); }
+
+#term-out { height: 60vh; resize: none; white-space: pre-wrap; background: #000; }
+.term-hint { font-size: 12px; margin: 6px 0; min-height: 18px; }
+.term-hint.warn { color: var(--warn); }
+
+/* ---- AI ---- */
+#ai-log { height: 56vh; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding-right: 6px; }
+.msg { max-width: 80%; padding: 10px 12px; border-radius: 10px; white-space: pre-wrap; }
+.msg.user { align-self: flex-end; background: rgba(51,255,0,0.12); border: 1px solid var(--term-dim); }
+.msg.ai { align-self: flex-start; background: var(--panel-2); border: 1px solid var(--line); }
+.msg.sys { align-self: center; font-size: 12px; opacity: .7; }
+
+/* ---- Calculator ---- */
+.calc { max-width: 360px; }
+#calc-display { font-size: 30px; text-align: right; }
+.calc-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 12px; }
+.calc-grid button { padding: 16px 0; font-size: 18px; }
+
+/* ---- Toggles ---- */
+.setting { display: flex; align-items: center; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid rgba(20,61,13,0.4); }
+.setting:last-child { border-bottom: none; }
+.setting .label { display: flex; flex-direction: column; }
+.setting .label small { opacity: .6; }
+.switch { position: relative; width: 48px; height: 24px; flex: none; }
+.switch input { display: none; }
+.switch .track { position: absolute; inset: 0; background: #001400; border: 1px solid var(--line); border-radius: 999px; transition: .15s; }
+.switch .track::before { content: ""; position: absolute; width: 18px; height: 18px; left: 2px; top: 2px; background: var(--term-dim); border-radius: 50%; transition: .15s; }
+.switch input:checked + .track { border-color: var(--term); }
+.switch input:checked + .track::before { left: 26px; background: var(--term); }
+
+/* ---- Modal ---- */
+.modal-bg { position: fixed; inset: 0; background: rgba(0,0,0,0.75); display: none; align-items: center; justify-content: center; z-index: 1000; }
+.modal-bg.show { display: flex; }
+.modal { width: min(560px, 92vw); background: var(--panel); border: 1px solid var(--term-dim); border-radius: 8px; padding: 20px; }
+.modal.danger { border-color: var(--danger); }
+.modal h3 { color: var(--term); }
+.modal.danger h3 { color: var(--danger); }
+.modal pre { background: #000; border: 1px solid var(--line); padding: 10px; border-radius: 4px; white-space: pre-wrap; word-break: break-all; max-height: 30vh; overflow: auto; }
+.modal .actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 16px; }
+
+/* ---- Toast ---- */
+#toast { position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%); background: var(--panel); border: 1px solid var(--term-dim); color: var(--term); padding: 10px 16px; border-radius: 6px; opacity: 0; transition: opacity .2s; z-index: 1100; pointer-events: none; }
+#toast.show { opacity: 1; }
+.badge { font-size: 11px; padding: 1px 7px; border-radius: 999px; border: 1px solid var(--line); }
+.badge.on { color: var(--ok); border-color: var(--term-dim); }
+.badge.off { color: var(--term-dim); }

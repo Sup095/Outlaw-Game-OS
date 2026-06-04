@@ -1,0 +1,29 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(chmod +x \"F:/Outlaw Game OS/Outlaw-OS-main/Outlaw-OS-main/outlaw-installer/bundle-codemaker.sh\")",
+      "Bash(chmod +x \"F:/Outlaw Game OS/Outlaw-OS-main/Outlaw-OS-main/outlaw-installer/airootfs/usr/local/bin/outlaw-session-watchdog\")",
+      "Bash(python -c ' *)",
+      "Bash(.venv/Scripts/python.exe -c ' *)",
+      "Bash(.venv/Scripts/python.exe _review_check.py)",
+      "Bash(.venv/Scripts/python.exe -m pytest tests/ -x --tb=short)",
+      "Bash(.venv/Scripts/python.exe -m pytest tests/ --tb=short)",
+      "Bash(.venv/Scripts/python.exe -m pytest tests/)",
+      "Bash(node --check syscore.js)",
+      "Bash(node --check renderer.js)",
+      "Bash(node -e \"JSON.parse\\(require\\('fs'\\).readFileSync\\('package.json','utf8'\\)\\); console.log\\('package.json OK'\\)\")",
+      "Bash(node --check main.js)",
+      "Bash(node --check diagnostics.js)",
+      "Bash(node --check preload.js)",
+      "Bash(node -e ' *)",
+      "Bash(node --check tts.js)",
+      "Bash(node --check dialogue.js)",
+      "Bash(node -e \"JSON.parse\\(require\\('fs'\\).readFileSync\\('dialogue.json','utf8'\\)\\); console.log\\('dialogue.json OK'\\)\")",
+      "Bash(chmod +x \"F:/Outlaw Game OS/Outlaw-OS-main/Outlaw-OS-main/outlaw-installer/airootfs/usr/local/bin/outlaw-diagnose\")",
+      "Bash(node --check diagnostics-cli.js)",
+      "Bash(node --check vram-tier.js)",
+      "Bash(node --check coreai.js)",
+      "Bash(.venv/Scripts/python.exe -m pytest tests/ --tb=line -q)"
+    ]
+  }
+}
