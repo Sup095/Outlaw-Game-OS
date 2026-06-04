@@ -80,15 +80,41 @@ confirm_word() {
 do_install() {
     banner
     ylw "Choose an installation strategy:"
-    echo "  1) Install into an existing EMPTY partition (recommended, keeps other OSes & data)"
-    echo "  2) ERASE an entire disk and use all of it (DESTRUCTIVE)"
-    echo "  0) Back"
+    echo
+    echo "  1) Install ALONGSIDE other operating systems (recommended)"
+    echo "     -> Outlaw goes into a single EMPTY partition you pick."
+    echo "     -> Windows / your data / other Linux installs are NOT touched."
+    echo "     -> GRUB will add the other OSes to the boot menu automatically."
+    echo
+    echo "  2) ERASE an entire disk and make Outlaw the only OS (DESTRUCTIVE)"
+    echo "     -> Wipes EVERY partition on the chosen disk."
+    echo "     -> You will type the device name AND the word ERASE to confirm."
+    echo
+    echo "  3) Show me my disk layout first (read-only, decide afterwards)"
+    echo
+    echo "  0) Back to main menu"
     read -rp "> " strat
     case "$strat" in
         1) install_into_partition ;;
         2) install_wipe_disk ;;
+        3) show_disk_layout; return ;;
         *) return ;;
     esac
+}
+
+show_disk_layout() {
+    banner
+    grn "Disk layout (read-only — nothing is being changed)"
+    echo
+    lsblk -o NAME,SIZE,TYPE,FSTYPE,LABEL,MOUNTPOINTS
+    echo
+    ylw "Need to make room for Outlaw without losing other data?"
+    echo "  * Inside the live Outlaw system: open a terminal and run \`sudo gparted\`"
+    echo "    to shrink an existing partition (e.g. Windows C:) and free up space."
+    echo "  * Inside Windows: shrink the C: drive from Disk Management before"
+    echo "    booting this USB, then come back here and pick option 1."
+    echo
+    echo "When you have an empty partition, run \`sudo outlaw-install\` again and pick 1."
 }
 
 prepare_common() {
@@ -109,8 +135,18 @@ prepare_common() {
 
 install_into_partition() {
     banner
+    grn "INSTALL ALONGSIDE OTHER OPERATING SYSTEMS"
+    echo
+    echo "Pick the empty partition you want Outlaw to live in."
+    echo
+    ylw "Don't see an empty partition?"
+    echo "  -> Cancel this (type 0 below), then run \`sudo gparted\` from a terminal"
+    echo "     to shrink your Windows / other partition and make room. Come back"
+    echo "     here when you have free space + an empty partition."
+    echo
     local root
-    root="$(pick_from_lsblk 'Target ROOT partition for Outlaw OS')"
+    root="$(pick_from_lsblk 'Target ROOT partition for Outlaw OS (or 0 to cancel)')"
+    if [[ "$root" == "0" || -z "$root" ]]; then echo "Cancelled."; return; fi
     [[ -b "$root" ]] || die "Not a block device: $root"
 
     red "This will FORMAT only $root. Everything currently on $root will be lost."
@@ -358,15 +394,23 @@ esac
 
 while :; do
     banner
-    echo "  1) Install Outlaw OS"
-    echo "  2) Remove Outlaw OS (switch back to another OS)"
-    echo "  3) Open a shell"
+    grn "Welcome to the Outlaw OS installer."
+    echo "You're running the live system — nothing is installed yet."
+    echo
+    echo "  1) Install Outlaw OS  (alongside other OSes OR wipe a whole disk)"
+    echo "  2) Show my disk layout (read-only)"
+    echo "  3) Remove Outlaw OS  (switch back to another OS)"
+    echo "  4) Open a shell"
     echo "  0) Reboot"
+    echo
+    ylw "Tip: need to make space first? Run \`sudo gparted\` from a terminal."
+    echo
     read -rp "> " main
     case "$main" in
         1) do_install ;;
-        2) do_uninstall ;;
-        3) bash ;;
+        2) show_disk_layout ;;
+        3) do_uninstall ;;
+        4) bash ;;
         0) systemctl reboot ;;
         *) ;;
     esac

@@ -36,6 +36,11 @@ mtools
 arch-install-scripts
 gptfdisk
 parted
+# gparted is INSTALLED IN THE LIVE ISO ONLY (not in the on-disk install set in
+# outlaw-install's PKGS array) so first-time users can resize Windows / other
+# OS partitions from the live environment if they need to make space for
+# Outlaw, without bloating the post-install footprint.
+gparted
 
 # --- Security hardening ---
 apparmor

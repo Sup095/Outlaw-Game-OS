@@ -17,7 +17,10 @@ OUT_DIR="$REPO_ROOT/out"
 WORK_DIR="$OUT_DIR/work"
 PROFILE_DIR="$OUT_DIR/build-profile"
 RELENG="/usr/share/archiso/configs/releng"
-ISO_VERSION="2.0"
+# Default version baked in for local builds. CI overrides this from the git
+# tag via OUTLAW_ISO_VERSION (see .github/workflows/build-iso.yml) so the
+# artifact filename always matches the tag the user pushed.
+ISO_VERSION="${OUTLAW_ISO_VERSION:-2.0.1}"
 ISO_FINAL="$OUT_DIR/outlaw-os-v${ISO_VERSION}.iso"
 
 echo "========================================"

@@ -1,0 +1,40 @@
+# Virtual environment
+.venv/
+venv/
+
+# Phoenix Protocol working files
+.outlaw_shadow/
+backups/
+.launch_state
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+
+# App data
+db/*.db
+db/*.db-journal
+db/.onboarded
+database/*.db
+workspace/*
+!workspace/.gitkeep
+
+# Bundled Tesseract binaries (installed via tools/setup_tesseract.py)
+tools/tesseract/*
+!tools/tesseract/.gitkeep
+
+# Screenshots / scratch
+*.png
+*.jpg
+captures/
+
+# OS / editor
+Thumbs.db
+.DS_Store
+.idea/
+.vscode/
+
+# Claude harness project dir
+.claude/

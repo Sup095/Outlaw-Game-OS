@@ -27,6 +27,9 @@ contextBridge.exposeInMainWorld('outlaw', {
         disk: () => ipcRenderer.invoke('system:disk'),
         net: () => ipcRenderer.invoke('system:net'),
         inventory: () => ipcRenderer.invoke('system:inventory'),
+        // Returns {live: bool, dismissed: bool}. Drives the live-ISO welcome
+        // card on the Dashboard.
+        liveIso: () => ipcRenderer.invoke('system:live-iso'),
     },
 
     // --- Files (read-only browsing + guarded open) --------------------------

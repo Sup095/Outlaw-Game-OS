@@ -11,6 +11,45 @@ A small boot greeter asks **Dev or Desktop** on every boot; you can also flip mi
 
 ---
 
+## 🚀 Install on a real computer in 3 steps
+
+You don't need to build anything. Just grab the ISO and go.
+
+### 1. Download the ISO
+
+Go to the [**Releases**](../../releases) page on this repository and click the latest `outlaw-os-v*.iso` file. *(Tip: download the matching `.sha256` next to it if you want to verify the file is intact — `sha256sum -c outlaw-os-v*.iso.sha256`.)*
+
+### 2. Burn it to a USB stick (8 GB or larger)
+
+- **On Windows:** Install [Rufus](https://rufus.ie/), pick the ISO, pick your USB drive, leave defaults, click *Start*. ~5 minutes.
+- **On macOS:** `diskutil list` to find your USB device, then `sudo dd if=outlaw-os-v*.iso of=/dev/diskN bs=4m` (replace `N` with your device number — **double-check it's the USB, not your hard drive!**).
+- **On Linux:** `sudo dd if=outlaw-os-v*.iso of=/dev/sdX bs=4M status=progress` (replace `sdX` with your USB device).
+
+### 3. Boot from the USB
+
+Reboot, hit the boot-menu key during POST (usually **F12 / F2 / Del / Esc** — varies by motherboard), pick the USB drive. You'll land in the live Outlaw OS desktop with a sci-fi pulsing core in the middle of the screen.
+
+A welcome card on the Dashboard asks: **Install Outlaw OS** · **Try it first** · **Don't show again**.
+
+### Two install paths — your choice
+
+When you click *Install Outlaw OS*, you're asked how:
+
+| Option | What it does | Other data |
+|---|---|---|
+| **1. Install alongside other OSes** *(recommended)* | Outlaw goes into a single empty partition you pick. GRUB picks up Windows / other Linux installs and adds them to the boot menu. | **Untouched.** Anything not on the chosen partition stays exactly as it was. |
+| **2. Erase a whole disk** *(destructive)* | Wipes every partition on the chosen drive, makes Outlaw the only OS on it. You type the device name *and* the word `ERASE` to confirm. | Anything on the chosen disk is **gone**. Other disks are untouched. |
+
+**Don't have an empty partition yet?** Open a terminal in the live system and run `sudo gparted` — it's pre-installed in the live ISO. Shrink Windows (or any other partition), make a fresh blank partition in the freed space, then run the installer.
+
+You can also **try Outlaw without installing**. Everything works — diagnostics, the System Core, the shell, CodeMaker — your changes just disappear on reboot.
+
+### Removing Outlaw OS later
+
+If you want to switch back to your other OS, boot the USB again and pick **Remove Outlaw OS**. It deletes Outlaw's boot entry and (optionally) frees the partition. Your other OSes and their data stay intact.
+
+---
+
 ## Highlights
 
 - **Two sessions, one OS.** Boot into the greeter, pick Dev (CodeMaker) or Desktop (shell). Persistent preference if you always want the same one.
@@ -142,6 +181,25 @@ This codebase is the product of three sequential roadmaps:
 3. **System Core roadmap (7 slices)** — Sci-fi centerpiece scaffold, live telemetry, three-tier diagnostics, scheduled background checks via systemd timers, cold-mode dialogue + local TTS, Live AI mode with tool calls, two-layer VRAM tiering.
 
 All 25 slices are landed and tested. The `Outlaw CodeMaker/tests/` pytest suite plus the shell-side integration audits cover the critical paths.
+
+---
+
+## Shipping a new release (maintainers)
+
+This repo has a GitHub Actions workflow at `.github/workflows/build-iso.yml` that builds the ISO automatically and attaches it to a Release whenever you push a version tag. The flow:
+
+```bash
+# Bump the version in outlaw-installer/build.sh (ISO_VERSION="2.1.0") + commit it
+git commit -am "Bump to v2.1.0"
+
+# Tag and push
+git tag v2.1.0
+git push origin main --tags
+```
+
+That's it. The workflow takes ~15–25 minutes (mostly pacstrap + squashfs). When it finishes, the matching Release page has `outlaw-os-v2.1.0.iso` + `.sha256` attached, ready for users to download.
+
+You can also kick off a manual build from the Actions tab (workflow_dispatch) — that produces a downloadable artifact without publishing a Release.
 
 ---
 

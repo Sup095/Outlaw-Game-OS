@@ -1,0 +1,159 @@
+# ============================================================================
+# Outlaw Game OS — automated ISO build
+# ----------------------------------------------------------------------------
+# Fires on:
+#   * Tag push  matching v*       (publishes ISO to the matching Release)
+#   * workflow_dispatch            (manual builds — produces an artifact only)
+#
+# Builds inside the official archlinux container so mkarchiso has the exact
+# environment it expects. The job takes ~15–25 minutes; mostly pacstrap +
+# squashfs compression.
+#
+# On a tag push, the resulting outlaw-os-v<version>.iso and the matching
+# .sha256 file are attached to the GitHub Release. Users go to your Releases
+# page, click the .iso link, and they have everything they need.
+# ============================================================================
+
+name: build-iso
+
+on:
+  push:
+    # Accept lowercase v* and capital V* so either tagging convention works.
+    tags: ['v*', 'V*']
+  workflow_dispatch:
+
+permissions:
+  contents: write   # uploading release assets requires this
+
+jobs:
+  build:
+    name: Build Outlaw OS ISO
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    container:
+      image: archlinux:latest
+      # mkarchiso uses loop devices + chroot. The GitHub Actions runner
+      # supports privileged containers; we need it for archiso to function.
+      options: --privileged
+
+    steps:
+      - name: Refresh pacman + install build deps
+        run: |
+          # Keyring init + sync. Container images sometimes ship a stale or
+          # missing keyring which makes pacman -Sy fail. This makes it robust.
+          pacman-key --init
+          pacman-key --populate archlinux
+          pacman -Syu --noconfirm
+          pacman -S --noconfirm --needed \
+            archiso git base-devel \
+            nodejs python python-pip rsync \
+            mkinitcpio mkinitcpio-archiso squashfs-tools \
+            dosfstools mtools libisoburn
+
+      - name: Check out the repository
+        uses: actions/checkout@v4
+        with:
+          # Need submodules if the repo grows them later; harmless if none.
+          submodules: recursive
+          fetch-depth: 1
+
+      - name: Make the build script executable
+        run: |
+          # Defensive: GitHub-hosted repos sometimes lose +x on checkout.
+          chmod +x outlaw-installer/build.sh
+          chmod +x outlaw-installer/bundle-codemaker.sh
+          # Mark every helper in the airootfs/usr/local/bin executable too —
+          # mkarchiso copies bits straight from the working tree, so the +x
+          # flag on the host filesystem matters.
+          find outlaw-installer/airootfs/usr/local/bin -type f -exec chmod +x {} +
+
+      - name: Derive ISO version from tag (if this is a tag build)
+        id: ver
+        run: |
+          # Strip leading v/V from the tag so v2.0.1-beta -> 2.0.1-beta.
+          # On non-tag builds (workflow_dispatch / branch pushes) we just leave
+          # ISO_VERSION at the default baked into build.sh.
+          REF="${GITHUB_REF_NAME:-}"
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            VERSION="${REF#v}"
+            VERSION="${VERSION#V}"
+            echo "iso_version=$VERSION" >> "$GITHUB_OUTPUT"
+            echo "Using ISO_VERSION=$VERSION (derived from tag $REF)"
+          else
+            echo "iso_version=" >> "$GITHUB_OUTPUT"
+            echo "No tag — build.sh will use its built-in default."
+          fi
+
+      - name: Build the ISO
+        env:
+          # build.sh looks for CodeMaker via OUTLAW_CODEMAKER_SRC first, then
+          # several sibling paths. The repo lays CodeMaker out beside the
+          # installer, so we point at "../Outlaw CodeMaker" relative to
+          # outlaw-installer/ (which is where build.sh runs from).
+          OUTLAW_CODEMAKER_SRC: ${{ github.workspace }}/Outlaw CodeMaker
+          # When this is a tag build, override the version. Otherwise empty,
+          # which build.sh treats as "keep your default".
+          OUTLAW_ISO_VERSION: ${{ steps.ver.outputs.iso_version }}
+        run: |
+          cd outlaw-installer
+          ./build.sh
+
+      - name: Locate built artifacts
+        id: artifacts
+        run: |
+          ISO=$(ls -1 out/outlaw-os-v*.iso | head -n1)
+          SHA="$ISO.sha256"
+          if [[ ! -f "$ISO" ]]; then
+            echo "ISO not produced — check the build log above." >&2
+            exit 1
+          fi
+          echo "iso_path=$ISO" >> "$GITHUB_OUTPUT"
+          echo "sha_path=$SHA" >> "$GITHUB_OUTPUT"
+          echo "iso_name=$(basename "$ISO")" >> "$GITHUB_OUTPUT"
+          ls -lh "$ISO" "$SHA"
+
+      # Manual builds and main-branch builds keep the ISO as a workflow
+      # artifact (downloadable from the Actions tab). Tag-driven builds also
+      # attach it to the matching GitHub Release in the next step.
+      - name: Upload as workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.artifacts.outputs.iso_name }}
+          path: |
+            outlaw-installer/${{ steps.artifacts.outputs.iso_path }}
+            outlaw-installer/${{ steps.artifacts.outputs.sha_path }}
+          retention-days: 30
+          if-no-files-found: error
+
+      - name: Publish to GitHub Release (tag push only)
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          # Auto-creates the Release if it doesn't exist; updates if it does.
+          files: |
+            outlaw-installer/${{ steps.artifacts.outputs.iso_path }}
+            outlaw-installer/${{ steps.artifacts.outputs.sha_path }}
+          generate_release_notes: true
+          body: |
+            ## Outlaw Game OS ${{ github.ref_name }}
+
+            **Burn this ISO to a USB drive, boot it, and you're in.**
+
+            ### Install on your computer
+            1. Download `${{ steps.artifacts.outputs.iso_name }}` from this Release.
+            2. Burn it to a USB stick (8 GB or larger):
+               - **Windows:** Use [Rufus](https://rufus.ie/) — pick the ISO, pick your USB, leave defaults, Start.
+               - **macOS / Linux:** `dd if=${{ steps.artifacts.outputs.iso_name }} of=/dev/sdX bs=4M status=progress` (replace `/dev/sdX` with your USB device).
+            3. Boot from the USB (F12 / F2 / Del at startup — varies by motherboard).
+            4. You'll land in the live desktop. Try it live, or click **Install Outlaw OS** to install to disk.
+
+            ### Two install paths
+            - **Install alongside other OSes** (recommended) — Outlaw goes into a single empty partition you pick. Windows / your data / other Linux installs stay 100% intact. Need to make space? Open **GParted** from the menu and shrink your Windows partition first.
+            - **Erase a whole disk** (destructive) — wipe a drive, make Outlaw the only OS on it. Requires typing the device name *and* the word `ERASE` to confirm.
+
+            Either way, GRUB sees your other operating systems and adds them to the boot menu automatically.
+
+            ### Verify the download (recommended)
+            ```bash
+            sha256sum -c ${{ steps.artifacts.outputs.iso_name }}.sha256
+            ```

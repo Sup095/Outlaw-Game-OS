@@ -39,6 +39,13 @@ out/
 Thumbs.db
 desktop.ini
 
+# ----- Tooling-local config caches (never ship to users) --------------------
+# AI coding assistants, local permission caches, editor histories, etc.
+.claude/
+.cursor/
+.aider*
+.history/
+
 # ----- Local data the user generated, NOT source ----------------------------
 # CodeMaker's local sqlite DBs (sessions, vault index, projects registry, evolution).
 # These are populated by the dev's own use of CodeMaker — never source of truth.

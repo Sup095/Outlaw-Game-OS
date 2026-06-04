@@ -941,6 +941,38 @@ function wire() {
     }
 
     // Session switcher: jump straight from the desktop into a Dev session.
+    // Live-ISO welcome card buttons. The card itself is shown/hidden by
+    // refreshLiveWelcome() on boot; these handlers cover the three actions
+    // the user can take from it.
+    const liveInstall = $('#live-install-btn');
+    if (liveInstall) {
+        liveInstall.addEventListener('click', async () => {
+            try {
+                const r = await api.installer.launch();
+                if (!r || !r.ok) toast(r && r.error ? r.error : 'Could not launch installer.');
+            } catch (e) {
+                toast('Installer launch failed: ' + e.message);
+            }
+        });
+    }
+    const liveTry = $('#live-dismiss-btn');
+    if (liveTry) {
+        liveTry.addEventListener('click', () => {
+            const card = $('#live-welcome');
+            if (card) card.hidden = true;
+            toast('Card hidden for this session — try anything you like, reboot to reset.');
+        });
+    }
+    const liveNever = $('#live-never-btn');
+    if (liveNever) {
+        liveNever.addEventListener('click', async () => {
+            const card = $('#live-welcome');
+            if (card) card.hidden = true;
+            try { await setSetting({ liveWelcomeDismissed: true }); } catch {}
+            toast('Welcome card disabled permanently for this user.');
+        });
+    }
+
     const sessSwitchBtn = $('#session-switch-dev');
     if (sessSwitchBtn) {
         sessSwitchBtn.addEventListener('click', async () => {
@@ -1022,6 +1054,24 @@ window.addEventListener('DOMContentLoaded', async () => {
     // Probe whether a previous shell version exists on disk so the Rollback
     // button reflects reality on Settings open instead of waiting for a click.
     refreshRollbackAvailability().catch(() => {});
+    // Live-ISO welcome card. Only shows when /run/archiso exists AND the user
+    // hasn't ticked "Don't show again". Installed users never see this.
+    refreshLiveWelcome().catch(() => {});
     calcRender();
     runBoot();
 });
+
+async function refreshLiveWelcome() {
+    const card = $('#live-welcome');
+    if (!card || !api.system || !api.system.liveIso) return;
+    try {
+        const r = await api.system.liveIso();
+        if (r && r.live && !r.dismissed) {
+            card.hidden = false;
+        } else {
+            card.hidden = true;
+        }
+    } catch {
+        card.hidden = true;
+    }
+}

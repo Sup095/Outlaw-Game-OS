@@ -91,6 +91,11 @@ const DEFAULT_SETTINGS = {
     // `free` even when VRAM is low. `lean` / `minimal` force-pin the tier
     // regardless of probe. See vram-tier.js for thresholds + effects.
     vramSaverMode: 'auto',
+    // Live-ISO welcome card. The Dashboard shows it on every boot of the
+    // live system until the user clicks "Don't show again" — at which point
+    // this flips true and persists. Installed systems never have /run/archiso
+    // so the card is never shown there regardless.
+    liveWelcomeDismissed: false,
 };
 
 function loadSettings() {
@@ -862,6 +867,16 @@ function registerIpc() {
             detail = e.message;
         }
         return { ok: true, intent, did, detail };
+    });
+
+    // ----- Live-ISO detection ---------------------------------------------
+    // /run/archiso exists only when booted from the live ISO. On installed
+    // systems this returns false even if the user kept the ISO around.
+    ipcMain.handle('system:live-iso', () => {
+        if (!IS_LINUX) return { live: false, dismissed: !!settings.liveWelcomeDismissed };
+        let live = false;
+        try { live = fs.existsSync('/run/archiso'); } catch { /* default false */ }
+        return { live, dismissed: !!settings.liveWelcomeDismissed };
     });
 
     ipcMain.handle('files:home', () => os.homedir());

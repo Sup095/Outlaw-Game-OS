@@ -176,6 +176,19 @@ h3 { font-size: 13px; text-transform: uppercase; color: var(--term-dim); }
 .sc-tier-lean    { color: var(--warn); }
 .sc-tier-minimal { color: var(--danger); }
 
+/* Live-ISO welcome card — prominent on the Dashboard until dismissed. */
+.live-welcome {
+    border: 1px solid var(--term);
+    background:
+        radial-gradient(circle at 30% 20%, rgba(51, 255, 0, 0.06), transparent 60%),
+        var(--panel);
+}
+.live-welcome h2 {
+    color: var(--term);
+    letter-spacing: 1px;
+    margin: 0 0 4px;
+}
+
 /* SC6 — Live mode toggle in the header. Bright green when active so a
    glance at the header tells the user whether prompts go to LM Studio. */
 .syscore-mode-toggle {
