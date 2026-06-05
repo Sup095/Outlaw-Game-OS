@@ -20,7 +20,7 @@ RELENG="/usr/share/archiso/configs/releng"
 # Default version baked in for local builds. CI overrides this from the git
 # tag via OUTLAW_ISO_VERSION (see .github/workflows/build-iso.yml) so the
 # artifact filename always matches the tag the user pushed.
-ISO_VERSION="${OUTLAW_ISO_VERSION:-2.0.7}"
+ISO_VERSION="${OUTLAW_ISO_VERSION:-2.0.8}"
 ISO_FINAL="$OUT_DIR/outlaw-os-v${ISO_VERSION}.iso"
 
 echo "========================================"
@@ -132,7 +132,7 @@ sed -i \
 #                            for --disable-gpu so VBox doesn't black-screen).
 #   outlaw-firstboot       — launches the first-boot setup wizard.
 for f in outlaw-install outlaw-install-aur outlaw-electron-flags \
-         outlaw-firstboot outlaw-hotswap outlaw-perf \
+         outlaw-firstboot outlaw-start-session outlaw-hotswap outlaw-perf \
          outlaw-update-apply outlaw-update-rollback outlaw-greeter \
          outlaw-codemaker outlaw-lm-studio outlaw-session-watchdog \
          outlaw-diagnose; do

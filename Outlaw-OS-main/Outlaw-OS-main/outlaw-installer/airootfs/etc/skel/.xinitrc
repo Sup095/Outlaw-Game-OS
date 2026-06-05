@@ -28,6 +28,20 @@ exec 2>>"$XLOG"
 # Header so each X session is easy to find in the log.
 printf '\n=== outlaw .xinitrc start: %s ===\n' "$(date -Iseconds)" >&2
 
+# Inside a VM, force software OpenGL so Electron / picom never try to use a
+# GPU path the virtual adapter can't provide. Combined with the
+# --disable-gpu flags from outlaw-electron-flags, this kills the
+# black-screen-on-VirtualBox failure for good. No-op on real hardware.
+if command -v systemd-detect-virt >/dev/null 2>&1; then
+    if [ "$(systemd-detect-virt 2>/dev/null)" != "none" ]; then
+        export LIBGL_ALWAYS_SOFTWARE=1
+        export GALLIUM_DRIVER=llvmpipe
+        echo "[xinitrc] VM detected — forcing software GL (LIBGL_ALWAYS_SOFTWARE=1)." >&2
+    fi
+fi
+
+# picom is nice-to-have, not essential. In a VM with no compositing support
+# it can fail; that's fine, the shell still renders. Run it best-effort.
 picom --config "$HOME/.config/picom/picom.conf" >/dev/null 2>&1 &
 
 # First-boot wizard: install optional bundles (Steam stack, Firefox, Godot)

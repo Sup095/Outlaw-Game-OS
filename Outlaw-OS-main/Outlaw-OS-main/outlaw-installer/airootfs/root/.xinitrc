@@ -19,6 +19,18 @@ exec 2>>"$XLOG"
 
 printf '\n=== outlaw live .xinitrc start: %s ===\n' "$(date -Iseconds)" >&2
 
+# Inside a VM, force software OpenGL so Electron / picom never try a GPU path
+# the virtual adapter can't provide. With the --disable-gpu flags from
+# outlaw-electron-flags this eliminates the black-screen-on-VBox failure.
+# No-op on real hardware.
+if command -v systemd-detect-virt >/dev/null 2>&1; then
+    if [ "$(systemd-detect-virt 2>/dev/null)" != "none" ]; then
+        export LIBGL_ALWAYS_SOFTWARE=1
+        export GALLIUM_DRIVER=llvmpipe
+        echo "[xinitrc] VM detected — forcing software GL (LIBGL_ALWAYS_SOFTWARE=1)." >&2
+    fi
+fi
+
 picom --config /root/.config/picom/picom.conf >/dev/null 2>&1 &
 
 if [ "${OUTLAW_SKIP_GREETER:-0}" != "1" ]; then

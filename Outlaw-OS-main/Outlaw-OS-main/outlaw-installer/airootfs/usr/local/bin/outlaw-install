@@ -39,6 +39,10 @@ ESSENTIAL_PKGS=(
   # X / desktop runtime
   xorg-server xorg-xinit picom feh rofi thunar xfce4-terminal electron
   ttf-jetbrains-mono noto-fonts mesa
+  # Xorg video drivers — vesa is the universal fallback (works on any GPU
+  # without KMS), vmware drives VirtualBox's VMSVGA adapter. Without these
+  # X may fail to find a screen on VMs and crash-loop. ~400 KB total.
+  xf86-video-vesa xf86-video-vmware
 
   # VirtualBox compatibility. The kernel modules auto-load only when VBox
   # is detected on boot, so this is harmless on real hardware — but for
@@ -274,16 +278,26 @@ pacstrap_and_configure() {
         cp -rT /opt/outlaw-codemaker "$TARGET/opt/outlaw-codemaker"
     fi
 
-    install -Dm755 /usr/local/bin/outlaw-hotswap      "$TARGET/usr/local/bin/outlaw-hotswap"
-    install -Dm755 /usr/local/bin/outlaw-perf         "$TARGET/usr/local/bin/outlaw-perf"
-    install -Dm755 /usr/local/bin/outlaw-install      "$TARGET/usr/local/bin/outlaw-install"
-    install -Dm755 /usr/local/bin/outlaw-update-apply "$TARGET/usr/local/bin/outlaw-update-apply"
-    # New launchers (these can be absent on older live ISOs — copy if present).
-    for helper in outlaw-greeter outlaw-codemaker outlaw-lm-studio outlaw-session-watchdog outlaw-update-rollback outlaw-diagnose; do
-        if [[ -x "/usr/local/bin/$helper" ]]; then
-            install -Dm755 "/usr/local/bin/$helper" "$TARGET/usr/local/bin/$helper"
-        fi
+    # Copy EVERY outlaw-* helper from the live image into the installed system.
+    # Using a glob (not a hardcoded list) means new helpers added to the ISO —
+    # outlaw-electron-flags, outlaw-firstboot, outlaw-start-session,
+    # outlaw-install-aur, etc. — are picked up automatically. A stale hardcoded
+    # list here previously dropped the VM GPU-flag helper from installs, which
+    # left the installed system black-screening even after the live ISO worked.
+    shopt -s nullglob
+    for helper in /usr/local/bin/outlaw-*; do
+        [[ -f "$helper" ]] || continue
+        install -Dm755 "$helper" "$TARGET/usr/local/bin/$(basename "$helper")"
     done
+    shopt -u nullglob
+
+    # First-boot wizard Electron app (separate from the shell). Copy if the
+    # live image carries it.
+    if [[ -d /usr/share/outlaw-firstboot ]]; then
+        mkdir -p "$TARGET/usr/share/outlaw-firstboot"
+        cp -rT /usr/share/outlaw-firstboot "$TARGET/usr/share/outlaw-firstboot"
+        rm -rf "$TARGET/usr/share/outlaw-firstboot/node_modules" 2>/dev/null || true
+    fi
 
     # Propagate /etc/skel from the live system so new accounts inherit Outlaw's
     # .bash_profile + .xinitrc (boot routing) and ~/.config/systemd/user/

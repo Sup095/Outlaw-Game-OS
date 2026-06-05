@@ -63,6 +63,15 @@ ufw
 # --- Desktop / shell runtime ---
 xorg-server
 xorg-xinit
+# Xorg video drivers. Without an explicit xf86-video-* driver, Xorg falls
+# back to the in-kernel "modesetting" path, which only works if the guest's
+# KMS driver happens to match the VM's emulated GPU — flaky on VirtualBox
+# and the cause of "X exits immediately → getty relaunch loop → black
+# screen". xf86-video-vesa is the universal no-KMS fallback (works on ANY
+# adapter); xf86-video-vmware drives VirtualBox's default VMSVGA controller
+# with acceleration. Tiny (~200 KB each) but they make X actually start.
+xf86-video-vesa
+xf86-video-vmware
 picom
 feh
 rofi
