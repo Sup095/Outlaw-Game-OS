@@ -20,7 +20,7 @@ RELENG="/usr/share/archiso/configs/releng"
 # Default version baked in for local builds. CI overrides this from the git
 # tag via OUTLAW_ISO_VERSION (see .github/workflows/build-iso.yml) so the
 # artifact filename always matches the tag the user pushed.
-ISO_VERSION="${OUTLAW_ISO_VERSION:-2.0.6}"
+ISO_VERSION="${OUTLAW_ISO_VERSION:-2.0.7}"
 ISO_FINAL="$OUT_DIR/outlaw-os-v${ISO_VERSION}.iso"
 
 echo "========================================"
@@ -62,6 +62,16 @@ echo "[3/7] Syncing Outlaw shell…"
 install -d "$PROFILE_DIR/airootfs/usr/share/outlaw-os"
 cp -rT "$REPO_ROOT/outlaw-shell" "$PROFILE_DIR/airootfs/usr/share/outlaw-os"
 rm -rf "$PROFILE_DIR/airootfs/usr/share/outlaw-os/node_modules" 2>/dev/null || true
+
+# Sync the first-boot wizard (separate small Electron app shown on first
+# login after install — checkbox UI for Steam / Firefox / Godot bundles).
+# Skipped silently on the live ISO via /root/.xinitrc.
+if [[ -d "$REPO_ROOT/outlaw-firstboot" ]]; then
+    echo "[3b/7] Syncing first-boot wizard…"
+    install -d "$PROFILE_DIR/airootfs/usr/share/outlaw-firstboot"
+    cp -rT "$REPO_ROOT/outlaw-firstboot" "$PROFILE_DIR/airootfs/usr/share/outlaw-firstboot"
+    rm -rf "$PROFILE_DIR/airootfs/usr/share/outlaw-firstboot/node_modules" 2>/dev/null || true
+fi
 
 # Bundle Outlaw CodeMaker into /opt/outlaw-codemaker. The path can be
 # overridden with OUTLAW_CODEMAKER_SRC for non-standard checkouts. We try a
@@ -116,10 +126,13 @@ sed -i \
     -e 's/^iso_publisher=.*/iso_publisher="Outlaw OS"/' \
     -e 's#^iso_application=.*#iso_application="Outlaw OS Live / Boot Manager"#' \
     "$PD"
-# Ensure our helper scripts are executable in the image. outlaw-install-aur
-# is the privileged helper invoked via pkexec by CodeMaker's Steam panel to
-# install AUR packages (currently just steamcmd) on demand.
-for f in outlaw-install outlaw-install-aur outlaw-hotswap outlaw-perf \
+# Ensure our helper scripts are executable in the image.
+#   outlaw-install-aur     — pkexec helper for on-demand AUR install (steamcmd).
+#   outlaw-electron-flags  — emits per-host Electron CLI flags (VM detection
+#                            for --disable-gpu so VBox doesn't black-screen).
+#   outlaw-firstboot       — launches the first-boot setup wizard.
+for f in outlaw-install outlaw-install-aur outlaw-electron-flags \
+         outlaw-firstboot outlaw-hotswap outlaw-perf \
          outlaw-update-apply outlaw-update-rollback outlaw-greeter \
          outlaw-codemaker outlaw-lm-studio outlaw-session-watchdog \
          outlaw-diagnose; do

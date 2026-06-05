@@ -4,27 +4,52 @@
 # ----------------------------------------------------------------------------
 # Boot flow:
 #   1. picom starts in the background (clean vsync compositor, no tearing).
-#   2. outlaw-greeter runs (Electron, kiosk-ish window) and writes the user's
+#   2. outlaw-firstboot runs ONCE on first login (checkbox UI: install Steam
+#      / Firefox / Godot bundles). After the user picks, it touches
+#      ~/.outlaw-firstboot-done so it never runs again. Skippable.
+#   3. outlaw-greeter runs (Electron, kiosk-ish window) and writes the user's
 #      session choice to ~/.outlaw-session.
-#   3. This script reads the choice and execs the matching session:
+#   4. This script reads the choice and execs the matching session:
 #        dev      → outlaw-codemaker (PyQt AI game-dev agent)
-#        desktop  → electron /usr/share/outlaw-os (standard shell)
+#        desktop  → electron-wrapped /usr/share/outlaw-os (standard shell)
 #        tty      → exit X, dropping back to the login console
+#
+# All stderr from the greeter / first-boot wizard / shell goes to
+# ~/.outlaw-x.log so silent Electron failures (the classic black-screen
+# symptom on VBox without 3D) are diagnosable after the fact.
 #
 # Fail-safe: if anything is missing or the choice can't be read, we fall back
 # to the desktop shell so the user is never stranded.
 # ============================================================================
 
+XLOG="$HOME/.outlaw-x.log"
+exec 2>>"$XLOG"
+
+# Header so each X session is easy to find in the log.
+printf '\n=== outlaw .xinitrc start: %s ===\n' "$(date -Iseconds)" >&2
+
 picom --config "$HOME/.config/picom/picom.conf" >/dev/null 2>&1 &
+
+# First-boot wizard: install optional bundles (Steam stack, Firefox, Godot)
+# the first time the user logs in. Marker file prevents re-runs.
+if [ ! -f "$HOME/.outlaw-firstboot-done" ] && command -v outlaw-firstboot >/dev/null 2>&1; then
+    echo "[xinitrc] first-boot wizard launching..." >&2
+    outlaw-firstboot || echo "[xinitrc] first-boot wizard exited non-zero (ignoring)" >&2
+fi
 
 # Run the greeter (blocks until the user picks). Honor a one-shot override:
 # set OUTLAW_SKIP_GREETER=1 (e.g. in /etc/environment) to bypass it for kiosks.
 if [ "${OUTLAW_SKIP_GREETER:-0}" != "1" ]; then
-    outlaw-greeter 2>/dev/null || true
+    outlaw-greeter || true
 fi
 
 SESSION="$(head -n1 "$HOME/.outlaw-session" 2>/dev/null | tr -d '[:space:]')"
 [ -z "$SESSION" ] && SESSION="desktop"
+
+# Build the Electron flag set once so the desktop session launch matches the
+# greeter (VM detection → --disable-gpu where needed).
+ELECTRON_FLAGS="$(outlaw-electron-flags 2>/dev/null | tr '\n' ' ')"
+[ -z "$ELECTRON_FLAGS" ] && ELECTRON_FLAGS="--no-sandbox"
 
 # Wrap the actual session launch in outlaw-session-watchdog so 3 consecutive
 # quick deaths flip us into safe-mode (Desktop) instead of looping forever.
@@ -32,9 +57,16 @@ SESSION="$(head -n1 "$HOME/.outlaw-session" 2>/dev/null | tr -d '[:space:]')"
 # re-read it on a watchdog-triggered exit (code 87).
 run_session() {
     case "$1" in
-        dev)     outlaw-session-watchdog dev outlaw-codemaker ;;
-        desktop) outlaw-session-watchdog desktop electron /usr/share/outlaw-os ;;
-        tty|*)   return 0 ;;
+        dev)
+            outlaw-session-watchdog dev outlaw-codemaker
+            ;;
+        desktop)
+            # shellcheck disable=SC2086  # word-splitting of ELECTRON_FLAGS is intentional
+            outlaw-session-watchdog desktop electron $ELECTRON_FLAGS /usr/share/outlaw-os
+            ;;
+        tty|*)
+            return 0
+            ;;
     esac
 }
 

@@ -27,9 +27,11 @@ if [[ ! -f "$GREETER_DIR/main.js" ]]; then
     exit 0
 fi
 
-# Some sandbox configurations on live images can't open the user namespace
-# Electron wants. --no-sandbox is fine here: the greeter is a closed surface
-# (no network, CSP locked down, one IPC method that writes a single file).
+# Electron CLI flags come from outlaw-electron-flags, which always emits
+# --no-sandbox and (when running in a VM with no 3D acceleration) adds
+# --disable-gpu --disable-gpu-compositing. The latter prevents the silent
+# black-screen-with-cursor failure mode on VirtualBox / QEMU with 3D off.
 # Run synchronously — .xinitrc waits for the greeter to exit before reading
 # the session file.
-exec electron --no-sandbox "$GREETER_DIR"
+mapfile -t ELECTRON_FLAGS < <(outlaw-electron-flags 2>/dev/null || echo "--no-sandbox")
+exec electron "${ELECTRON_FLAGS[@]}" "$GREETER_DIR"

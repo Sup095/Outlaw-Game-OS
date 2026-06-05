@@ -15,28 +15,65 @@
 # ============================================================================
 set -uo pipefail
 
-# Default install is minimal. Everything else (Blender, GIMP, VS Code, Lutris,
-# Wine, security toolkit, chromium, etc.) is available on demand via the shell's
-# Apps panel, which runs `pkexec pacman -S <pkg>` after the user clicks Install.
-# Keep this list in sync with outlaw-installer/packages.x86_64.
-PKGS=(
+# ESSENTIAL_PKGS — the MINIMUM set needed to (a) boot the installed system,
+# (b) bring up the Electron shell + greeter, and (c) run Outlaw CodeMaker.
+# Everything else lives in optional bundles that the first-boot wizard
+# (/usr/share/outlaw-firstboot) lets the user opt into on first login.
+#
+# Why split? A failure in any single package causes pacstrap to abort and
+# leaves the user with a half-installed system. Keeping the install slim
+# shrinks the failure surface and lets users decline things they don't
+# want (e.g. gaming users who don't need Godot, devs who don't want Steam).
+# steamcmd remains AUR-only — see Outlaw CodeMaker/core/aur_install.py.
+ESSENTIAL_PKGS=(
+  # Base system
   base linux linux-firmware intel-ucode amd-ucode mkinitcpio
   sudo polkit networkmanager curl wget git nano
+
+  # Bootloader / install tooling
   grub efibootmgr os-prober dosfstools mtools gptfdisk parted
+
+  # Security hardening
   apparmor firejail ufw
+
+  # X / desktop runtime
   xorg-server xorg-xinit picom feh rofi thunar xfce4-terminal electron
-  ttf-jetbrains-mono noto-fonts
-  # steamcmd is AUR-only; CodeMaker's Steam panel installs it on demand at
-  # publish time. Keep this list in sync with outlaw-installer/packages.x86_64.
-  steam gamemode lib32-gamemode gamescope
-  mangohud lib32-mangohud vulkan-icd-loader lib32-vulkan-icd-loader vulkan-tools
-  mesa lib32-mesa firefox
-  godot base-devel python python-pip cmake
+  ttf-jetbrains-mono noto-fonts mesa
+
+  # VirtualBox compatibility. The kernel modules auto-load only when VBox
+  # is detected on boot, so this is harmless on real hardware — but for
+  # users testing the ISO in VBox / VBox-based VMs, it provides the proper
+  # vboxvideo driver and ensures the shell isn't stuck on the fallback
+  # framebuffer (which on VBox without 3D is what causes the black-screen
+  # symptom). ~10 MB on disk.
+  virtualbox-guest-utils
+
+  # Python + build tools (needed for the CodeMaker venv to compile any
+  # native pip wheels for pyautogui / pytesseract / pillow on this host)
+  python python-pip base-devel cmake
+
   # Outlaw CodeMaker runtime deps (X11 input + OCR backend for pyautogui /
   # pytesseract). The Python packages themselves live in a venv created in
   # /opt/outlaw-codemaker/.venv during this install (see post-pacstrap step).
   xdotool scrot tesseract tesseract-data-eng
 )
+
+# OPTIONAL_BUNDLES — installed by /usr/share/outlaw-firstboot AFTER the user
+# logs in for the first time. The wizard shows each bundle as a checkbox
+# (defaulting to checked) and lets the user opt out of any of them. Bundle
+# definitions inside outlaw-firstboot/main.js must stay in sync with what's
+# listed here as a comment for the maintainer's reference:
+#
+#   steam-gaming: steam, gamemode, lib32-gamemode, gamescope, mangohud,
+#                 lib32-mangohud, vulkan-icd-loader, lib32-vulkan-icd-loader,
+#                 vulkan-tools, lib32-mesa
+#   firefox:      firefox
+#   godot:        godot
+#
+# Anything else (Blender, GIMP, VS Code, Lutris, Wine, etc.) stays available
+# on demand via the shell's Apps panel after first login.
+
+PKGS=("${ESSENTIAL_PKGS[@]}")
 
 red()  { printf '\033[31m%s\033[0m\n' "$*"; }
 grn()  { printf '\033[32m%s\033[0m\n' "$*"; }
