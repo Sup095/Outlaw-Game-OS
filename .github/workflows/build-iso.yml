@@ -68,14 +68,55 @@ jobs:
             dosfstools mtools libisoburn
 
       - name: Check out the repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           # Need submodules if the repo grows them later; harmless if none.
           submodules: recursive
           fetch-depth: 1
 
+      - name: Diagnostics — environment + workspace tree
+        # If a later step fails silently, this gives us *something* to diff
+        # against when reading the run log. Cheap, fast, easy.
+        run: |
+          set -e
+          echo "::group::Runner environment"
+          uname -a
+          echo "Node: $(node --version 2>/dev/null || echo none)"
+          echo "Bash: $BASH_VERSION"
+          echo "PWD : $(pwd)"
+          echo "Free disk:"
+          df -h / "$GITHUB_WORKSPACE" 2>/dev/null || df -h
+          echo "Free memory:"
+          free -h 2>/dev/null || echo "(free not available)"
+          echo "::endgroup::"
+
+          echo "::group::Workspace top level"
+          ls -la "$GITHUB_WORKSPACE"
+          echo "::endgroup::"
+
+          echo "::group::INSTALLER_DIR contents"
+          if [[ -d "$INSTALLER_DIR" ]]; then
+            ls -la "$INSTALLER_DIR"
+          else
+            echo "::error::INSTALLER_DIR ($INSTALLER_DIR) does not exist."
+            exit 1
+          fi
+          echo "::endgroup::"
+
+          echo "::group::CodeMaker source sanity"
+          CM="$GITHUB_WORKSPACE/Outlaw CodeMaker"
+          if [[ -d "$CM" ]]; then
+            echo "Found CodeMaker dir."
+            [[ -f "$CM/main.py" ]] && echo "  main.py present." || echo "::warning::main.py missing — bundler will skip."
+            ls "$CM" | head -20
+          else
+            echo "::warning::Outlaw CodeMaker dir missing — Dev session will fall back to desktop."
+          fi
+          echo "::endgroup::"
+
       - name: Make the build script executable
         run: |
+          set -e
           # Defensive: GitHub-hosted repos sometimes lose +x on checkout.
           chmod +x "$INSTALLER_DIR/build.sh"
           chmod +x "$INSTALLER_DIR/bundle-codemaker.sh"
@@ -83,6 +124,7 @@ jobs:
           # mkarchiso copies bits straight from the working tree, so the +x
           # flag on the host filesystem matters.
           find "$INSTALLER_DIR/airootfs/usr/local/bin" -type f -exec chmod +x {} +
+          echo "Permissions set. build.sh: $(ls -l "$INSTALLER_DIR/build.sh")"
 
       - name: Derive ISO version from tag (if this is a tag build)
         id: ver
@@ -110,8 +152,34 @@ jobs:
           # which build.sh treats as "keep your default".
           OUTLAW_ISO_VERSION: ${{ steps.ver.outputs.iso_version }}
         run: |
+          set -e
           cd "$INSTALLER_DIR"
-          ./build.sh
+
+          # Capture build output to a log file we can always tail later, even
+          # when GitHub's collapsed-step viewer hides the actual failure line.
+          LOG="$GITHUB_WORKSPACE/build.log"
+          if ./build.sh 2>&1 | tee "$LOG"; then
+            echo "::notice::build.sh succeeded."
+          else
+            RC=${PIPESTATUS[0]}
+            echo "::error::build.sh failed with exit code $RC"
+            echo "::group::Last 200 lines of build output (recap)"
+            tail -n 200 "$LOG" || true
+            echo "::endgroup::"
+            echo "::group::Disk usage at failure time"
+            df -h
+            echo "::endgroup::"
+            exit "$RC"
+          fi
+
+      - name: Upload build log (always — useful for diagnosing failures too)
+        if: always()
+        uses: actions/upload-artifact@v5
+        with:
+          name: build-log-${{ github.run_id }}
+          path: build.log
+          retention-days: 14
+          if-no-files-found: ignore
 
       - name: Locate built artifacts
         id: artifacts
@@ -140,7 +208,7 @@ jobs:
       # artifact (downloadable from the Actions tab). Tag-driven builds also
       # attach it to the matching GitHub Release in the next step.
       - name: Upload as workflow artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: ${{ steps.artifacts.outputs.iso_name }}
           path: |
