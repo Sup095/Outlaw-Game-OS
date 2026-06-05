@@ -77,22 +77,18 @@ noto-fonts
 # user downloads at first launch via /usr/local/bin/outlaw-lm-studio. We only
 # pre-install a launcher (the shell calls it for the AI assistant).
 
-# --- Gaming runtime (Steam needs the Vulkan + lib32 stack) ---
-# steamcmd (the publishing CLI used by CodeMaker's Steam panel) is AUR-only,
-# so pacstrap can't install it during ISO build. The Steam panel installs it
-# on demand the first time a user publishes a game — see Outlaw CodeMaker's
-# core/steam_publish.py for the lazy-install flow.
-steam
-gamemode
-lib32-gamemode
-gamescope
-mangohud
-lib32-mangohud
-vulkan-icd-loader
-lib32-vulkan-icd-loader
-vulkan-tools
+# --- GPU stack for the live shell ---
+# We only ship mesa in the live ISO — enough to run the Electron shell, the
+# installer, GParted, and the welcome card. The FULL gaming stack (Steam +
+# gamescope + gamemode + Vulkan + lib32-*) is installed onto the user's disk
+# by outlaw-install — see the PKGS array in airootfs/usr/local/bin/outlaw-install.
+#
+# Why the divergence: GitHub release assets cap at 2 GB. Bundling Steam (~600 MB)
+# + lib32 gaming deps (~150 MB) into the live ISO pushed it over the limit
+# without giving the live USB anything it needs — nobody plays Steam games off
+# a USB stick. The installed system still gets everything, pulled fresh from
+# mirrors during install.
 mesa
-lib32-mesa
 
 # --- Browser (default; alternatives via Apps panel) ---
 firefox

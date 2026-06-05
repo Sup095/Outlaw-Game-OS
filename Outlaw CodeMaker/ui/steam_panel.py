@@ -17,9 +17,11 @@ import html
 import logging
 from pathlib import Path
 
-from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtCore import Qt, QThread, pyqtSignal
 from PyQt6.QtWidgets import (
     QComboBox,
+    QDialog,
+    QDialogButtonBox,
     QFormLayout,
     QFrame,
     QHBoxLayout,
@@ -35,6 +37,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from core import aur_install
 from core.steam_publish import (
     DepotConfig,
     GeneratedVdfs,
@@ -56,6 +59,118 @@ from .styles import COLORS, dot
 
 
 logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# AUR install dialog (used for on-demand `steamcmd` install via the privileged
+# /usr/local/bin/outlaw-install-aur helper that ships in Outlaw OS).
+# ---------------------------------------------------------------------------
+
+
+class _AurInstallWorker(QThread):
+    """Runs :func:`core.aur_install.install_package` off the GUI thread.
+
+    Each line of helper output is emitted via :attr:`line` so the dialog can
+    append it live. When the install finishes (success or failure), the
+    final :class:`AurInstallResult` is emitted via :attr:`finished_result`.
+    The dialog connects to both and closes itself on completion.
+    """
+
+    line = pyqtSignal(str)
+    finished_result = pyqtSignal(object)   # AurInstallResult
+
+    def __init__(self, package: str, parent=None):
+        super().__init__(parent)
+        self._package = package
+
+    def run(self) -> None:  # noqa: D401 — QThread API
+        result = aur_install.install_package(
+            self._package,
+            on_line=lambda s: self.line.emit(s),
+        )
+        self.finished_result.emit(result)
+
+
+class _AurInstallDialog(QDialog):
+    """Modal "Install steamcmd from AUR" progress dialog.
+
+    Shows a live-streaming log of the helper's output, an indeterminate
+    progress bar while running, and a Close button that's disabled until
+    the install finishes. The caller reads :attr:`result` after the dialog
+    returns to decide how to react.
+
+    Usage::
+
+        dlg = _AurInstallDialog("steamcmd", parent=self)
+        dlg.exec()  # blocks until install finishes (or user cancels by closing)
+        if dlg.result_obj and dlg.result_obj.ok:
+            ...
+    """
+
+    def __init__(self, package: str, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle(f"Installing {package} from AUR")
+        self.setModal(True)
+        self.resize(640, 360)
+        self.result_obj: aur_install.AurInstallResult | None = None
+
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(14, 12, 14, 12)
+        outer.setSpacing(8)
+
+        header = QLabel(
+            f"Installing <b>{html.escape(package)}</b> via the AUR helper.<br>"
+            "<span style='color:#888;'>This usually takes 20–60 seconds and "
+            "needs a working network connection. You can leave this open while "
+            "you keep using CodeMaker — it'll just be unresponsive while the "
+            "build runs.</span>"
+        )
+        header.setWordWrap(True)
+        header.setTextFormat(Qt.TextFormat.RichText)
+        outer.addWidget(header)
+
+        self._progress = QProgressBar()
+        self._progress.setRange(0, 0)   # indeterminate
+        self._progress.setMaximumHeight(8)
+        outer.addWidget(self._progress)
+
+        self._log = QPlainTextEdit()
+        self._log.setReadOnly(True)
+        self._log.setObjectName("TerminalLog")
+        outer.addWidget(self._log, 1)
+
+        self._buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
+        # Close stays disabled until the worker finishes. The user *can*
+        # force-close via the window's X button — Qt will tear the worker
+        # down cleanly because we don't hold native resources from inside it.
+        self._close_btn = self._buttons.button(QDialogButtonBox.StandardButton.Close)
+        self._close_btn.setEnabled(False)
+        self._buttons.rejected.connect(self.accept)
+        outer.addWidget(self._buttons)
+
+        self._worker = _AurInstallWorker(package, parent=self)
+        self._worker.line.connect(self._append_line)
+        self._worker.finished_result.connect(self._on_finished)
+        self._worker.start()
+
+    def _append_line(self, line: str) -> None:
+        self._log.appendPlainText(line)
+
+    def _on_finished(self, result: aur_install.AurInstallResult) -> None:
+        self.result_obj = result
+        self._progress.setRange(0, 1)
+        self._progress.setValue(1)
+
+        # Trailer line for clarity, since helper output ends mid-sentence.
+        if result.ok:
+            self._log.appendPlainText("")
+            self._log.appendPlainText(f"✓ {result.note}")
+        else:
+            self._log.appendPlainText("")
+            self._log.appendPlainText(f"✗ {result.note}")
+
+        self._close_btn.setEnabled(True)
+        self._close_btn.setFocus()
 
 
 # ---------------------------------------------------------------------------
@@ -170,6 +285,18 @@ class SteamPanel(QWidget):
         self.steamcmd_edit.setPlaceholderText("Auto-detected — override only if needed")
         self.steamcmd_edit.editingFinished.connect(self._refresh_status)
 
+        # Install-from-AUR shortcut. Visible only when steamcmd is missing
+        # AND the privileged outlaw-install-aur helper is present on this
+        # host (i.e. we're running on Outlaw OS). Wired in _refresh_status.
+        self.install_steamcmd_btn = QPushButton("⤓  Install steamcmd from AUR")
+        self.install_steamcmd_btn.setToolTip(
+            "steamcmd lives in the Arch User Repository (AUR), not the official "
+            "repos, so Outlaw OS doesn't bundle it. This button asks for your "
+            "password (polkit), then downloads + builds it (~30 sec, ~2 MB)."
+        )
+        self.install_steamcmd_btn.clicked.connect(self._on_install_steamcmd_clicked)
+        self.install_steamcmd_btn.setVisible(False)
+
         cfg_form = QFormLayout()
         cfg_form.setSpacing(8)
         cfg_form.addRow("App ID", self.app_id_edit)
@@ -185,6 +312,12 @@ class SteamPanel(QWidget):
         cfg_card_layout = QVBoxLayout(cfg_card)
         cfg_card_layout.setContentsMargins(12, 10, 12, 10)
         cfg_card_layout.addLayout(cfg_form)
+        # Install button sits flush-left below the form. Indented to align
+        # with the QLineEdit column, not the label column.
+        install_row = QHBoxLayout()
+        install_row.addStretch(1)
+        install_row.addWidget(self.install_steamcmd_btn, 0)
+        cfg_card_layout.addLayout(install_row)
 
         # Depots editor
         self.depots_container = QWidget()
@@ -449,6 +582,15 @@ class SteamPanel(QWidget):
                 f'{html.escape(status.note or "not found")}</span>'
             )
 
+        # Surface the AUR install shortcut only when both conditions hold:
+        # (1) we don't currently have steamcmd, AND (2) the privileged helper
+        # is present on this host. On non-Outlaw-OS Linux (vanilla Arch, Mac
+        # dev workstation, etc.) the button stays hidden and the user sees
+        # the existing "install manually" note.
+        self.install_steamcmd_btn.setVisible(
+            not status.available and aur_install.helper_available()
+        )
+
         # Config validity
         cfg = self._read_form()
         errors = cfg.validate()
@@ -488,6 +630,68 @@ class SteamPanel(QWidget):
         self.promote_btn.setEnabled(ready and self._promote_worker is None)
 
     # ------------------------------------------------------------------
+    # AUR install (on-demand steamcmd)
+    # ------------------------------------------------------------------
+
+    def _on_install_steamcmd_clicked(self) -> None:
+        """Run the privileged AUR install for steamcmd, then re-refresh.
+
+        The install runs in a worker thread under :class:`_AurInstallDialog`
+        so the GUI stays responsive. If the user authenticates and the
+        build succeeds, the resulting binary lands on $PATH and the next
+        :meth:`_refresh_status` picks it up automatically.
+        """
+        # Belt-and-braces: re-check availability right before the click,
+        # in case the user installed it manually since the last refresh.
+        if aur_install.is_already_installed("steamcmd"):
+            self._refresh_status()
+            return
+
+        # Short confirmation to set expectations. This is the moment a
+        # password prompt is about to appear, so warn the user.
+        confirm = QMessageBox(self)
+        confirm.setWindowTitle("Install steamcmd from AUR")
+        confirm.setIcon(QMessageBox.Icon.Question)
+        confirm.setText(
+            "Install <b>steamcmd</b> from the Arch User Repository?"
+        )
+        confirm.setInformativeText(
+            "You'll be asked for your password (via polkit). The build "
+            "takes roughly 30 seconds and downloads about 2 MB.<br><br>"
+            "steamcmd is the official Steamworks command-line tool used "
+            "to upload Godot builds to your Steam app."
+        )
+        confirm.setStandardButtons(
+            QMessageBox.StandardButton.Ok | QMessageBox.StandardButton.Cancel
+        )
+        confirm.setDefaultButton(QMessageBox.StandardButton.Ok)
+        if confirm.exec() != QMessageBox.StandardButton.Ok:
+            return
+
+        dlg = _AurInstallDialog("steamcmd", parent=self)
+        dlg.exec()
+
+        result = dlg.result_obj
+        if result is None:
+            # Dialog closed without the worker finishing — shouldn't happen
+            # in practice (close button stays disabled until done) but be
+            # defensive in case the user force-quit via window manager.
+            return
+
+        if result.ok:
+            self.log_message.emit("info", f"steamcmd installed: {result.note}")
+        else:
+            self.log_message.emit("error", f"steamcmd install failed: {result.note}")
+            # If pkexec/polkit weren't available we can't retry — show the
+            # manual-install instructions from the result note.
+            if result.needs_manual_install:
+                QMessageBox.information(
+                    self, "Manual install required", result.note
+                )
+
+        self._refresh_status()
+
+    # ------------------------------------------------------------------
     # Upload flow
     # ------------------------------------------------------------------
 
@@ -498,7 +702,13 @@ class SteamPanel(QWidget):
             QMessageBox.warning(self, "No project open", "Open a project first.")
             return
         if not self._steamcmd_path:
-            QMessageBox.warning(self, "steamcmd missing", "Install steamcmd or set its path first.")
+            QMessageBox.warning(
+                self,
+                "steamcmd missing",
+                "steamcmd isn't installed yet. Use the 'Install steamcmd from "
+                "AUR' button above (if you're on Outlaw OS) or set its path "
+                "manually in the Config form.",
+            )
             return
         cfg = self._read_form()
         errors = cfg.validate()
@@ -579,7 +789,13 @@ class SteamPanel(QWidget):
             QMessageBox.warning(self, "No project open", "Open a project first.")
             return
         if not self._steamcmd_path:
-            QMessageBox.warning(self, "steamcmd missing", "Install steamcmd or set its path first.")
+            QMessageBox.warning(
+                self,
+                "steamcmd missing",
+                "steamcmd isn't installed yet. Use the 'Install steamcmd from "
+                "AUR' button above (if you're on Outlaw OS) or set its path "
+                "manually in the Config form.",
+            )
             return
 
         cfg = self._read_form()
@@ -687,7 +903,13 @@ class SteamPanel(QWidget):
         if self._promote_worker:
             return
         if not self._steamcmd_path:
-            QMessageBox.warning(self, "steamcmd missing", "Install steamcmd or set its path first.")
+            QMessageBox.warning(
+                self,
+                "steamcmd missing",
+                "steamcmd isn't installed yet. Use the 'Install steamcmd from "
+                "AUR' button above (if you're on Outlaw OS) or set its path "
+                "manually in the Config form.",
+            )
             return
         cfg = self._read_form()
         if cfg.validate():

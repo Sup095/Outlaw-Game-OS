@@ -20,7 +20,7 @@ RELENG="/usr/share/archiso/configs/releng"
 # Default version baked in for local builds. CI overrides this from the git
 # tag via OUTLAW_ISO_VERSION (see .github/workflows/build-iso.yml) so the
 # artifact filename always matches the tag the user pushed.
-ISO_VERSION="${OUTLAW_ISO_VERSION:-2.0.5}"
+ISO_VERSION="${OUTLAW_ISO_VERSION:-2.0.6}"
 ISO_FINAL="$OUT_DIR/outlaw-os-v${ISO_VERSION}.iso"
 
 echo "========================================"
@@ -116,10 +116,13 @@ sed -i \
     -e 's/^iso_publisher=.*/iso_publisher="Outlaw OS"/' \
     -e 's#^iso_application=.*#iso_application="Outlaw OS Live / Boot Manager"#' \
     "$PD"
-# Ensure our helper scripts are executable in the image
-for f in outlaw-install outlaw-hotswap outlaw-perf outlaw-update-apply \
-         outlaw-update-rollback outlaw-greeter outlaw-codemaker outlaw-lm-studio \
-         outlaw-session-watchdog outlaw-diagnose; do
+# Ensure our helper scripts are executable in the image. outlaw-install-aur
+# is the privileged helper invoked via pkexec by CodeMaker's Steam panel to
+# install AUR packages (currently just steamcmd) on demand.
+for f in outlaw-install outlaw-install-aur outlaw-hotswap outlaw-perf \
+         outlaw-update-apply outlaw-update-rollback outlaw-greeter \
+         outlaw-codemaker outlaw-lm-studio outlaw-session-watchdog \
+         outlaw-diagnose; do
     if ! grep -q "/usr/local/bin/$f" "$PD"; then
         sed -i "/^file_permissions=(/a\\  [\"/usr/local/bin/$f\"]=\"0:0:755\"" "$PD"
     fi
@@ -142,3 +145,23 @@ echo "✅ Build complete:"
 echo "   ISO: $ISO_FINAL"
 echo "   SHA: $ISO_FINAL.sha256"
 ls -lh "$ISO_FINAL"*
+
+# --- Size budget --------------------------------------------------------------
+# GitHub release assets are capped at 2 GiB (2147483648 bytes). Surface the
+# ISO size here so any future bloat shows up at build time, not at upload
+# time. Hard-fail at 2 GiB so CI catches it before the gh-release step.
+ISO_BYTES=$(stat -c%s "$ISO_FINAL" 2>/dev/null || wc -c < "$ISO_FINAL")
+ISO_MIB=$((ISO_BYTES / 1024 / 1024))
+LIMIT_BYTES=$((2 * 1024 * 1024 * 1024))   # 2 GiB
+WARN_BYTES=$((1800 * 1024 * 1024))        # 1.8 GiB — start trimming territory
+echo "   Size: ${ISO_MIB} MiB  (limit: 2048 MiB for GitHub release upload)"
+if (( ISO_BYTES >= LIMIT_BYTES )); then
+    echo ""
+    echo "❌ ERROR: ISO is ${ISO_MIB} MiB — GitHub caps release assets at 2048 MiB."
+    echo "   Trim packages.x86_64 (the LIVE-ISO list) — anything not strictly"
+    echo "   needed to boot the installer + shell should live only in"
+    echo "   outlaw-install's PKGS array, where it's pacstrapped post-install."
+    exit 1
+elif (( ISO_BYTES >= WARN_BYTES )); then
+    echo "   ⚠ heads-up: within 250 MiB of the GitHub asset cap."
+fi
