@@ -26,7 +26,9 @@ PKGS=(
   apparmor firejail ufw
   xorg-server xorg-xinit picom feh rofi thunar xfce4-terminal electron
   ttf-jetbrains-mono noto-fonts
-  steam steamcmd gamemode lib32-gamemode gamescope
+  # steamcmd is AUR-only; CodeMaker's Steam panel installs it on demand at
+  # publish time. Keep this list in sync with outlaw-installer/packages.x86_64.
+  steam gamemode lib32-gamemode gamescope
   mangohud lib32-mangohud vulkan-icd-loader lib32-vulkan-icd-loader vulkan-tools
   mesa lib32-mesa firefox
   godot base-devel python python-pip cmake

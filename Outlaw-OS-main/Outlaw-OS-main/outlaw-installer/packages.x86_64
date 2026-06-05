@@ -78,8 +78,11 @@ noto-fonts
 # pre-install a launcher (the shell calls it for the AI assistant).
 
 # --- Gaming runtime (Steam needs the Vulkan + lib32 stack) ---
+# steamcmd (the publishing CLI used by CodeMaker's Steam panel) is AUR-only,
+# so pacstrap can't install it during ISO build. The Steam panel installs it
+# on demand the first time a user publishes a game — see Outlaw CodeMaker's
+# core/steam_publish.py for the lazy-install flow.
 steam
-steamcmd
 gamemode
 lib32-gamemode
 gamescope
