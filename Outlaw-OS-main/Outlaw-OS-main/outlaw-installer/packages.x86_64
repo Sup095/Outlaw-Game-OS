@@ -28,6 +28,12 @@ git
 nano
 
 # --- Bootloader / install tooling ---
+# syslinux is required by the bios.syslinux.* bootmodes declared in
+# profiledef.sh — without it mkarchiso fails ISO validation before build.
+# mkinitcpio-archiso provides the live-init hooks the boot image needs;
+# missing it produces a USB stick that boots to a kernel panic.
+syslinux
+mkinitcpio-archiso
 grub
 efibootmgr
 os-prober
@@ -36,6 +42,13 @@ mtools
 arch-install-scripts
 gptfdisk
 parted
+# memtest86+ and edk2-shell are referenced by the upstream releng GRUB menu
+# we inherit. They're not strictly required to boot, but missing them
+# produces noisy warnings during validation and the corresponding boot-menu
+# entries silently disappear. Cheap to include.
+memtest86+
+memtest86+-efi
+edk2-shell
 # gparted is INSTALLED IN THE LIVE ISO ONLY (not in the on-disk install set in
 # outlaw-install's PKGS array) so first-time users can resize Windows / other
 # OS partitions from the live environment if they need to make space for
