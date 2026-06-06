@@ -7,7 +7,7 @@ Two halves, one OS:
 - **🛠 Outlaw CodeMaker** — a PyQt6 desktop AI agent that designs, codes, and ships Godot games. Local LM Studio backend. CPU-only RAG over your project. Auto-snapshots before every file write. Self-learning from past fixes. Steam upload + branch promotion built in. Runs in the **Dev session**.
 - **⌂ Outlaw Shell** — a hardened Electron desktop with browser, file manager, terminal, Steam, **Apps panel** (on-demand pacman installs), and the sci-fi **System Core** — telemetry, diagnostics, scheduled background checks, local TTS voice, conversational AI, and tiered VRAM management. Runs in the **Desktop session**.
 
-A small boot greeter asks **Dev or Desktop** on every boot; you can also flip mid-session.
+Your **first boot goes straight to the Desktop** and runs a quick setup wizard (so you land on a known-good desktop and get everything installed). **After that**, a small boot greeter lets you pick **Dev or Desktop** each boot — and you can switch mid-session from Settings.
 
 ---
 
@@ -68,7 +68,7 @@ Once installed, you never need to re-download an ISO for normal updates. Two upd
 
 ## Highlights
 
-- **Two sessions, one OS.** Boot into the greeter, pick Dev (CodeMaker) or Desktop (shell). Persistent preference if you always want the same one.
+- **Two sessions, one OS.** First boot goes straight to Desktop (+ setup wizard) for a reliable start; after that a boot greeter lets you pick Dev (CodeMaker) or Desktop (shell), with a persistent preference if you always want the same one.
 - **Self-healing boot.** Three quick crash-restarts of any session forces the next boot into safe-mode Desktop with a visible banner. Watchdog runs outside the shell — closing the desktop doesn't stop the safety net.
 - **Auto-snapshots.** Every file the AI agent edits is captured first. Bad edit? Open the *Snapshots* tab and restore — through the same approval-diff as a normal write.
 - **VRAM-friendly.** Two-layer model: always-on free savings (lazy imports, CPU-only RAG, paused-when-hidden pollers) plus conditional emergency mode (Auto / Off / Always Lean / Always Minimal). Works on 4–6 GB GPUs.
@@ -154,21 +154,53 @@ python main.py
 
 CodeMaker expects LM Studio running locally on `127.0.0.1:1234` (load any model and click *Start Server*). The Project Picker opens on first launch; pick a Godot project or run the **New Game wizard**.
 
-### 3. Boot the real OS (build the ISO + run in VirtualBox)
+### 3. Test the real OS in VirtualBox (recommended VM settings)
 
-**Building the ISO requires Arch Linux** (the `mkarchiso` tool). The simplest path is to install Arch in a VirtualBox VM, clone this repo there, and build inside it. From an Arch host:
+Most people just download the ISO from Releases (above) and use it. If you want to test it in a virtual machine first, **the VM settings matter** — wrong settings are the #1 cause of a black screen. Use these exactly:
+
+**Create the VM:**
+
+1. Open VirtualBox → **New**.
+2. **Name:** Outlaw OS · **Type:** Linux · **Version:** *Arch Linux (64-bit)*. (This is the "Arch Linux setup" — VirtualBox just needs to know it's a 64-bit Linux guest; it doesn't change the ISO.)
+3. **Skip unattended install** if asked (we use our own installer).
+
+**Then open the VM's Settings and set:**
+
+| Section | Setting | Value | Why |
+|---|---|---|---|
+| **System → Motherboard** | Base Memory | **4096 MB+** (8192 recommended) | Electron + the installer need headroom |
+| **System → Motherboard** | Enable **EFI** | ✅ on | Outlaw boots in UEFI mode |
+| **System → Processor** | Processors | **2+** | Smoother desktop |
+| **Display → Screen** | Video Memory | **128 MB** | Avoids low-VRAM display glitches |
+| **Display → Screen** | Graphics Controller | **VMSVGA** | The controller Outlaw's `vesa`/modesetting drivers target |
+| **Display → Screen** | Enable 3D Acceleration | **❌ OFF** | Outlaw auto-uses software rendering in VMs; leaving 3D off is the reliable path |
+| **Storage** | Add Optical Drive → pick `outlaw-os-v*.iso` | — | The boot medium |
+| **Storage** | Add a Hard Disk | **30 GB+** (only if you'll install) | Target for a real install |
+
+4. Boot the VM. You'll land **directly on the Outlaw desktop** with the pulsing System Core. A welcome card offers **Install Outlaw OS · Try it first · Don't show again**.
+5. To install to the VM's virtual disk: click **Install Outlaw OS** (or run `sudo outlaw-install` in a terminal). After install, power off, **remove the ISO from the optical drive**, and boot the disk.
+6. On the installed system's **first boot** you go straight to the Desktop and a setup wizard offers the optional bundles (Steam / Firefox / Godot). After that, every boot shows the greeter to pick Dev or Desktop.
+
+> **Still get a black screen?** Switch to a text console with **Right-Ctrl + F2**, log in, and run `cat ~/.outlaw-x.log` — it records exactly what the graphical session did. (Outlaw also drops you to a usable shell automatically if the desktop fails to start, instead of looping.)
+
+### 4. Build the ISO yourself on Arch Linux (optional — for contributors)
+
+Normal releases are built automatically by GitHub Actions on every version tag, so you rarely need this. But to build locally you need **Arch Linux** (for `mkarchiso`). If you don't have an Arch machine, install one in a VM first ([Arch install guide](https://wiki.archlinux.org/title/Installation_guide)), then:
 
 ```bash
-sudo pacman -S archiso git nodejs python python-pip
-git clone https://github.com/YOUR-USERNAME/Outlaw-Game-OS.git
+# On an Arch Linux host, as a normal user:
+sudo pacman -Syu --needed archiso git nodejs python python-pip
+
+git clone https://github.com/Sup095/Outlaw-Game-OS.git
 cd Outlaw-Game-OS/Outlaw-OS-main/Outlaw-OS-main/outlaw-installer
-sudo OUTLAW_CODEMAKER_SRC=../../../"Outlaw CodeMaker" ./build.sh
-# → ../out/outlaw-os-v<version>.iso
+
+# build.sh must run as root (mkarchiso needs loop devices + chroot).
+# OUTLAW_CODEMAKER_SRC points at the CodeMaker source so it gets bundled in.
+sudo OUTLAW_CODEMAKER_SRC="../../../Outlaw CodeMaker" ./build.sh
+# → ../out/outlaw-os-v<version>.iso  (+ .sha256)
 ```
 
-Then create a fresh VirtualBox VM (Arch Linux 64-bit, 6 GB RAM, 30 GB disk, EFI on, 128 MB VRAM, audio enabled), attach the ISO, and boot it. You'll land in the greeter — pick Desktop to test the System Core; pick Dev to test CodeMaker.
-
-To install the OS to the VM's virtual disk instead of just booting live: from inside the shell, *Settings → Open Installer*. Or run `sudo outlaw-install` from a terminal.
+The build takes ~15–25 minutes (mostly `pacstrap` + squashfs compression) and prints the final ISO size with a 2 GB budget warning.
 
 ---
 
