@@ -253,6 +253,32 @@
                 </div>
             </div>
 
+            <div class="core-control card" id="sc-control">
+                <div class="syscore-subhead"><h3>SYSTEM CONTROL</h3><span class="dim mono" id="sc-control-status"></span></div>
+                <div class="sc-control-grid">
+                    <button class="sc-control-btn" data-sc-control="update-os">
+                        <span class="sc-ctl-ico">⟳</span><span class="sc-ctl-label">Update Outlaw OS</span>
+                        <span class="sc-ctl-sub">check &amp; install the latest release</span>
+                    </button>
+                    <button class="sc-control-btn" data-sc-control="update-packages">
+                        <span class="sc-ctl-ico">📦</span><span class="sc-ctl-label">Update Software</span>
+                        <span class="sc-ctl-sub">refresh all installed packages</span>
+                    </button>
+                    <button class="sc-control-btn" data-sc-control="perf">
+                        <span class="sc-ctl-ico">⚡</span><span class="sc-ctl-label" id="sc-ctl-perf-label">Performance Mode</span>
+                        <span class="sc-ctl-sub" id="sc-ctl-perf-sub">toggle the gaming CPU governor</span>
+                    </button>
+                    <button class="sc-control-btn" data-sc-control="diagnostics">
+                        <span class="sc-ctl-ico">✓</span><span class="sc-ctl-label">Run Diagnostics</span>
+                        <span class="sc-ctl-sub">quick health check</span>
+                    </button>
+                    <button class="sc-control-btn" data-sc-control="settings">
+                        <span class="sc-ctl-ico">⚙</span><span class="sc-ctl-label">All Settings</span>
+                        <span class="sc-ctl-sub">channel, updates, voice, more</span>
+                    </button>
+                </div>
+            </div>
+
             <div class="core-footer">
                 <span class="dim" id="core-footer-msg">core dormant · no AI traffic · no diagnostics</span>
             </div>
@@ -453,6 +479,13 @@
                     <input id="update-repo" placeholder="your-username/Outlaw-OS-main" style="width:auto;min-width:260px;">
                 </div>
                 <div class="setting">
+                    <div class="label">Update channel<small>Stable = only tested releases · Beta = the newest builds (help test)</small></div>
+                    <select id="update-channel" style="width:auto;min-width:200px;">
+                        <option value="stable">Stable (recommended)</option>
+                        <option value="beta">Beta (newest, untested)</option>
+                    </select>
+                </div>
+                <div class="setting">
                     <div class="label">Background auto-check<small>Quietly polls every 6 hours; notifies you when a new release is published</small></div>
                     <label class="switch"><input type="checkbox" id="auto-check"><span class="track"></span></label>
                 </div>
@@ -477,6 +510,24 @@
                     <button data-action="updates-check">Check for updates</button>
                     <button data-action="updates-apply">Apply updates</button>
                     <span id="update-status" class="muted mono"></span>
+                </div>
+            </div>
+
+            <div class="card">
+                <h3>Help Test This Version</h3>
+                <div class="muted" style="margin-bottom:8px;">
+                    Tell us whether <span id="stability-version" class="mono">this build</span> works for you.
+                    Reports are advisory — they help the maintainer decide which version to mark <em>stable</em>.
+                </div>
+                <div class="row" style="align-items:center;">
+                    <button data-action="stability-works" id="stability-works-btn">✓ Works for me</button>
+                    <button data-action="stability-broken" id="stability-broken-btn">✗ Having problems</button>
+                    <span id="stability-your-vote" class="muted mono"></span>
+                </div>
+                <div class="row" style="margin-top:8px;align-items:center;">
+                    <button data-action="stability-refresh">↻ Community tally</button>
+                    <span id="stability-tally" class="muted mono">—</span>
+                    <button data-action="stability-share" class="primary">Share feedback on GitHub</button>
                 </div>
             </div>
 

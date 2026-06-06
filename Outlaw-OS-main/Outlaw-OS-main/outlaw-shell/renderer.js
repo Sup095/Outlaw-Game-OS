@@ -652,6 +652,72 @@ function safeEval(expr) {
 // ---------------------------------------------------------------------------
 // Settings
 // ---------------------------------------------------------------------------
+// --- P2: stability reporting -------------------------------------------------
+// The user's own per-version vote lives in settings.stabilityReports
+// ({ "2.0.11": "works" | "broken" }); the community tally is a read-only
+// GitHub reaction count fetched on demand (zero idle network cost).
+let _stabilityReports = {};
+let _stabilityVersion = '';
+let _stabilityShareUrl = '';
+
+function _normVer(v) { return String(v || '').replace(/^v/i, '').replace(/-.*$/, '').trim(); }
+
+async function _ensureStabilityVersion() {
+    if (_stabilityVersion) return _stabilityVersion;
+    try { const i = await api.system.info(); _stabilityVersion = _normVer(i.appVersion); } catch {}
+    return _stabilityVersion;
+}
+
+async function refreshStabilityUi() {
+    await _ensureStabilityVersion();
+    const vEl = $('#stability-version');
+    if (vEl) vEl.textContent = _stabilityVersion ? ('v' + _stabilityVersion) : 'this build';
+    const mine = _stabilityReports[_stabilityVersion];
+    const yv = $('#stability-your-vote');
+    if (yv) {
+        yv.textContent = mine === 'works' ? 'You marked this: Works ✓'
+            : mine === 'broken' ? 'You marked this: Problems ✗'
+            : '';
+    }
+}
+
+async function setStabilityVote(vote) {
+    await _ensureStabilityVersion();
+    if (!_stabilityVersion) { toast('Version unknown — can’t record a report.'); return; }
+    _stabilityReports = { ..._stabilityReports, [_stabilityVersion]: vote };
+    try { await api.settings.set({ stabilityReports: _stabilityReports }); } catch {}
+    refreshStabilityUi();
+    toast(vote === 'works' ? 'Thanks! Marked as working.' : 'Noted — thanks for the report.');
+    refreshStabilityTally();
+}
+
+async function refreshStabilityTally() {
+    const el = $('#stability-tally');
+    if (el) el.textContent = 'checking…';
+    try {
+        const t = await api.stability.tally();
+        if (!t || !t.ok) { if (el) el.textContent = (t && t.error) ? t.error : 'unavailable'; return; }
+        _stabilityShareUrl = t.htmlUrl || '';
+        if (el) {
+            el.textContent = t.found
+                ? `👍 ${t.works}   👎 ${t.broken}   (community)`
+                : 'no matching release yet';
+        }
+    } catch {
+        if (el) el.textContent = 'unavailable';
+    }
+}
+
+function shareStabilityFeedback() {
+    const url = _stabilityShareUrl || '';
+    if (/^https?:\/\//i.test(url)) { window.open(url, '_blank'); return; }
+    // Fall back to the repo's releases page if we haven't fetched a tally yet.
+    refreshStabilityTally().then(() => {
+        if (/^https?:\/\//i.test(_stabilityShareUrl)) window.open(_stabilityShareUrl, '_blank');
+        else toast('Set the GitHub repository in Settings first.');
+    });
+}
+
 async function loadSettings() {
     let s = {};
     try { s = await api.settings.get(); } catch {}
@@ -662,8 +728,15 @@ async function loadSettings() {
     // LM Studio handles model selection itself — no dropdown to seed.
     $('#perf-toggle').checked = !!s.performanceMode;
     $('#update-repo').value = s.updateRepo || '';
+    const chanEl = $('#update-channel');
+    if (chanEl) chanEl.value = s.updateChannel || 'stable';
     $('#auto-check').checked = !!s.autoCheck;
     $('#sponsor-url').value = s.sponsorUrl || '';
+    // P2 — stability reporting: label the current version + reflect any
+    // prior local vote. The community tally is fetched lazily (button /
+    // first Settings open) so there's zero network cost otherwise.
+    _stabilityReports = s.stabilityReports || {};
+    refreshStabilityUi();
     // SC5 — System Core voice toggle. Probe TTS engine availability in
     // parallel with reading the setting so the sub-text reflects reality
     // (e.g., "On · piper" vs "On · not installed").
@@ -822,6 +895,10 @@ function wire() {
                 window.open(url, '_blank');
                 break;
             }
+            case 'stability-works':  setStabilityVote('works'); break;
+            case 'stability-broken': setStabilityVote('broken'); break;
+            case 'stability-refresh': refreshStabilityTally(); break;
+            case 'stability-share':  shareStabilityFeedback(); break;
             case 'confirm-cancel': closeConfirm(false); break;
         }
     });
@@ -1008,6 +1085,16 @@ function wire() {
         setSetting({ autoCheck: e.target.checked });
         toast('Auto-check ' + (e.target.checked ? 'enabled' : 'disabled') + '.');
     });
+    const channelEl = $('#update-channel');
+    if (channelEl) {
+        channelEl.addEventListener('change', (e) => {
+            const ch = e.target.value === 'beta' ? 'beta' : 'stable';
+            setSetting({ updateChannel: ch });
+            toast(ch === 'beta'
+                ? 'Beta channel — you’ll get the newest (untested) builds.'
+                : 'Stable channel — only tested releases.');
+        });
+    }
     let sponsorSaveTimer = null;
     $('#sponsor-url').addEventListener('input', (e) => {
         clearTimeout(sponsorSaveTimer);

@@ -9,6 +9,8 @@ Two halves, one OS:
 
 Your **first boot goes straight to the Desktop** and runs a quick setup wizard (so you land on a known-good desktop and get everything installed). **After that**, a small boot greeter lets you pick **Dev or Desktop** each boot — and you can switch mid-session from Settings.
 
+> **A note from the team.** Outlaw Game OS is built by a small team, with the help of AI. We test everything we ship as thoroughly as we can to make sure it works — but we're a small group, so if something slips through, please bear with us and let us know on the [Issues](../../issues) page. We built this OS mainly **for ourselves**, the way we wanted it to work, and we're sharing it openly in case it's useful to anyone else who wants or needs something like it.
+
 ---
 
 ## 🚀 Install on a real computer in 3 steps
@@ -248,16 +250,20 @@ The product is the result of three completed roadmaps (25 slices, all landed and
 - ✅ First-boot setup wizard (opt-in Steam / Firefox / Godot bundles).
 - ✅ Boot crash-guard (escape to a readable shell instead of an invisible loop).
 
+### Update system, channels & desktop features — ✅ shipped
+
+- ✅ **Phase 1 — Update system + channels.** Package/driver updater, Outlaw OS self-updater (in-place component swap + rollback), stable/beta release channels, and the in-OS Updates panel.
+- ✅ **Phase 2 — Community testing + desktop features.** In-OS "Works / Broken" stability reporting (advisory; the maintainer blesses a version stable), and a desktop System Core **System Control** panel (one-click OS update, package update, performance mode, diagnostics, settings).
+
 ### Current work
 
-- 🚧 **Phase 1 — Update system + channels.** Package/driver updater, Outlaw OS self-updater (in-place component swap + rollback), and stable/beta release channels. *Backend done; in-OS Updates panel UI in progress.*
-- 🔜 **Phase 2 — Community testing + desktop features + hardening.** In-OS "Works / Broken" stability reporting (advisory; maintainer blesses stable), a desktop System Core **Chat + system-control** panel, and a repo-wide **security + stress test suite** wired into CI.
+- 🚧 **Phase 3 — VirtualBox / VM boot fix.** Some VMs show the ISO boot menu ("Arch Linux" options) and then go to a black screen no matter which entry is picked — the live environment never comes up. This is a bootloader/kernel-level issue (earlier than the desktop fixes). Plan: stop replacing the upstream `releng` package list (append to it instead) so no live-boot essential is ever dropped; add VM-friendly kernel parameters (framebuffer/console); and verify both the UEFI and BIOS boot paths in a clean VM. **Top priority.**
 
 ### Planned
 
-- 🔜 **Phase 3 — CI package preflight.** Validate every package name exists in the Arch repos *before* the 20-minute ISO build, so a typo or removed package fails in seconds with a clear message.
-- 🔜 **Phase 4 — Post-install stress test + auto-tune.** After install, run a hardware check / stress test, then automatically apply the best settings for *your* machine (CPU governor, swap/zram, GPU power mode, VRAM defaults, compositor, file-watcher limits) to make development smoother.
-- 🔜 **Phase 5 — CodeMaker / dev overhaul.** A big upgrade to the development experience while keeping background VRAM minimal — including a low-VRAM mode that runs a smaller model, spills into system RAM when needed (slower but better code), and caches roadmaps/context to disk so the AI keeps its memory without using more RAM.
+- 🔜 **Phase 4 — CI package preflight.** Validate every package name exists in the Arch repos *before* the 20-minute ISO build, so a typo or removed package fails in seconds with a clear message.
+- 🔜 **Phase 5 — Post-install stress test + auto-tune.** After install, run a hardware check / stress test, then automatically apply the best settings for *your* machine (CPU governor, swap/zram, GPU power mode, VRAM defaults, compositor, file-watcher limits) to make development smoother.
+- 🔜 **Phase 6 — CodeMaker / dev overhaul.** A big upgrade to the development experience while keeping background VRAM minimal — including a low-VRAM mode that runs a smaller model, spills into system RAM when needed (slower but better code), and caches roadmaps/context to disk so the AI keeps its memory without using more RAM.
 
 ### Future updates
 

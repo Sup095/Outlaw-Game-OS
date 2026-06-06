@@ -1162,6 +1162,22 @@ function registerIpc() {
         return { ok: true };
     });
 
+    // Advisory community-stability tally for the INSTALLED version. Reads the
+    // public 👍/👎 reaction counts on the matching GitHub release. The local
+    // "your vote" is persisted client-side in settings (stabilityReports);
+    // this handler only fetches the shared signal. Read-only, no auth.
+    ipcMain.handle('stability:tally', async () => {
+        try {
+            const t = await updater.getStabilityTally({
+                repo: settings.updateRepo,
+                version: APP_VERSION,
+            });
+            return { ok: true, version: updater.normalize(APP_VERSION), ...t };
+        } catch (e) {
+            return { ok: false, error: e.message };
+        }
+    });
+
     // --- Safe mode marker (set by outlaw-session-watchdog after a crash loop) ----
     ipcMain.handle('safe-mode:check', () => {
         if (!IS_LINUX) return { active: false, reason: '' };

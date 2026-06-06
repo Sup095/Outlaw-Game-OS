@@ -104,6 +104,11 @@ contextBridge.exposeInMainWorld('outlaw', {
         checkRollback: () => ipcRenderer.invoke('updates:rollback-check'),
         rollback: () => ipcRenderer.invoke('updates:rollback'),
     },
+    // Advisory community-stability signal for the installed version (read-only
+    // GitHub reaction tally). The user's own vote is stored in settings.
+    stability: {
+        tally: () => ipcRenderer.invoke('stability:tally'),
+    },
     installer: {
         launch: () => ipcRenderer.invoke('installer:launch'),
     },

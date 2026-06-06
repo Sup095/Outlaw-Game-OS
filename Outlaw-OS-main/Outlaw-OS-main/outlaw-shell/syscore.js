@@ -123,6 +123,10 @@
         // the current _liveMode flag (preserved across re-visits).
         _wireLiveOnce();
         _syncLiveUi();
+        // P2 — System Control quick-actions card. Wire once; refresh the perf
+        // label to reflect the current setting each visit.
+        _wireControlOnce();
+        _refreshControlState();
     }
 
     /**
@@ -1216,6 +1220,90 @@
         coreSay('Channel cleared. Fresh start.', 3000);
         const inputEl = $$('#core-input-text');
         if (inputEl) inputEl.focus();
+    }
+
+    // --- P2: System Control quick actions -----------------------------------
+    // Direct one-click actions that route ONLY through existing audited IPC
+    // (updates / gaming-perf / diagnostics / settings nav). No new privileged
+    // path, no AI dependency — works whether or not LM Studio is running.
+    let _controlWired = false;
+
+    function _setControlStatus(text) {
+        const el = $$('#sc-control-status');
+        if (el) el.textContent = text || '';
+    }
+
+    async function _refreshControlState() {
+        try {
+            const s = (window.outlaw && window.outlaw.settings)
+                ? await window.outlaw.settings.get() : {};
+            const on = !!(s && s.performanceMode);
+            const lbl = $$('#sc-ctl-perf-label');
+            const sub = $$('#sc-ctl-perf-sub');
+            if (lbl) lbl.textContent = on ? 'Performance Mode: ON' : 'Performance Mode: OFF';
+            if (sub) sub.textContent = on
+                ? 'gaming CPU governor active — click to turn off'
+                : 'toggle the gaming CPU governor';
+        } catch { /* preview / no settings bridge */ }
+    }
+
+    function _wireControlOnce() {
+        if (_controlWired) return;
+        const root = $$('#sc-control');
+        if (!root) return;
+        _controlWired = true;
+        root.addEventListener('click', (e) => {
+            const btn = e.target.closest('[data-sc-control]');
+            if (!btn) return;
+            _runControl(btn.getAttribute('data-sc-control'))
+                .catch((err) => _setControlStatus('error: ' + ((err && err.message) || err)));
+        });
+    }
+
+    async function _runControl(action) {
+        const o = window.outlaw || {};
+        switch (action) {
+            case 'update-os': {
+                if (!o.updates) { _setControlStatus('updates unavailable in preview.'); return; }
+                _setControlStatus('checking for an Outlaw OS update…');
+                const info = await o.updates.checkShell();
+                if (!info || !info.ok) { _setControlStatus((info && info.error) || 'check failed.'); return; }
+                if (!info.available) { _setControlStatus(`up to date (v${info.currentVersion}).`); return; }
+                _setControlStatus(`installing v${info.remoteVersion}…`);
+                const r = await o.updates.installShell(info);
+                _setControlStatus((r && r.ok)
+                    ? `updated to v${info.remoteVersion} — restart to apply.`
+                    : ((r && r.error) || 'install failed.'));
+                break;
+            }
+            case 'update-packages': {
+                if (!o.updates) { _setControlStatus('updates unavailable in preview.'); return; }
+                _setControlStatus('updating system packages (this can take a while)…');
+                const r = await o.updates.apply();
+                _setControlStatus((r && r.ok) ? 'packages up to date.' : ((r && r.error) || 'update failed.'));
+                break;
+            }
+            case 'perf': {
+                if (!o.gaming) { _setControlStatus('not available in preview.'); return; }
+                const s = o.settings ? await o.settings.get() : {};
+                const next = !(s && s.performanceMode);
+                await o.gaming.setPerformance(next);
+                if (o.settings) await o.settings.set({ performanceMode: next });
+                await _refreshControlState();
+                _setControlStatus('performance mode ' + (next ? 'ON' : 'OFF'));
+                break;
+            }
+            case 'diagnostics': {
+                _setControlStatus('');
+                await _runDiagnostic('quick');
+                break;
+            }
+            case 'settings': {
+                const nav = document.querySelector('[data-screen="settings"]');
+                if (nav) nav.click();
+                break;
+            }
+        }
     }
 
     // --- export -------------------------------------------------------------

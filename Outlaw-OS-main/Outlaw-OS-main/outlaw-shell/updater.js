@@ -134,4 +134,34 @@ async function downloadShellUpdate({ assetUrl, shaUrl }) {
     return { tmp, tarPath, sha: expected };
 }
 
-module.exports = { checkShellUpdate, downloadShellUpdate, compareVersions, normalize };
+// Advisory community-stability tally for a specific installed version.
+// Finds the GitHub release whose tag matches `version` and returns its 👍/👎
+// reaction counts (the "works / broken" community signal). No auth needed —
+// reaction counts are public. Returns zeros + the releases URL if the release
+// or its reactions can't be found, so the UI always has something to show.
+async function getStabilityTally({ repo, version }) {
+    if (!repo || !/^[\w.-]+\/[\w.-]+$/.test(repo))
+        throw new Error('Set the GitHub repository in Settings (format: owner/repo).');
+    const res = await ghFetch(`https://api.github.com/repos/${repo}/releases?per_page=30`);
+    const list = await res.json();
+    const want = normalize(version);
+    const rel = (Array.isArray(list) ? list : []).find(
+        (r) => normalize(r.tag_name || r.name || '') === want
+    );
+    const reactions = (rel && rel.reactions) || {};
+    return {
+        found: !!rel,
+        tagName: rel ? (rel.tag_name || '') : '',
+        works: reactions['+1'] || 0,
+        broken: reactions['-1'] || 0,
+        htmlUrl: rel ? rel.html_url : `https://github.com/${repo}/releases`,
+    };
+}
+
+module.exports = {
+    checkShellUpdate,
+    downloadShellUpdate,
+    getStabilityTally,
+    compareVersions,
+    normalize,
+};
