@@ -39,10 +39,12 @@ ESSENTIAL_PKGS=(
   # X / desktop runtime
   xorg-server xorg-xinit picom feh rofi thunar xfce4-terminal electron
   ttf-jetbrains-mono noto-fonts mesa
-  # Xorg video drivers — vesa is the universal fallback (works on any GPU
-  # without KMS), vmware drives VirtualBox's VMSVGA adapter. Without these
-  # X may fail to find a screen on VMs and crash-loop. ~400 KB total.
-  xf86-video-vesa xf86-video-vmware
+  # Xorg video driver — vesa is the universal fallback (works on any GPU
+  # without KMS, including VirtualBox VMSVGA in VESA mode). Combined with the
+  # built-in modesetting driver this keeps X from crash-looping on VMs.
+  # (xf86-video-vmware was dropped from the Arch repos; vesa + modesetting
+  # cover VirtualBox without it.)
+  xf86-video-vesa
 
   # VirtualBox compatibility. The kernel modules auto-load only when VBox
   # is detected on boot, so this is harmless on real hardware — but for
