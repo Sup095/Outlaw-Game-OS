@@ -76,7 +76,8 @@ const DEFAULT_SETTINGS = {
     crtFx: false,            // CRT scanline/flicker effect OFF by default (crisp + readable)
     glow: false,             // text glow OFF by default (no discoloration)
     performanceMode: false,  // gaming CPU governor / gamemode hint
-    updateRepo: '',          // "owner/repo" — where the self-updater looks for releases
+    updateRepo: 'Sup095/Outlaw-Game-OS',  // "owner/repo" the self-updater checks for releases (overridable in Settings)
+    updateChannel: 'stable', // 'stable' = latest non-prerelease; 'beta' = newest release of any kind
     autoCheck: true,         // background check for shell updates
     lastUpdateCheck: 0,
     lastNotifiedVersion: '', // don't re-toast the same available version
@@ -1111,6 +1112,7 @@ function registerIpc() {
             const info = await updater.checkShellUpdate({
                 repo: settings.updateRepo,
                 currentVersion: APP_VERSION,
+                channel: settings.updateChannel || 'stable',
             });
             settings = saveSettings({ ...settings, lastUpdateCheck: Date.now() });
             return { ok: true, ...info };
@@ -1263,7 +1265,7 @@ function createWindow() {
 async function backgroundUpdateCheck() {
     if (!settings.autoCheck || !settings.updateRepo) return;
     try {
-        const info = await updater.checkShellUpdate({ repo: settings.updateRepo, currentVersion: APP_VERSION });
+        const info = await updater.checkShellUpdate({ repo: settings.updateRepo, currentVersion: APP_VERSION, channel: settings.updateChannel || 'stable' });
         settings = saveSettings({ ...settings, lastUpdateCheck: Date.now() });
         if (info.available && info.remoteVersion !== settings.lastNotifiedVersion) {
             settings = saveSettings({ ...settings, lastNotifiedVersion: info.remoteVersion });

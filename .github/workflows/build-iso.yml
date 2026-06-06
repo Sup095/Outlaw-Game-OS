@@ -204,6 +204,40 @@ jobs:
           echo "iso_name=$ISO_NAME" >> "$GITHUB_OUTPUT"
           ls -lh "$ISO_ABS" "$SHA_ABS"
 
+      # Package the shell as a self-update component tarball. The in-OS
+      # self-updater (outlaw-shell/updater.js) looks for an asset named
+      # outlaw-shell-v<ver>.tar.gz on the GitHub release, verifies its
+      # .sha256, and hands it to outlaw-update-apply for an atomic in-place
+      # swap. Without this asset the "Update Outlaw OS" button has nothing
+      # to download. node_modules is excluded to match what ships on the ISO
+      # (the shell runs on the system `electron` package + Node built-ins).
+      - name: Package shell self-update component
+        id: components
+        run: |
+          set -e
+          SHELL_DIR="$GITHUB_WORKSPACE/Outlaw-OS-main/Outlaw-OS-main/outlaw-shell"
+          if [[ ! -f "$SHELL_DIR/package.json" ]]; then
+            echo "::warning::shell dir not found at $SHELL_DIR — skipping component tarball."
+            exit 0
+          fi
+          # Version: prefer the tag-derived value, else read the shell's package.json.
+          VER="${{ steps.ver.outputs.iso_version }}"
+          if [[ -z "$VER" ]]; then
+            VER="$(sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$SHELL_DIR/package.json" | head -n1)"
+          fi
+          OUT="$GITHUB_WORKSPACE/outlaw-shell-v${VER}.tar.gz"
+          # Flat archive: package.json at the archive root (outlaw-update-apply
+          # accepts flat or one-level-nested, but flat is cleanest).
+          tar -czf "$OUT" \
+            --exclude='node_modules' \
+            --exclude='package-lock.json' \
+            -C "$SHELL_DIR" .
+          sha256sum "$OUT" | awk '{print $1}' > "$OUT.sha256"
+          echo "shell_tar_rel=${OUT#$GITHUB_WORKSPACE/}"        >> "$GITHUB_OUTPUT"
+          echo "shell_sha_rel=${OUT#$GITHUB_WORKSPACE/}.sha256" >> "$GITHUB_OUTPUT"
+          echo "shell_tar_name=$(basename "$OUT")"              >> "$GITHUB_OUTPUT"
+          ls -lh "$OUT" "$OUT.sha256"
+
       # Manual builds and main-branch builds keep the ISO as a workflow
       # artifact (downloadable from the Actions tab). Tag-driven builds also
       # attach it to the matching GitHub Release in the next step.
@@ -214,6 +248,8 @@ jobs:
           path: |
             ${{ steps.artifacts.outputs.iso_rel }}
             ${{ steps.artifacts.outputs.sha_rel }}
+            ${{ steps.components.outputs.shell_tar_rel }}
+            ${{ steps.components.outputs.shell_sha_rel }}
           retention-days: 30
           if-no-files-found: error
 
@@ -222,9 +258,13 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           # Auto-creates the Release if it doesn't exist; updates if it does.
+          # The shell component tarball + its .sha256 power the in-OS
+          # "Update Outlaw OS" self-updater (no full reinstall needed).
           files: |
             ${{ steps.artifacts.outputs.iso_rel }}
             ${{ steps.artifacts.outputs.sha_rel }}
+            ${{ steps.components.outputs.shell_tar_rel }}
+            ${{ steps.components.outputs.shell_sha_rel }}
           generate_release_notes: true
           body: |
             ## Outlaw Game OS ${{ github.ref_name }}

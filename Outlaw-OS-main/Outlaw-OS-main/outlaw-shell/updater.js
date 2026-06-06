@@ -41,9 +41,27 @@ async function ghFetch(url, opts = {}) {
     return res;
 }
 
-async function getLatestRelease(repo) {
+// Fetch the newest release for a channel.
+//   'stable' → GitHub's /releases/latest (newest NON-prerelease). This is how
+//             the maintainer "blesses" a build: uncheck "pre-release" on the
+//             GitHub release and it becomes the stable target.
+//   'beta'   → newest release of any kind (includes prereleases). For testers.
+async function getLatestRelease(repo, channel = 'stable') {
     if (!repo || !/^[\w.-]+\/[\w.-]+$/.test(repo))
         throw new Error('Set the GitHub repository in Settings (format: owner/repo).');
+
+    if (channel === 'beta') {
+        const res = await ghFetch(`https://api.github.com/repos/${repo}/releases?per_page=15`);
+        const list = await res.json();
+        if (!Array.isArray(list) || list.length === 0)
+            throw new Error('No releases found for the beta channel.');
+        // The API returns releases newest-first; skip drafts but keep prereleases.
+        const newest = list.find((r) => !r.draft);
+        if (!newest) throw new Error('No published releases found for the beta channel.');
+        return newest;
+    }
+
+    // stable
     const res = await ghFetch(`https://api.github.com/repos/${repo}/releases/latest`);
     return res.json();
 }
@@ -57,9 +75,9 @@ function pickAsset(release, patterns) {
     return null;
 }
 
-// Returns { available, currentVersion, remoteVersion, assetUrl, shaUrl, notes, htmlUrl }
-async function checkShellUpdate({ repo, currentVersion }) {
-    const release = await getLatestRelease(repo);
+// Returns { available, currentVersion, remoteVersion, channel, prerelease, assetUrl, shaUrl, notes, htmlUrl }
+async function checkShellUpdate({ repo, currentVersion, channel = 'stable' }) {
+    const release = await getLatestRelease(repo, channel);
     const remote = normalize(release.tag_name || release.name || '0');
     const tar = pickAsset(release, [
         /^outlaw-shell-v?[\d.]+\.tar\.gz$/i,
@@ -72,6 +90,8 @@ async function checkShellUpdate({ repo, currentVersion }) {
     return {
         currentVersion: normalize(currentVersion),
         remoteVersion: remote,
+        channel,
+        prerelease: !!release.prerelease,
         available: compareVersions(remote, currentVersion) > 0,
         assetUrl: tar ? tar.browser_download_url : null,
         shaUrl: sha ? sha.browser_download_url : null,
