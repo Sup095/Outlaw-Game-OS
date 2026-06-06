@@ -71,7 +71,15 @@ xorg-xinit
 # VMSVGA in VESA mode), so X always finds a screen. ~200 KB.
 # (Note: xf86-video-vmware was dropped from the Arch repos, so we rely on
 # vesa + the built-in modesetting driver instead — both cover VirtualBox.)
+#
+# xf86-video-fbdev is the CRITICAL one for VMs: when we boot with `nomodeset`
+# (to avoid the VMSVGA+EFI black screen), KMS is off, so the modesetting and
+# vboxvideo drivers can't run, and `vesa` needs a real-mode VESA BIOS that
+# doesn't exist under UEFI. fbdev renders straight to the EFI framebuffer
+# (/dev/fb0), which is the only thing that actually works in that mode — it's
+# what lets Xorg (and therefore the desktop) start at all on a UEFI VM.
 xf86-video-vesa
+xf86-video-fbdev
 picom
 feh
 rofi

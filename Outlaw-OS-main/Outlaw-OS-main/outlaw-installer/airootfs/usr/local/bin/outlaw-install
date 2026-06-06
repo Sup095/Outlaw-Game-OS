@@ -39,12 +39,13 @@ ESSENTIAL_PKGS=(
   # X / desktop runtime
   xorg-server xorg-xinit picom feh rofi thunar xfce4-terminal electron
   ttf-jetbrains-mono noto-fonts mesa
-  # Xorg video driver — vesa is the universal fallback (works on any GPU
-  # without KMS, including VirtualBox VMSVGA in VESA mode). Combined with the
-  # built-in modesetting driver this keeps X from crash-looping on VMs.
-  # (xf86-video-vmware was dropped from the Arch repos; vesa + modesetting
-  # cover VirtualBox without it.)
-  xf86-video-vesa
+  # Xorg video drivers. vesa = universal fallback (BIOS/VESA-BIOS path);
+  # fbdev = renders to the kernel framebuffer (/dev/fb0). fbdev is required on
+  # UEFI VMs booted with `nomodeset`: KMS is off so modesetting/vboxvideo can't
+  # run and vesa has no real-mode BIOS, leaving the EFI framebuffer (fbdev) as
+  # the only driver Xorg can actually start with. (xf86-video-vmware was
+  # dropped from the Arch repos.)
+  xf86-video-vesa xf86-video-fbdev
 
   # VirtualBox compatibility. The kernel modules auto-load only when VBox
   # is detected on boot, so this is harmless on real hardware — but for
@@ -408,6 +409,13 @@ CHROOT
             sed -i 's/^\(GRUB_CMDLINE_LINUX_DEFAULT="[^"]*\)"/\1 nomodeset"/' "$TARGET/etc/default/grub"
         else
             echo 'GRUB_CMDLINE_LINUX_DEFAULT="nomodeset"' >> "$TARGET/etc/default/grub"
+        fi
+        # With nomodeset, Xorg can only drive the EFI framebuffer via fbdev.
+        # Pin it on the installed system too, mirroring the live ISO. (Real
+        # hardware skips this whole branch and keeps KMS + its proper driver.)
+        if [[ -f /etc/X11/xorg.conf.d/99-outlaw-fbdev.conf ]]; then
+            install -Dm644 /etc/X11/xorg.conf.d/99-outlaw-fbdev.conf \
+                "$TARGET/etc/X11/xorg.conf.d/99-outlaw-fbdev.conf"
         fi
     fi
 
