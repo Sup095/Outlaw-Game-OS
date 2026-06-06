@@ -396,6 +396,21 @@ if [[ -f /opt/outlaw-codemaker/main.py ]]; then
 fi
 CHROOT
 
+    # If we're installing INSIDE a virtual machine, add `nomodeset` to the
+    # installed system's kernel cmdline so its console/display is visible on
+    # VirtualBox (VMSVGA+EFI otherwise black-screens once a KMS driver loads —
+    # the same issue the live ISO works around). We edit /etc/default/grub
+    # BEFORE the chroot runs grub-mkconfig so the generated grub.cfg picks it
+    # up. On real hardware we leave KMS enabled for full-resolution graphics.
+    if systemd-detect-virt --quiet 2>/dev/null; then
+        ylw "Virtual machine detected — adding 'nomodeset' to the installed boot config for display compatibility."
+        if grep -q '^GRUB_CMDLINE_LINUX_DEFAULT=' "$TARGET/etc/default/grub" 2>/dev/null; then
+            sed -i 's/^\(GRUB_CMDLINE_LINUX_DEFAULT="[^"]*\)"/\1 nomodeset"/' "$TARGET/etc/default/grub"
+        else
+            echo 'GRUB_CMDLINE_LINUX_DEFAULT="nomodeset"' >> "$TARGET/etc/default/grub"
+        fi
+    fi
+
     chmod +x "$TARGET/root/outlaw-chroot.sh"
     arch-chroot "$TARGET" /root/outlaw-chroot.sh || die "Configuration failed."
     rm -f "$TARGET/root/outlaw-chroot.sh"

@@ -169,19 +169,23 @@ Most people just download the ISO from Releases (above) and use it. If you want 
 | Section | Setting | Value | Why |
 |---|---|---|---|
 | **System → Motherboard** | Base Memory | **4096 MB+** (8192 recommended) | Electron + the installer need headroom |
-| **System → Motherboard** | Enable **EFI** | ✅ on | Outlaw boots in UEFI mode |
 | **System → Processor** | Processors | **2+** | Smoother desktop |
 | **Display → Screen** | Video Memory | **128 MB** | Avoids low-VRAM display glitches |
-| **Display → Screen** | Graphics Controller | **VMSVGA** | The controller Outlaw's `vesa`/modesetting drivers target |
-| **Display → Screen** | Enable 3D Acceleration | **❌ OFF** | Outlaw auto-uses software rendering in VMs; leaving 3D off is the reliable path |
+| **Display → Screen** | Graphics Controller | **VBoxVGA** *(most reliable)* or VMSVGA | VBoxVGA gives the most dependable framebuffer for the live console. If you use VMSVGA and get a black screen, switch to VBoxVGA. |
+| **Display → Screen** | Enable 3D Acceleration | **❌ OFF** | Outlaw renders with software GL in VMs; 3D off is the reliable path. |
+| **System → Motherboard** | Enable EFI | **Optional** | The ISO boots in both BIOS and UEFI. If a UEFI boot black-screens, turn EFI **off** (BIOS boot via syslinux is the most bulletproof for the live ISO). |
 | **Storage** | Add Optical Drive → pick `outlaw-os-v*.iso` | — | The boot medium |
 | **Storage** | Add a Hard Disk | **30 GB+** (only if you'll install) | Target for a real install |
 
+> **Why these matter:** the live ISO now boots with `nomodeset` by default, which forces the simple framebuffer VirtualBox always displays — this fixes the "boot menu → black screen" problem on the VMSVGA + EFI combo. The settings above are the belt-and-suspenders combo.
+
 4. Boot the VM. You'll land **directly on the Outlaw desktop** with the pulsing System Core. A welcome card offers **Install Outlaw OS · Try it first · Don't show again**.
-5. To install to the VM's virtual disk: click **Install Outlaw OS** (or run `sudo outlaw-install` in a terminal). After install, power off, **remove the ISO from the optical drive**, and boot the disk.
+5. To install to the VM's virtual disk: click **Install Outlaw OS** (or run `sudo outlaw-install` in a terminal). The installer auto-detects the VM and adds the same display-compatibility setting to your installed system. After install, power off, **remove the ISO from the optical drive**, and boot the disk.
 6. On the installed system's **first boot** you go straight to the Desktop and a setup wizard offers the optional bundles (Steam / Firefox / Godot). After that, every boot shows the greeter to pick Dev or Desktop.
 
-> **Still get a black screen?** Switch to a text console with **Right-Ctrl + F2**, log in, and run `cat ~/.outlaw-x.log` — it records exactly what the graphical session did. (Outlaw also drops you to a usable shell automatically if the desktop fails to start, instead of looping.)
+> **Black screen right after the boot menu (before any desktop)?** That's a graphics-mode issue. Fix in order: (1) **Graphics Controller → VBoxVGA**, (2) **disable EFI** (BIOS boot), (3) make sure **3D Acceleration is OFF**. The ISO already adds `nomodeset` to help, so one of these almost always does it.
+>
+> **Black screen *after* the desktop tries to start?** Switch to a text console with **Right-Ctrl + F2**, log in, and run `cat ~/.outlaw-x.log` — it records exactly what the graphical session did. (Outlaw also drops you to a usable shell automatically if the desktop fails to start, instead of looping.)
 
 ### 4. Build the ISO yourself on Arch Linux (optional — for contributors)
 

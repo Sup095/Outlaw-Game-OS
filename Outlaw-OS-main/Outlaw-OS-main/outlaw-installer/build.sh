@@ -20,7 +20,7 @@ RELENG="/usr/share/archiso/configs/releng"
 # Default version baked in for local builds. CI overrides this from the git
 # tag via OUTLAW_ISO_VERSION (see .github/workflows/build-iso.yml) so the
 # artifact filename always matches the tag the user pushed.
-ISO_VERSION="${OUTLAW_ISO_VERSION:-2.0.12}"
+ISO_VERSION="${OUTLAW_ISO_VERSION:-2.0.13}"
 ISO_FINAL="$OUT_DIR/outlaw-os-v${ISO_VERSION}.iso"
 
 echo "========================================"
@@ -56,6 +56,33 @@ cp "$HERE/pacman.conf"     "$PROFILE_DIR/pacman.conf"
 
 # Merge our airootfs overlay (scripts, skel, root profile, hostname)
 cp -rT "$HERE/airootfs" "$PROFILE_DIR/airootfs"
+
+# --- VM-safe kernel parameters --------------------------------------------
+# Add `nomodeset` to every live-boot menu entry. Without it, the kernel loads
+# a KMS driver (vmwgfx for VirtualBox VMSVGA, or vboxvideo) that, under
+# VirtualBox's VMSVGA+EFI combo, blanks the display — GRUB and the kernel load
+# fine, then the screen goes black with no console (the exact symptom testers
+# hit). nomodeset forces the simple EFI/VESA framebuffer, which VirtualBox
+# always shows. Our shell already renders with software GL and ships the vesa
+# Xorg driver, so the desktop still comes up; we just don't rely on KMS.
+#
+# The kernel cmdline lives on whichever line contains `archisobasedir` in each
+# bootloader config (GRUB for UEFI, syslinux for BIOS, systemd-boot loader
+# entries). Append there, robustly, across whatever releng ships.
+echo "[2b/7] Adding VM-safe kernel params (nomodeset) to live boot entries…"
+LIVE_KPARAMS="nomodeset"
+PATCHED_ANY=0
+while IFS= read -r bootcfg; do
+    [[ -f "$bootcfg" ]] || continue
+    sed -i "/archisobasedir/ s/\$/ ${LIVE_KPARAMS}/" "$bootcfg"
+    echo "   patched ${bootcfg#$PROFILE_DIR/}"
+    PATCHED_ANY=1
+done < <(grep -rIl 'archisobasedir' \
+            "$PROFILE_DIR/grub" "$PROFILE_DIR/syslinux" "$PROFILE_DIR/efiboot" \
+            2>/dev/null || true)
+if [[ "$PATCHED_ANY" -eq 0 ]]; then
+    echo "   ⚠ no boot configs with 'archisobasedir' found — releng layout may have changed."
+fi
 
 # Sync the Electron shell into the image (single source of truth: outlaw-shell)
 echo "[3/7] Syncing Outlaw shell…"
