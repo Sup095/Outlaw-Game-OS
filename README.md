@@ -111,8 +111,6 @@ Outlaw-Game-OS/
 │       ├── bundle-codemaker.sh  Bundles CodeMaker into airootfs
 │       ├── packages.x86_64      Minimal live-ISO install set
 │       └── airootfs/            /etc/skel, /usr/local/bin (outlaw-* helpers), systemd units
-├── tests/
-│   └── check-all.sh         ← repo-wide static/security/consistency suite (CI gate)
 └── Outlaw CodeMaker/        ← PyQt agent (Dev session)
     ├── main.py                  Entry point
     ├── config.json              LM Studio + paths
@@ -288,14 +286,14 @@ You can also kick off a manual build from the Actions tab (workflow_dispatch) �
 
 ## Contributing
 
-Standard GitHub flow — fork, branch, PR. Before pushing, run the repo-wide check suite (the same one CI runs on every push — see `.github/workflows/checks.yml`):
+Standard GitHub flow — fork, branch, PR. Before pushing, sanity-check what you touched:
 
 ```bash
-# Static + security + consistency checks across the whole repo:
-# every script/JS/Python parses, Electron hardening intact, no secrets,
-# versions agree, helper files exist. Needs bash + node + python3 (and
-# shellcheck for the lint stage; it's skipped with a note if absent).
-bash tests/check-all.sh
+# Shell scripts parse
+bash -n outlaw-installer/airootfs/usr/local/bin/outlaw-*
+
+# Shell JS parses
+cd Outlaw-OS-main/Outlaw-OS-main/outlaw-shell && node --check *.js
 
 # CodeMaker test suite
 cd "Outlaw CodeMaker"
