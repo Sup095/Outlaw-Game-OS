@@ -50,6 +50,22 @@ If you want to switch back to your other OS, boot the USB again and pick **Remov
 
 ---
 
+## 🔄 Keeping Outlaw OS updated
+
+Once installed, you never need to re-download an ISO for normal updates. Two updaters live in the desktop shell:
+
+1. **Update installed software** — keeps your apps and drivers current (`pacman -Syu` under the hood). One button, one password prompt.
+2. **Update Outlaw OS** — checks GitHub for a newer Outlaw release and updates the shell in place. If an update ever misbehaves, **Roll back** restores the previous version instantly.
+
+**Stable vs. beta channel** (in *Settings*):
+
+- **Stable** *(default)* — only versions that have been tested and marked stable. Recommended for everyday use.
+- **Beta** — the newest build of any kind, including untested ones. Pick this if you want to help test and report back.
+
+> **For maintainers:** every CI build is published as a GitHub *pre-release* (the beta channel). When you've tested one and it's solid, open that release on GitHub and **uncheck "Set as a pre-release"** — it instantly becomes the stable target that everyone on the stable channel receives. You can do this to any past version at any time.
+
+---
+
 ## Highlights
 
 - **Two sessions, one OS.** Boot into the greeter, pick Dev (CodeMaker) or Desktop (shell). Persistent preference if you always want the same one.
@@ -59,7 +75,10 @@ If you want to switch back to your other OS, boot the USB again and pick **Remov
 - **Sci-fi System Core.** Pure CSS/SVG centerpiece, zero VRAM idle. Live readouts (CPU, RAM, GPU+VRAM, disk, network, uptime, inventory). Three-tier diagnostic runner. Scheduled background checks via systemd user timers. Optional voice via piper-tts or espeak-ng. Optional Live AI mode with tightly allowlisted tool calls.
 - **Steam publishing built in.** VDF generation, `steamcmd` upload, BuildID parsing, branch promotion. Mandatory dry-run preview before any real ship.
 - **Hardened by design.** Sandboxed Electron renderer, context isolation, strict CSP, destructive-command guard, polkit-prompted privileged actions, no passwordless root. Emergency stop (Ctrl+Alt+K) anywhere.
-- **Stripped default install.** ~30 packages on the ISO. Blender, GIMP, VS Code, Lutris, security toolkit etc. install on demand from the **Apps panel** (curated, pacman-backed, allowlisted).
+- **Stripped default install.** Minimal package set on the ISO. Blender, GIMP, VS Code, Lutris, security toolkit etc. install on demand from the **Apps panel** (curated, pacman-backed, allowlisted).
+- **First-boot setup wizard.** The first time you log in after installing, a one-screen wizard offers the optional bundles (Steam stack, Firefox, Godot) as checkboxes — install what you want, skip the rest. It never appears again.
+- **Built-in updaters.** A package/driver updater (one button → `pacman -Syu`) and an Outlaw OS self-updater that pulls new releases from GitHub on your chosen channel (**stable** or **beta**) and swaps the shell in place, with one-click rollback if a release misbehaves.
+- **Runs in a VM out of the box.** Auto-detects VirtualBox / QEMU and forces software rendering so the desktop never black-screens on a VM without 3D acceleration. A boot-time crash-guard drops you to a readable shell instead of an invisible getty loop if X ever fails.
 
 ---
 
@@ -80,14 +99,20 @@ Outlaw-Game-OS/
 │   │   ├── tts.js               piper / espeak-ng wrapper
 │   │   ├── dialogue.js/.json    Cold-mode catalogue + picker
 │   │   ├── ai-agent.js          OS-level AI assistant
-│   │   ├── updater.js           GitHub Releases OTA
+│   │   ├── updater.js           GitHub Releases OTA (stable/beta channels)
 │   │   ├── index.html / styles.css
 │   │   └── package.json
+│   ├── outlaw-firstboot/    ← first-boot setup wizard (Electron)
+│   │   ├── main.js              Bundle install via pkexec pacman
+│   │   ├── preload.js / renderer.js / index.html / styles.css
+│   │   └── package.json
 │   └── outlaw-installer/    ← archiso profile + helper scripts
-│       ├── build.sh             Builds the live ISO
+│       ├── build.sh             Builds the live ISO + self-update component tarball
 │       ├── bundle-codemaker.sh  Bundles CodeMaker into airootfs
-│       ├── packages.x86_64      ~30-package minimal install set
-│       └── airootfs/            /etc/skel, /usr/local/bin, /usr/share, systemd units
+│       ├── packages.x86_64      Minimal live-ISO install set
+│       └── airootfs/            /etc/skel, /usr/local/bin (outlaw-* helpers), systemd units
+├── tests/
+│   └── check-all.sh         ← repo-wide static/security/consistency suite (CI gate)
 └── Outlaw CodeMaker/        ← PyQt agent (Dev session)
     ├── main.py                  Entry point
     ├── config.json              LM Studio + paths
@@ -138,7 +163,7 @@ sudo pacman -S archiso git nodejs python python-pip
 git clone https://github.com/YOUR-USERNAME/Outlaw-Game-OS.git
 cd Outlaw-Game-OS/Outlaw-OS-main/Outlaw-OS-main/outlaw-installer
 sudo OUTLAW_CODEMAKER_SRC=../../../"Outlaw CodeMaker" ./build.sh
-# → ../out/outlaw-os-v2.0.iso
+# → ../out/outlaw-os-v<version>.iso
 ```
 
 Then create a fresh VirtualBox VM (Arch Linux 64-bit, 6 GB RAM, 30 GB disk, EFI on, 128 MB VRAM, audio enabled), attach the ISO, and boot it. You'll land in the greeter — pick Desktop to test the System Core; pick Dev to test CodeMaker.
@@ -172,15 +197,41 @@ This README is the entry point. Deeper docs live alongside the code:
 
 ---
 
-## Roadmaps shipped
+## 🗺 Roadmap
 
-This codebase is the product of three sequential roadmaps:
+Outlaw OS is built in phases. This section is kept up to date as work lands — check the boxes to see what's done.
 
-1. **Product roadmap (7 slices)** — Merged the two original codebases. Project Picker + New Game wizard, single LM Studio backend, stripped OS default install + Apps panel, boot greeter, Steam pipeline, CodeMaker deployment to `/opt`, VRAM saver.
-2. **Reliability roadmap (11 slices)** — Auto-snapshots, Steam dry-run, emergency stop, LM Studio reconnect, prompt pre-flight, diagnostic dump, greeter preference, Apps search + filter, "Working on…" headline + notifications, project templates, OS shell rollback UI.
-3. **System Core roadmap (7 slices)** — Sci-fi centerpiece scaffold, live telemetry, three-tier diagnostics, scheduled background checks via systemd timers, cold-mode dialogue + local TTS, Live AI mode with tool calls, two-layer VRAM tiering.
+### Foundations — ✅ shipped
 
-All 25 slices are landed and tested. The `Outlaw CodeMaker/tests/` pytest suite plus the shell-side integration audits cover the critical paths.
+The product is the result of three completed roadmaps (25 slices, all landed and tested):
+
+- ✅ **Product roadmap (7 slices)** — Merged the two original codebases: Project Picker + New Game wizard, single LM Studio backend, stripped OS default install + Apps panel, boot greeter, Steam pipeline, CodeMaker deployment to `/opt`, VRAM saver.
+- ✅ **Reliability roadmap (11 slices)** — Auto-snapshots, Steam dry-run, emergency stop, LM Studio reconnect, prompt pre-flight, diagnostic dump, greeter preference, Apps search + filter, "Working on…" headline + notifications, project templates, OS shell rollback UI.
+- ✅ **System Core roadmap (7 slices)** — Sci-fi centerpiece scaffold, live telemetry, three-tier diagnostics, scheduled background checks via systemd timers, cold-mode dialogue + local TTS, Live AI mode with tool calls, two-layer VRAM tiering.
+
+### Release & boot hardening — ✅ shipped
+
+- ✅ Automated ISO build + publish on tag push (GitHub Actions).
+- ✅ Live-ISO welcome card, GParted in the live environment, polished installer.
+- ✅ On-demand AUR install for `steamcmd` (Steam panel installs it at first publish).
+- ✅ VirtualBox/VM black-screen fix (auto software rendering + guaranteed video driver).
+- ✅ First-boot setup wizard (opt-in Steam / Firefox / Godot bundles).
+- ✅ Boot crash-guard (escape to a readable shell instead of an invisible loop).
+
+### Current work
+
+- 🚧 **Phase 1 — Update system + channels.** Package/driver updater, Outlaw OS self-updater (in-place component swap + rollback), and stable/beta release channels. *Backend done; in-OS Updates panel UI in progress.*
+- 🔜 **Phase 2 — Community testing + desktop features + hardening.** In-OS "Works / Broken" stability reporting (advisory; maintainer blesses stable), a desktop System Core **Chat + system-control** panel, and a repo-wide **security + stress test suite** wired into CI.
+
+### Planned
+
+- 🔜 **Phase 3 — CI package preflight.** Validate every package name exists in the Arch repos *before* the 20-minute ISO build, so a typo or removed package fails in seconds with a clear message.
+- 🔜 **Phase 4 — Post-install stress test + auto-tune.** After install, run a hardware check / stress test, then automatically apply the best settings for *your* machine (CPU governor, swap/zram, GPU power mode, VRAM defaults, compositor, file-watcher limits) to make development smoother.
+- 🔜 **Phase 5 — CodeMaker / dev overhaul.** A big upgrade to the development experience while keeping background VRAM minimal — including a low-VRAM mode that runs a smaller model, spills into system RAM when needed (slower but better code), and caches roadmaps/context to disk so the AI keeps its memory without using more RAM.
+
+### Future updates
+
+Beyond the planned phases, Outlaw OS will keep improving — more project templates, deeper Godot integration, broader hardware support, and quality-of-life polish driven by what testers report through the in-OS stability reporting. Suggestions and bug reports are welcome on the [Issues](../../issues) page.
 
 ---
 
@@ -205,16 +256,18 @@ You can also kick off a manual build from the Actions tab (workflow_dispatch) �
 
 ## Contributing
 
-Standard GitHub flow — fork, branch, PR. Before pushing:
+Standard GitHub flow — fork, branch, PR. Before pushing, run the repo-wide check suite (the same one CI runs on every push — see `.github/workflows/checks.yml`):
 
 ```bash
+# Static + security + consistency checks across the whole repo:
+# every script/JS/Python parses, Electron hardening intact, no secrets,
+# versions agree, helper files exist. Needs bash + node + python3 (and
+# shellcheck for the lint stage; it's skipped with a note if absent).
+bash tests/check-all.sh
+
 # CodeMaker test suite
 cd "Outlaw CodeMaker"
 .venv/Scripts/python.exe -m pytest tests/
-
-# Shell static check
-cd ../Outlaw-OS-main/Outlaw-OS-main/outlaw-shell
-node --check *.js
 ```
 
 When adding a new shell IPC handler, make sure to:
