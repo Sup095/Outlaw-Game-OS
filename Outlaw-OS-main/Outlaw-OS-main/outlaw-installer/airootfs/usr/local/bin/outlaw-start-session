@@ -48,6 +48,33 @@ read_fails() {
 }
 write_fails() { printf '%s\n' "$1" > "$STATE" 2>/dev/null || true; }
 
+# Print the actual reason X failed straight to the console (and the serial
+# port, if one exists) so a stuck tester can SEE/photograph it instead of
+# staring at a blank screen. Shows the tail of both the session log (our
+# .xinitrc stderr) and the Xorg server log.
+_dump_logs() {
+    local xorglog="$HOME/.local/share/xorg/Xorg.0.log" out
+    out="$(
+        echo ""
+        echo "================ why the desktop didn't start ================"
+        if [[ -f "$XLOG" ]]; then
+            echo "--- session log tail ($XLOG) ---"
+            tail -n 25 "$XLOG" 2>/dev/null
+        fi
+        if [[ -f "$xorglog" ]]; then
+            echo "--- Xorg log tail ($xorglog) ---"
+            tail -n 25 "$xorglog" 2>/dev/null
+            echo "--- Xorg errors (EE) ---"
+            grep -E '\(EE\)|no screens found|Cannot run in framebuffer' "$xorglog" 2>/dev/null | tail -n 15
+        fi
+        echo "============================================================="
+    )"
+    # To the console this script runs on…
+    printf '%s\n' "$out" >&2
+    # …and to a serial port if the VM has one (lets a stuck tester capture it).
+    [[ -w /dev/ttyS0 ]] && printf '%s\n' "$out" > /dev/ttyS0 2>/dev/null || true
+}
+
 FAILS="$(read_fails)"
 
 # If we've already failed too many times in a row, don't loop again — hand
@@ -72,6 +99,7 @@ if (( FAILS >= MAX_FAILS )); then
   (that resets the counter; if it works, normal boot resumes next time)
 
 MSG
+    _dump_logs
     # Reset so a manual startx / next login gets a clean attempt.
     write_fails 0
     exit 0
@@ -114,6 +142,7 @@ while true; do
   Type 'startx' to try again.
 
 MSG
+        _dump_logs
         # Leave the counter at MAX so the next *login* also lands on a shell
         # (not an infinite getty loop). A manual `startx` resets it on success.
         exit 0

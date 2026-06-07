@@ -20,7 +20,7 @@ RELENG="/usr/share/archiso/configs/releng"
 # Default version baked in for local builds. CI overrides this from the git
 # tag via OUTLAW_ISO_VERSION (see .github/workflows/build-iso.yml) so the
 # artifact filename always matches the tag the user pushed.
-ISO_VERSION="${OUTLAW_ISO_VERSION:-2.0.14}"
+ISO_VERSION="${OUTLAW_ISO_VERSION:-2.0.15}"
 ISO_FINAL="$OUT_DIR/outlaw-os-v${ISO_VERSION}.iso"
 
 echo "========================================"
@@ -56,6 +56,24 @@ cp "$HERE/pacman.conf"     "$PROFILE_DIR/pacman.conf"
 
 # Merge our airootfs overlay (scripts, skel, root profile, hostname)
 cp -rT "$HERE/airootfs" "$PROFILE_DIR/airootfs"
+
+# --- Live root login shell -------------------------------------------------
+# CRITICAL: the upstream releng profile ships /etc/passwd with the live root
+# shell set to /usr/bin/zsh, and bundles zsh in ITS package list. We REPLACE
+# that package list with our own slim one, which does NOT include zsh — so on
+# our ISO root's login shell points at a binary that isn't installed. The
+# autologin getty then can't start a shell, the login profile never runs, and
+# `startx` never fires: the live session dies before X, leaving a blank tty1.
+# (This silently broke the live ISO on every build.) Force root's shell to
+# /bin/bash, which is always present (base) and whose ~/.bash_profile we ship
+# to launch the graphical session.
+LIVE_PASSWD="$PROFILE_DIR/airootfs/etc/passwd"
+if [[ -f "$LIVE_PASSWD" ]] && grep -qE '^root:.*:(/usr)?/bin/zsh$' "$LIVE_PASSWD"; then
+    sed -i -E 's#^(root(:[^:]*){5}):[^:]*$#\1:/bin/bash#' "$LIVE_PASSWD"
+    echo "[2a/7] Live root shell set to /bin/bash (releng default was zsh, which we don't ship)."
+else
+    echo "[2a/7] Live root shell check: no zsh override found (root already uses a shell we ship)."
+fi
 
 # --- VM-safe kernel parameters --------------------------------------------
 # Add `nomodeset` to every live-boot menu entry. Without it, the kernel loads
