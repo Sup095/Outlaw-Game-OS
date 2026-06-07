@@ -1178,6 +1178,64 @@ function registerIpc() {
         }
     });
 
+    // --- Phase 5: per-machine tuning (outlaw-tune) --------------------------
+    // probe / recommend / stress / status are read-only (no pkexec). apply +
+    // reset are privileged and go through the audited outlaw-tune helper, which
+    // only ever writes its own fixed set of files. JSON is parsed here so the
+    // renderer gets objects, not raw text.
+    const _parseJson = (s) => { try { return JSON.parse(s); } catch { return null; } };
+
+    ipcMain.handle('tune:probe', async () => {
+        if (!IS_LINUX) return { ok: false, error: 'Hardware tuning runs on Outlaw OS.' };
+        const r = await runShell('outlaw-tune probe', { timeout: 15000 });
+        const data = _parseJson(r.stdout || '');
+        return data ? { ok: true, data } : { ok: false, error: (r.stderr || 'probe failed').slice(-400) };
+    });
+
+    ipcMain.handle('tune:recommend', async () => {
+        if (!IS_LINUX) return { ok: false, error: 'Hardware tuning runs on Outlaw OS.' };
+        const r = await runShell('outlaw-tune recommend json', { timeout: 15000 });
+        const data = _parseJson(r.stdout || '');
+        return data ? { ok: true, data } : { ok: false, error: (r.stderr || 'recommend failed').slice(-400) };
+    });
+
+    ipcMain.handle('tune:stress', async (_e, seconds) => {
+        if (!IS_LINUX) return { ok: false, error: 'The stress test runs on Outlaw OS.' };
+        // Clamp here too; the helper clamps again as defence in depth.
+        let s = parseInt(seconds, 10); if (!Number.isFinite(s)) s = 10;
+        s = Math.max(3, Math.min(30, s));
+        const r = await runShell(`outlaw-tune stress ${s}`, { timeout: (s + 20) * 1000 });
+        const data = _parseJson(r.stdout || '');
+        return data ? { ok: true, data } : { ok: false, error: (r.stderr || 'stress test failed').slice(-400) };
+    });
+
+    ipcMain.handle('tune:status', async () => {
+        if (!IS_LINUX) return { ok: false, error: 'Hardware tuning runs on Outlaw OS.' };
+        const r = await runShell('outlaw-tune status', { timeout: 8000 });
+        return { ok: true, data: _parseJson(r.stdout || '') || { applied: false } };
+    });
+
+    ipcMain.handle('tune:apply', async () => {
+        if (!IS_LINUX) return { ok: false, error: 'Hardware tuning runs on Outlaw OS.' };
+        const r = await runShell('pkexec outlaw-tune apply', { timeout: 1000 * 60 * 2 });
+        if (r.code !== 0) return { ok: false, error: (r.stderr || r.stdout || `exit ${r.code}`).slice(-800) };
+        // The helper prints OUTLAW_VRAM_MODE=<mode>; mirror it into the shell's
+        // own VRAM-saver setting so CodeMaker's default matches the hardware.
+        const m = (r.stdout || '').match(/OUTLAW_VRAM_MODE=(\w+)/);
+        if (m && ['auto', 'off', 'lean', 'minimal'].includes(m[1])) {
+            settings = saveSettings({ ...settings, vramSaverMode: m[1] });
+            try { vramTier.setMode(m[1]); } catch {}
+        }
+        return { ok: true, log: (r.stdout || '').slice(-800) };
+    });
+
+    ipcMain.handle('tune:reset', async () => {
+        if (!IS_LINUX) return { ok: false, error: 'Hardware tuning runs on Outlaw OS.' };
+        const r = await runShell('pkexec outlaw-tune reset', { timeout: 1000 * 60 });
+        if (r.code !== 0) return { ok: false, error: (r.stderr || r.stdout || `exit ${r.code}`).slice(-800) };
+        return { ok: true, log: (r.stdout || '').slice(-400) };
+    });
+
     // --- Safe mode marker (set by outlaw-session-watchdog after a crash loop) ----
     ipcMain.handle('safe-mode:check', () => {
         if (!IS_LINUX) return { active: false, reason: '' };

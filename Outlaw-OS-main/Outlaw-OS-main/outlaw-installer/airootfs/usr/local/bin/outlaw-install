@@ -29,6 +29,9 @@ ESSENTIAL_PKGS=(
   # Base system
   base linux linux-firmware intel-ucode amd-ucode mkinitcpio
   sudo polkit networkmanager curl wget git nano
+  # zram-generator: compressed-RAM swap that outlaw-tune ("Tune This PC")
+  # enables on low-memory machines. No effect unless tuning writes its config.
+  zram-generator
 
   # Bootloader / install tooling
   grub efibootmgr os-prober dosfstools mtools gptfdisk parted

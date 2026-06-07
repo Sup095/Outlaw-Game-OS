@@ -718,6 +718,104 @@ function shareStabilityFeedback() {
     });
 }
 
+// --- P5: per-machine hardware tuning ----------------------------------------
+let _tuneRec = null;
+
+function _fmtMB(mb) {
+    if (mb == null || mb < 0) return 'n/a';
+    return mb >= 1024 ? (mb / 1024).toFixed(1) + ' GB' : mb + ' MB';
+}
+
+function _renderTune(p, r) {
+    const L = [];
+    L.push('HARDWARE');
+    L.push('  CPU      : ' + (p.cpu_model || '?') + '  (' + p.cpu_cores + ' cores)');
+    L.push('  Memory   : ' + _fmtMB(p.ram_mb) + ' RAM, ' + _fmtMB(p.swap_mb) + ' swap');
+    L.push('  Disk     : ' + (p.root_rotational ? 'HDD (spinning)' : 'SSD / NVMe'));
+    L.push('  GPU      : ' + (p.gpu || '?') + (p.vram_mb >= 0 ? '  (' + _fmtMB(p.vram_mb) + ' VRAM)' : ''));
+    L.push('  Platform : ' + (p.virt && p.virt !== 'none' ? ('VM — ' + p.virt) : 'bare metal') + (p.is_laptop ? ', laptop' : ''));
+    if (p.temp_c >= 0) L.push('  Temp     : ' + p.temp_c + '°C');
+    if (r) {
+        L.push('');
+        L.push('RECOMMENDED FOR THIS MACHINE');
+        L.push('  CPU governor     : ' + r.governor);
+        L.push('  Swappiness       : ' + r.swappiness);
+        L.push('  zram swap        : ' + (r.zram_mb > 0 ? _fmtMB(r.zram_mb) : 'off'));
+        L.push('  File-watch limit : ' + r.inotify_watches);
+        L.push('  Max map count    : ' + r.max_map_count);
+        L.push('  CodeMaker VRAM   : ' + r.vram_mode);
+    }
+    return L.join('\n');
+}
+
+async function tuneScan() {
+    const out = $('#tune-output'), st = $('#tune-status');
+    st.textContent = 'scanning…'; out.style.display = 'block'; out.textContent = 'Reading hardware…';
+    try {
+        const p = await api.tune.probe();
+        if (!p || !p.ok) { st.textContent = ''; out.textContent = (p && p.error) || 'probe failed'; return; }
+        const r = await api.tune.recommend();
+        _tuneRec = (r && r.ok) ? r.data : null;
+        out.textContent = _renderTune(p.data, _tuneRec);
+        st.textContent = 'scan complete';
+        const btn = $('#tune-apply-btn'); if (btn) btn.disabled = !_tuneRec;
+    } catch (e) { st.textContent = ''; out.textContent = 'error: ' + e.message; }
+}
+
+async function tuneStress() {
+    const out = $('#tune-output'), st = $('#tune-status');
+    if (!window.confirm('Run a ~10-second CPU stress test? This briefly loads all cores while watching temperature.')) return;
+    st.textContent = 'stress testing…'; out.style.display = 'block'; out.textContent = 'Loading all CPU cores for ~10 seconds…';
+    try {
+        const r = await api.tune.stress(10);
+        if (!r || !r.ok) { st.textContent = ''; out.textContent = (r && r.error) || 'stress test failed'; return; }
+        const d = r.data, L = [];
+        L.push('STRESS TEST');
+        L.push('  Cores loaded : ' + d.cores_stressed + ' for ' + d.seconds + 's');
+        L.push('  CPU score    : ' + d.score_kops + ' k-ops/s (single core, relative)');
+        if (d.temp_before_c >= 0) L.push('  Temp before  : ' + d.temp_before_c + '°C');
+        if (d.temp_peak_c >= 0) L.push('  Temp peak    : ' + d.temp_peak_c + '°C');
+        L.push('  Thermals     : ' + (d.thermal_ok ? 'OK' : '⚠ HOT (≥95°C) — check cooling'));
+        out.textContent = L.join('\n');
+        st.textContent = 'stress test done';
+    } catch (e) { st.textContent = ''; out.textContent = 'error: ' + e.message; }
+}
+
+async function tuneApply() {
+    const st = $('#tune-status');
+    st.textContent = 'applying (you may be asked for your password)…';
+    try {
+        const r = await api.tune.apply();
+        st.textContent = (r && r.ok) ? 'applied ✓ — some changes take effect after reboot' : ((r && r.error) || 'apply failed');
+        tuneRefreshStatus();
+    } catch (e) { st.textContent = 'error: ' + e.message; }
+}
+
+async function tuneReset() {
+    const st = $('#tune-status');
+    if (!window.confirm('Remove all Outlaw tuning and reset system settings to defaults?')) return;
+    st.textContent = 'resetting…';
+    try {
+        const r = await api.tune.reset();
+        st.textContent = (r && r.ok) ? 'reset ✓' : ((r && r.error) || 'reset failed');
+        tuneRefreshStatus();
+    } catch (e) { st.textContent = 'error: ' + e.message; }
+}
+
+async function tuneRefreshStatus() {
+    const el = $('#tune-applied'); if (!el) return;
+    try {
+        const r = await api.tune.status();
+        const d = r && r.data;
+        if (d && d.applied !== false && d.governor) {
+            el.textContent = 'currently applied: governor ' + d.governor + ', swappiness ' + d.swappiness +
+                (d.zram_mb > 0 ? (', zram ' + d.zram_mb + ' MB') : '');
+        } else {
+            el.textContent = 'not tuned yet';
+        }
+    } catch { el.textContent = ''; }
+}
+
 async function loadSettings() {
     let s = {};
     try { s = await api.settings.get(); } catch {}
@@ -737,6 +835,8 @@ async function loadSettings() {
     // first Settings open) so there's zero network cost otherwise.
     _stabilityReports = s.stabilityReports || {};
     refreshStabilityUi();
+    // P5 — reflect any already-applied per-machine tuning.
+    tuneRefreshStatus();
     // SC5 — System Core voice toggle. Probe TTS engine availability in
     // parallel with reading the setting so the sub-text reflects reality
     // (e.g., "On · piper" vs "On · not installed").
@@ -899,6 +999,10 @@ function wire() {
             case 'stability-broken': setStabilityVote('broken'); break;
             case 'stability-refresh': refreshStabilityTally(); break;
             case 'stability-share':  shareStabilityFeedback(); break;
+            case 'tune-scan':   tuneScan(); break;
+            case 'tune-stress': tuneStress(); break;
+            case 'tune-apply':  tuneApply(); break;
+            case 'tune-reset':  tuneReset(); break;
             case 'confirm-cancel': closeConfirm(false); break;
         }
     });

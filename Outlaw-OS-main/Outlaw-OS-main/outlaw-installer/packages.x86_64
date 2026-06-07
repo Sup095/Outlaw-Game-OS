@@ -26,6 +26,10 @@ curl
 wget
 git
 nano
+# zram-generator powers the optional compressed-RAM swap that the "Tune This
+# PC" panel (outlaw-tune) enables on low-memory machines. Tiny; no effect
+# unless outlaw-tune writes a zram config.
+zram-generator
 
 # --- Bootloader / install tooling ---
 # syslinux is required by the bios.syslinux.* bootmodes declared in

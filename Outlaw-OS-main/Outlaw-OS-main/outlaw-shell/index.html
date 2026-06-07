@@ -532,6 +532,26 @@
             </div>
 
             <div class="card">
+                <h3>Tune This PC</h3>
+                <div class="muted" style="margin-bottom:8px;">
+                    Scan your hardware and apply the best settings for <em>this</em> machine —
+                    CPU governor, swappiness, zram, file-watcher limits, and CodeMaker's VRAM
+                    default. Optional: a short CPU stress test to check stability under load.
+                </div>
+                <div class="row" style="align-items:center;">
+                    <button data-action="tune-scan">🔍 Scan hardware</button>
+                    <button data-action="tune-stress" title="Loads all CPU cores for ~10 seconds while watching temperature.">🔥 Stress test (10s)</button>
+                    <span id="tune-status" class="muted mono"></span>
+                </div>
+                <pre id="tune-output" class="mono" style="display:none;white-space:pre-wrap;background:var(--panel-2,#0d130d);border:1px solid var(--line,#1c2a1c);border-radius:8px;padding:10px 12px;margin-top:8px;max-height:240px;overflow:auto;font-size:12px;"></pre>
+                <div class="row" style="margin-top:8px;align-items:center;">
+                    <button class="primary" data-action="tune-apply" id="tune-apply-btn" disabled>Apply recommended tuning</button>
+                    <button data-action="tune-reset">Reset to defaults</button>
+                    <span id="tune-applied" class="muted mono"></span>
+                </div>
+            </div>
+
+            <div class="card">
                 <h3>Boot &amp; Recovery</h3>
                 <div class="row">
                     <button data-action="hotswap">⇄ Hotswap to another OS</button>

@@ -35,7 +35,7 @@ Outlaw Game OS is built in the open, one phase at a time.
 
 ```
 Foundations  ▰▰▰▰▰▰▰▰▰▰  done
-This era      ▰▰▰▰▰▰▰▱▱▱  Phases 1–4 shipped · 5–6 ahead
+This era      ▰▰▰▰▰▰▰▰▱▱  Phases 1–5 shipped · 6 ahead
 ```
 
 > **Legend:** ✅ shipped & in your hands · 🚧 building now · 🔭 on the horizon
@@ -57,14 +57,14 @@ This era      ▰▰▰▰▰▰▰▱▱▱  Phases 1–4 shipped · 5–6 ahea
 - **Phase 2 · Community testing & desktop control** — in-OS *Works / Broken* stability reporting, plus the System Core **System Control** panel.
 - **Phase 3 · Boot anywhere** — the ISO now boots reliably on real hardware *and* inside VirtualBox/QEMU (correct login shell, auto framebuffer + software-GL fallback, self-reporting boot failures), instead of dropping to a black screen.
 - **Phase 4 · Bulletproof builds** — a CI preflight validates every package name against the Arch repos *before* the 20-minute ISO build, so a typo, a renamed package, or one dropped from the repos fails in seconds with a clear message instead of deep inside the build.
+- **Phase 5 · Tune This PC** — a Settings panel that scans your hardware, runs an optional thermal-watched CPU stress test, and applies the best settings for *your* machine: CPU governor, swappiness, zram on low-RAM rigs, dev-friendly file-watcher/mmap limits, and CodeMaker's VRAM default. One click to apply, one to reset.
 
 ### 🚧 Building now
 
-*Between phases — Phase 5 is next up.*
+*Between phases — Phase 6 is next up.*
 
 ### 🔭 On the horizon
 
-- **Phase 5 · Stress-test & auto-tune** — after install, benchmark the machine and automatically dial in the best settings for *your* hardware (CPU governor, swap/zram, GPU power, VRAM defaults, compositor) for the smoothest dev experience.
 - **Phase 6 · CodeMaker deep overhaul** — a major upgrade to the dev experience at minimal background VRAM, including a low-VRAM mode that runs a smaller model, spills into system RAM when needed, and caches roadmaps/context to disk so the AI keeps its memory without eating more RAM.
 
 ### 🌌 Beyond
