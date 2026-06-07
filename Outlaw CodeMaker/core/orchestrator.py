@@ -40,6 +40,8 @@ from .reasoning import ChainOfThoughtReasoner, ReasoningTrace
 from .snapshots import SnapshotManager
 from .solution_recall import SolutionRecall
 from .vram_saver import VRAMSaver, truncate_tree
+from .context_cache import ContextCache, signature
+from . import lmstudio_tuning
 
 
 logger = logging.getLogger(__name__)
@@ -610,6 +612,21 @@ class Orchestrator(QObject):
         # On non-NVIDIA hosts (auto mode + no NVML) this stays at FULL by design.
         vram_pref = (config.get("vram_saver") or {}).get("mode", "auto")
         self.vram_saver = VRAMSaver(self.hardware, mode_pref=vram_pref)
+        # Whether to auto-apply LM Studio GPU offload on low-VRAM transitions,
+        # and which (small) model to load if so. Off by default — advisory only.
+        _vs = config.get("vram_saver") or {}
+        self._spill_apply = bool(_vs.get("spill_apply", False))
+        self._low_vram_model = (config.get("lm_studio") or {}).get("low_vram_model") or None
+        # Phase 6: disk-backed context cache. In lean/minimal modes the agent
+        # reuses cached recall/roadmap context from disk instead of re-deriving
+        # and re-stuffing it each turn — keeping working memory out of RAM/VRAM.
+        try:
+            from pathlib import Path as _CachePath
+            _cache_root = _CachePath(__file__).resolve().parent.parent / "db" / "context_cache"
+            self.context_cache = ContextCache(
+                _cache_root, namespace=str(config["agent"].get("workspace_root") or "global"))
+        except Exception:  # noqa: BLE001 — caching is optional, never fatal
+            self.context_cache = None
         # Cheap CPU-only recall over past successful self-upgrades; injects
         # "you've solved this before" hints into the planning prompt.
         self.solution_recall = SolutionRecall(self.store)
@@ -892,6 +909,19 @@ class Orchestrator(QObject):
         if self.vram_saver.mode_changed_since_last_check():
             # Only spam the log on actual transitions, not every turn.
             self.log.emit("info", f"VRAM saver: mode = {mode.label}.")
+            # Phase 6: on a tighter-than-FULL transition, tell the user how to
+            # spill the model into RAM (and optionally do it for them).
+            try:
+                plan = self.vram_saver.spill_plan()
+                if plan.gpu_offload < 1.0:
+                    self.log.emit("info",
+                        "Low-VRAM tuning — " + lmstudio_tuning.guidance_for(plan, self._low_vram_model))
+                    if self._spill_apply:
+                        res = lmstudio_tuning.apply_offload(plan, self._low_vram_model)
+                        self.log.emit("info" if res.get("applied") else "warn",
+                                      "Spill apply: " + res.get("message", ""))
+            except Exception:  # noqa: BLE001 — tuning is advisory, never fatal
+                pass
         self.vram_mode_changed.emit(mode.label)
         if budget.max_output_tokens < self._base_max_tokens:
             self.log.emit(
@@ -919,15 +949,34 @@ class Orchestrator(QObject):
 
         # Solution recall — surface past fixes for similar problems. Zero VRAM cost
         # (CPU vectoriser over the curated evolution log).
+        #
+        # Phase 6: in lean/minimal VRAM modes we cache the *rendered* recall
+        # block to disk (keyed by task + depth) and reuse it, so we don't
+        # re-run the vectoriser and re-derive context every turn under memory
+        # pressure. FULL mode always recomputes fresh. Fail-safe: any hiccup
+        # falls back to a direct recall.
+        def _render_recall() -> str:
+            try:
+                rs = self.solution_recall.recall(task, top_k=budget.solution_recall_k)
+            except Exception:  # noqa: BLE001
+                return ""
+            return self.solution_recall.render_prompt_block(rs) if rs else ""
+
+        recall_block = ""
         try:
-            recalls = self.solution_recall.recall(task, top_k=budget.solution_recall_k)
+            cache_this = (self.context_cache is not None
+                          and self.vram_saver.spill_plan().aggressive_cache)
+            if cache_this:
+                key = signature("recall", task, budget.solution_recall_k)
+                recall_block = self.context_cache.get_or_compute(
+                    key, _render_recall, ttl=300) or ""
+            else:
+                recall_block = _render_recall()
         except Exception:  # noqa: BLE001
-            recalls = []
-        if recalls:
-            recall_block = self.solution_recall.render_prompt_block(recalls)
-            if recall_block:
-                workspace_summary = f"{workspace_summary}\n\n{recall_block}"
-                self.log.emit("info", f"Recalled {len(recalls)} past solution(s) into context.")
+            recall_block = _render_recall()
+        if recall_block:
+            workspace_summary = f"{workspace_summary}\n\n{recall_block}"
+            self.log.emit("info", "Recalled past solution(s) into context.")
 
         worker = _AgentWorker(
             user_task=task,

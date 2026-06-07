@@ -124,6 +124,78 @@ class ContextBudget:
         )
 
 
+@dataclass(frozen=True)
+class SpillPlan:
+    """How to run the model on THIS machine when VRAM is the constraint.
+
+    On a tight GPU we keep only some of the model's layers in VRAM and "spill"
+    the rest into system RAM (run on the CPU) — much slower, but it lets a
+    bigger / better model run at all. This plan captures the recommendation so
+    the orchestrator can act on it and the UI can explain it.
+    """
+
+    gpu_offload: float          # 0.0–1.0 fraction of layers to keep on the GPU
+    prefer_cpu: bool            # mostly CPU/RAM (extreme low-VRAM)
+    aggressive_cache: bool      # lean hard on the disk context cache
+    model_hint: str             # human guidance on model size to pick
+    reason: str
+
+    def to_dict(self) -> dict:
+        return {
+            "gpu_offload": self.gpu_offload,
+            "prefer_cpu": self.prefer_cpu,
+            "aggressive_cache": self.aggressive_cache,
+            "model_hint": self.model_hint,
+            "reason": self.reason,
+        }
+
+
+def compute_spill_plan(mode: "VRAMMode", snapshot: dict) -> SpillPlan:
+    """Recommend GPU offload + model sizing from the mode + a hardware snapshot.
+
+    Pure function (no hardware access) so it's easy to test. ``snapshot`` is a
+    :meth:`HardwareMonitor.snapshot` dict; missing keys are tolerated.
+    """
+    free = snapshot.get("vram_free_mb")
+    ram_total = snapshot.get("ram_total_mb")
+
+    if mode is VRAMMode.FULL:
+        return SpillPlan(
+            gpu_offload=1.0, prefer_cpu=False, aggressive_cache=False,
+            model_hint="Any model that fits your VRAM — full GPU acceleration.",
+            reason="Plenty of VRAM headroom; keep the whole model on the GPU.",
+        )
+
+    if mode is VRAMMode.LEAN:
+        return SpillPlan(
+            gpu_offload=0.5, prefer_cpu=False, aggressive_cache=True,
+            model_hint="A ~7B model at Q4 (~4–5 GB) keeps most layers on the GPU.",
+            reason="VRAM is moderate; keep ~half the layers on the GPU and "
+                   "lean on the disk cache to keep context out of memory.",
+        )
+
+    # MINIMAL — extreme low VRAM. Spill most/all of the model into system RAM.
+    if free is None:
+        offload = 0.0
+    elif free < 600:
+        offload = 0.0
+    elif free < 1500:
+        offload = 0.2
+    else:
+        offload = 0.35
+    ram_note = ""
+    if isinstance(ram_total, (int, float)) and ram_total and ram_total < 8192:
+        ram_note = " (Heads up: with under 8 GB RAM this will be quite slow — " \
+                   "consider an even smaller model.)"
+    return SpillPlan(
+        gpu_offload=offload, prefer_cpu=True, aggressive_cache=True,
+        model_hint="A small model (~3B at Q4, ~2–3 GB) or smaller. Most layers "
+                   "run on the CPU using system RAM — slower, but it works." + ram_note,
+        reason="Very little free VRAM; spill the model into system RAM and "
+               "rely on the cached roadmap/context so we don't re-stuff memory each turn.",
+    )
+
+
 # Modes accepted from config / Settings UI. "auto" reads VRAM; the mode names
 # force-pin (handy for benchmarking or for users who know their hardware).
 _VALID_PREFS = {"auto", "off", "full", "lean", "minimal"}
@@ -180,6 +252,10 @@ class VRAMSaver:
 
     def budget(self, base_max_tokens: int) -> ContextBudget:
         return ContextBudget.for_mode(self.current_mode(), base_max_tokens)
+
+    def spill_plan(self) -> SpillPlan:
+        """Recommend GPU offload + model sizing for the current mode + VRAM."""
+        return compute_spill_plan(self.current_mode(), self.hardware.snapshot())
 
     def mode_changed_since_last_check(self) -> bool:
         """True if the auto-classifier flipped the mode since the last call.

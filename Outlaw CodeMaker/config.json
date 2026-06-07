@@ -6,7 +6,8 @@
     "temperature": 0.7,
     "max_tokens": 2048,
     "request_timeout_seconds": 900,
-    "input_context_tokens": 5000
+    "input_context_tokens": 5000,
+    "low_vram_model": ""
   },
   "agent": {
     "reasoning_steps": [
@@ -22,7 +23,8 @@
     "default_games_dir": "F:/Godot Games"
   },
   "vram_saver": {
-    "mode": "auto"
+    "mode": "auto",
+    "spill_apply": false
   },
   "vision": {
     "screenshot_interval_seconds": 5,

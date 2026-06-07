@@ -35,7 +35,7 @@ Outlaw Game OS is built in the open, one phase at a time.
 
 ```
 Foundations  ▰▰▰▰▰▰▰▰▰▰  done
-This era      ▰▰▰▰▰▰▰▰▱▱  Phases 1–5 shipped · 6 ahead
+This era      ▰▰▰▰▰▰▰▰▰▰  Phases 1–6 shipped — now testing + polishing
 ```
 
 > **Legend:** ✅ shipped & in your hands · 🚧 building now · 🔭 on the horizon
@@ -58,14 +58,11 @@ This era      ▰▰▰▰▰▰▰▰▱▱  Phases 1–5 shipped · 6 ahead
 - **Phase 3 · Boot anywhere** — the ISO now boots reliably on real hardware *and* inside VirtualBox/QEMU (correct login shell, auto framebuffer + software-GL fallback, self-reporting boot failures), instead of dropping to a black screen.
 - **Phase 4 · Bulletproof builds** — a CI preflight validates every package name against the Arch repos *before* the 20-minute ISO build, so a typo, a renamed package, or one dropped from the repos fails in seconds with a clear message instead of deep inside the build.
 - **Phase 5 · Tune This PC** — a Settings panel that scans your hardware, runs an optional thermal-watched CPU stress test, and applies the best settings for *your* machine: CPU governor, swappiness, zram on low-RAM rigs, dev-friendly file-watcher/mmap limits, and CodeMaker's VRAM default. One click to apply, one to reset.
+- **Phase 6 · Low-VRAM CodeMaker** — the dev agent now runs on modest GPUs. On tight VRAM it recommends (and can apply via LM Studio) a GPU-offload split that **spills the model into system RAM**, suggests a right-sized model, and **caches recall/roadmap context to disk** so the AI keeps its working memory without re-stuffing RAM each turn.
 
 ### 🚧 Building now
 
-*Between phases — Phase 6 is next up.*
-
-### 🔭 On the horizon
-
-- **Phase 6 · CodeMaker deep overhaul** — a major upgrade to the dev experience at minimal background VRAM, including a low-VRAM mode that runs a smaller model, spills into system RAM when needed, and caches roadmaps/context to disk so the AI keeps its memory without eating more RAM.
+*The planned roadmap is fully shipped — now in testing + polish, and open to what the community reports.*
 
 ### 🌌 Beyond
 

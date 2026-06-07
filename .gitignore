@@ -80,3 +80,7 @@ outlaw-codemaker/tools/tesseract/
 .outlaw-session.honor-once
 .outlaw-diagnostics/
 .outlaw-codemaker/
+
+# Phase 6 disk context cache (per-machine runtime data, never source)
+Outlaw CodeMaker/db/context_cache/
+outlaw-codemaker/db/context_cache/
