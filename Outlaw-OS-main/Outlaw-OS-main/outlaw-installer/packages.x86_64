@@ -67,21 +67,15 @@ ufw
 # --- Desktop / shell runtime ---
 xorg-server
 xorg-xinit
-# Xorg video driver. Without an explicit xf86-video-* driver, Xorg relies on
-# the in-kernel "modesetting" path, which only works if the guest's KMS driver
-# matches the VM's emulated GPU — flaky on VirtualBox and the cause of "X exits
-# immediately → getty relaunch loop → black screen". xf86-video-vesa is the
-# universal no-KMS fallback that works on ANY adapter (including VirtualBox's
-# VMSVGA in VESA mode), so X always finds a screen. ~200 KB.
-# (Note: xf86-video-vmware was dropped from the Arch repos, so we rely on
-# vesa + the built-in modesetting driver instead — both cover VirtualBox.)
-#
-# xf86-video-fbdev is the CRITICAL one for VMs: when we boot with `nomodeset`
-# (to avoid the VMSVGA+EFI black screen), KMS is off, so the modesetting and
-# vboxvideo drivers can't run, and `vesa` needs a real-mode VESA BIOS that
-# doesn't exist under UEFI. fbdev renders straight to the EFI framebuffer
-# (/dev/fb0), which is the only thing that actually works in that mode — it's
-# what lets Xorg (and therefore the desktop) start at all on a UEFI VM.
+# Xorg video drivers. The primary path is the kernel's "modesetting" driver
+# over whatever KMS driver the GPU exposes — vmwgfx (VirtualBox VMSVGA),
+# vboxvideo (VirtualBox VBoxVGA), or a real GPU's driver. These two extras are
+# automatic fallbacks Xorg tries if modesetting can't open a screen:
+#   * xf86-video-vesa  — works via the real-mode VESA BIOS (BIOS boot).
+#   * xf86-video-fbdev — renders to a kernel framebuffer (/dev/fb0), e.g. efifb.
+# (xf86-video-vmware was dropped from the Arch repos; vmwgfx in-kernel covers
+# VMSVGA.) We do NOT force a specific driver or use `nomodeset` — letting Xorg
+# auto-select is what works across BIOS, UEFI, VMs, and real hardware.
 xf86-video-vesa
 xf86-video-fbdev
 picom

@@ -154,7 +154,7 @@ Boot the VM → you land **directly on the Outlaw desktop**. To install to the v
 ### Troubleshooting a black screen, in order
 
 1. **Pure black, never shows a boot menu, "nothing happens"** → VirtualBox EFI firmware hang. **Turn EFI OFF** (and delete the VM's `.nvram` file if it was on). This is the most common cause.
-2. **Boot menu shows, then black** → graphics mode. Set **Graphics Controller → VBoxVGA** and confirm **3D Acceleration is OFF**. (The ISO already boots with `nomodeset` + a framebuffer X driver to help.)
+2. **Boot menu shows, then black** → graphics mode. Set **Graphics Controller → VBoxVGA** and confirm **3D Acceleration is OFF**. (Outlaw uses the kernel's standard mode-setting driver with a VESA fallback, so a screen is found on either controller.)
 3. **Desktop tries to start, then black** → switch to a text console with **Right-Ctrl + F2**, log in, and run `cat ~/.outlaw-x.log` — it records exactly what the graphical session did. (Outlaw also drops you to a usable shell automatically instead of looping.)
 
 ---

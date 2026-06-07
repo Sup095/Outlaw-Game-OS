@@ -20,7 +20,7 @@ RELENG="/usr/share/archiso/configs/releng"
 # Default version baked in for local builds. CI overrides this from the git
 # tag via OUTLAW_ISO_VERSION (see .github/workflows/build-iso.yml) so the
 # artifact filename always matches the tag the user pushed.
-ISO_VERSION="${OUTLAW_ISO_VERSION:-2.0.18}"
+ISO_VERSION="${OUTLAW_ISO_VERSION:-2.0.19}"
 ISO_FINAL="$OUT_DIR/outlaw-os-v${ISO_VERSION}.iso"
 
 echo "========================================"
@@ -75,32 +75,16 @@ else
     echo "[2a/7] Live root shell check: no zsh override found (root already uses a shell we ship)."
 fi
 
-# --- VM-safe kernel parameters --------------------------------------------
-# Add `nomodeset` to every live-boot menu entry. Without it, the kernel loads
-# a KMS driver (vmwgfx for VirtualBox VMSVGA, or vboxvideo) that, under
-# VirtualBox's VMSVGA+EFI combo, blanks the display — GRUB and the kernel load
-# fine, then the screen goes black with no console (the exact symptom testers
-# hit). nomodeset forces the simple EFI/VESA framebuffer, which VirtualBox
-# always shows. Our shell already renders with software GL and ships the vesa
-# Xorg driver, so the desktop still comes up; we just don't rely on KMS.
-#
-# The kernel cmdline lives on whichever line contains `archisobasedir` in each
-# bootloader config (GRUB for UEFI, syslinux for BIOS, systemd-boot loader
-# entries). Append there, robustly, across whatever releng ships.
-echo "[2b/7] Adding VM-safe kernel params (nomodeset) to live boot entries…"
-LIVE_KPARAMS="nomodeset"
-PATCHED_ANY=0
-while IFS= read -r bootcfg; do
-    [[ -f "$bootcfg" ]] || continue
-    sed -i "/archisobasedir/ s/\$/ ${LIVE_KPARAMS}/" "$bootcfg"
-    echo "   patched ${bootcfg#$PROFILE_DIR/}"
-    PATCHED_ANY=1
-done < <(grep -rIl 'archisobasedir' \
-            "$PROFILE_DIR/grub" "$PROFILE_DIR/syslinux" "$PROFILE_DIR/efiboot" \
-            2>/dev/null || true)
-if [[ "$PATCHED_ANY" -eq 0 ]]; then
-    echo "   ⚠ no boot configs with 'archisobasedir' found — releng layout may have changed."
-fi
+# NOTE: we deliberately do NOT add `nomodeset` to the boot entries anymore.
+# Earlier builds did, as a workaround for a "black screen" we later traced to
+# the wrong cause (the live root shell pointed at an uninstalled zsh, so X
+# never started — fixed above). With that real bug gone, `nomodeset` was doing
+# harm: it disables kernel mode-setting, so there's no DRM framebuffer for the
+# modesetting Xorg driver, and in BIOS mode no efifb either — Xorg then failed
+# with "no screens found". The standard KMS path (vmwgfx for VMSVGA, vboxvideo
+# for VBoxVGA, or a real GPU) gives Xorg's modesetting driver a screen, with
+# xf86-video-vesa / -fbdev still installed as automatic fallbacks. Much more
+# robust across BIOS, UEFI, VMs and real hardware.
 
 # Sync the Electron shell into the image (single source of truth: outlaw-shell)
 echo "[3/7] Syncing Outlaw shell…"
