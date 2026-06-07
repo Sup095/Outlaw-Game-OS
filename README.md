@@ -35,7 +35,7 @@ Outlaw Game OS is built in the open, one phase at a time.
 
 ```
 Foundations  ▰▰▰▰▰▰▰▰▰▰  done
-This era      ▰▰▰▰▰▱▱▱▱▱  Phases 1–3 shipped · 4–6 ahead
+This era      ▰▰▰▰▰▰▰▱▱▱  Phases 1–4 shipped · 5–6 ahead
 ```
 
 > **Legend:** ✅ shipped & in your hands · 🚧 building now · 🔭 on the horizon
@@ -55,15 +55,15 @@ This era      ▰▰▰▰▰▱▱▱▱▱  Phases 1–3 shipped · 4–6 ahea
 **🔄 Update system, channels & control**
 - **Phase 1 · Updates & channels** — package/driver updater, OS self-updater (in-place swap + one-click rollback), and **stable / beta** release channels.
 - **Phase 2 · Community testing & desktop control** — in-OS *Works / Broken* stability reporting, plus the System Core **System Control** panel.
-- **Phase 3 · Boot anywhere** — the ISO now boots reliably on real hardware *and* inside VirtualBox/QEMU (auto framebuffer + software-GL fallback), instead of dropping to a black screen.
+- **Phase 3 · Boot anywhere** — the ISO now boots reliably on real hardware *and* inside VirtualBox/QEMU (correct login shell, auto framebuffer + software-GL fallback, self-reporting boot failures), instead of dropping to a black screen.
+- **Phase 4 · Bulletproof builds** — a CI preflight validates every package name against the Arch repos *before* the 20-minute ISO build, so a typo, a renamed package, or one dropped from the repos fails in seconds with a clear message instead of deep inside the build.
 
 ### 🚧 Building now
 
-*Between phases — Phase 4 is next up.*
+*Between phases — Phase 5 is next up.*
 
 ### 🔭 On the horizon
 
-- **Phase 4 · CI package preflight** — verify every package exists in the repos *before* the 20-minute ISO build, so mistakes fail in seconds with a clear message instead of wasting a build.
 - **Phase 5 · Stress-test & auto-tune** — after install, benchmark the machine and automatically dial in the best settings for *your* hardware (CPU governor, swap/zram, GPU power, VRAM defaults, compositor) for the smoothest dev experience.
 - **Phase 6 · CodeMaker deep overhaul** — a major upgrade to the dev experience at minimal background VRAM, including a low-VRAM mode that runs a smaller model, spills into system RAM when needed, and caches roadmaps/context to disk so the AI keeps its memory without eating more RAM.
 

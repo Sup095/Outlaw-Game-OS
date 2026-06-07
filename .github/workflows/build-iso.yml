@@ -43,8 +43,92 @@ env:
   OUTPUT_DIR: Outlaw-OS-main/Outlaw-OS-main/out
 
 jobs:
+  # --------------------------------------------------------------------------
+  # Phase 4: package preflight. Validate that EVERY package we ask pacman to
+  # install (the live-ISO packages.x86_64 + the installer's ESSENTIAL_PKGS)
+  # actually resolves in the official Arch repos — BEFORE the ~20-minute ISO
+  # build. A typo, a renamed package, an AUR-only name, or one dropped from
+  # the repos (we've hit all of these: ollama, steamcmd, xf86-video-vmware)
+  # now fails here in seconds with a clear list, instead of deep inside
+  # pacstrap 20 minutes in. The build job `needs:` this, so it won't even
+  # start until the names check out.
+  # --------------------------------------------------------------------------
+  preflight:
+    name: Validate package names
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    container:
+      image: archlinux:latest
+    steps:
+      - name: Refresh pacman + enable multilib
+        run: |
+          set -e
+          pacman-key --init
+          pacman-key --populate archlinux
+          # Our package set includes lib32-* packages, so the multilib repo
+          # must be enabled for them to resolve.
+          if ! grep -q '^\[multilib\]' /etc/pacman.conf; then
+            printf '\n[multilib]\nInclude = /etc/pacman.d/mirrorlist\n' >> /etc/pacman.conf
+          fi
+          pacman -Syu --noconfirm
+          pacman -S --noconfirm --needed git
+
+      - name: Check out the repository
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 1
+
+      - name: Validate every package resolves in the Arch repos
+        run: |
+          set -uo pipefail
+          PKGFILE="$INSTALLER_DIR/packages.x86_64"
+          INSTALLER="$INSTALLER_DIR/airootfs/usr/local/bin/outlaw-install"
+
+          echo "::group::Collecting package names"
+          # Live-ISO set: one package per line. Drop comment + blank lines,
+          # then take the first whitespace-delimited field of each line (the
+          # package name) — this trims indentation WITHOUT collapsing newlines.
+          mapfile -t LIVE < <(grep -vE '^[[:space:]]*#|^[[:space:]]*$' "$PKGFILE" \
+                              | awk '{print $1}' | grep -v '^$' || true)
+          # Installed-system ESSENTIAL_PKGS bash array: take lines between
+          # 'ESSENTIAL_PKGS=(' and the closing ')', strip inline comments,
+          # split into words, keep package-looking tokens.
+          mapfile -t ESS < <(awk '/ESSENTIAL_PKGS=\(/{f=1;next} f&&/^\)/{f=0} f{sub(/#.*/,"");print}' "$INSTALLER" \
+                              | tr ' \t' '\n\n' | grep -E '^[a-z0-9]' || true)
+          ALL="$(printf '%s\n' "${LIVE[@]}" "${ESS[@]}" | sort -u | grep -v '^$' || true)"
+          COUNT="$(printf '%s\n' "$ALL" | grep -c . || true)"
+          echo "Live-ISO packages   : ${#LIVE[@]}"
+          echo "Installer essential : ${#ESS[@]}"
+          echo "Unique to validate  : $COUNT"
+          printf '%s\n' "$ALL" | tr '\n' ' '; echo
+          echo "::endgroup::"
+
+          echo "::group::Resolving against the repos"
+          MISSING=""
+          while IFS= read -r pkg; do
+            [[ -z "$pkg" ]] && continue
+            if pacman -Si -- "$pkg" >/dev/null 2>&1; then
+              echo "  ok   $pkg"
+            else
+              echo "  MISS $pkg"
+              MISSING="$MISSING $pkg"
+            fi
+          done <<< "$ALL"
+          echo "::endgroup::"
+
+          if [[ -n "${MISSING// /}" ]]; then
+            echo "::error::Package preflight FAILED — these don't resolve in the official Arch repos (typo / renamed / AUR-only / dropped):$MISSING"
+            echo ""
+            echo "Fix the name(s) in $PKGFILE and/or ESSENTIAL_PKGS in outlaw-install,"
+            echo "or move any AUR-only package to an on-demand install. This check runs"
+            echo "BEFORE the ~20-minute ISO build so you catch it in seconds."
+            exit 1
+          fi
+          echo "✅ All $COUNT packages resolve in the official repos. Safe to build."
+
   build:
     name: Build Outlaw OS ISO
+    needs: preflight
     runs-on: ubuntu-latest
     timeout-minutes: 60
     container:
