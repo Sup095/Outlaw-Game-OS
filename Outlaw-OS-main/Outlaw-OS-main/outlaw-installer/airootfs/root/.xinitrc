@@ -20,16 +20,23 @@ XLOG="/root/.outlaw-x.log"
 exec 2>>"$XLOG"
 printf '\n=== outlaw live .xinitrc start: %s ===\n' "$(date -Iseconds)" >&2
 
-# Inside a VM, force software OpenGL (kills the black-screen-on-VBox failure).
+# Detect VM: force software GL, and skip the compositor (picom) below.
+OUTLAW_IN_VM=0
 if command -v systemd-detect-virt >/dev/null 2>&1; then
     if [ "$(systemd-detect-virt 2>/dev/null)" != "none" ]; then
+        OUTLAW_IN_VM=1
         export LIBGL_ALWAYS_SOFTWARE=1
         export GALLIUM_DRIVER=llvmpipe
-        echo "[xinitrc] VM detected — forcing software GL." >&2
+        echo "[xinitrc] VM detected — forcing software GL, skipping picom." >&2
     fi
 fi
 
-picom --config /root/.config/picom/picom.conf >/dev/null 2>&1 &
+# picom's glx backend needs real OpenGL. In a VM (software framebuffer) a
+# half-working glx compositor redirects windows and paints them BLACK — the
+# Electron window appears but stays dark. Only composite on real hardware.
+if [ "$OUTLAW_IN_VM" = "0" ]; then
+    picom --config /root/.config/picom/picom.conf >/dev/null 2>&1 &
+fi
 
 ELECTRON_FLAGS="$(outlaw-electron-flags 2>/dev/null | tr '\n' ' ')"
 [ -z "$ELECTRON_FLAGS" ] && ELECTRON_FLAGS="--no-sandbox"

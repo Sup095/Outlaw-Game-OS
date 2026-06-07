@@ -25,20 +25,26 @@ XLOG="$HOME/.outlaw-x.log"
 exec 2>>"$XLOG"
 printf '\n=== outlaw .xinitrc start: %s ===\n' "$(date -Iseconds)" >&2
 
-# Inside a VM, force software OpenGL so Electron / picom never try a GPU path
-# the virtual adapter can't provide (the classic black-screen-on-VirtualBox
-# failure). Combined with --disable-gpu from outlaw-electron-flags. No-op on
-# real hardware.
+# Detect whether we're in a VM. Used for two things below: forcing software
+# GL, and SKIPPING the compositor (picom).
+OUTLAW_IN_VM=0
 if command -v systemd-detect-virt >/dev/null 2>&1; then
     if [ "$(systemd-detect-virt 2>/dev/null)" != "none" ]; then
+        OUTLAW_IN_VM=1
         export LIBGL_ALWAYS_SOFTWARE=1
         export GALLIUM_DRIVER=llvmpipe
-        echo "[xinitrc] VM detected — forcing software GL." >&2
+        echo "[xinitrc] VM detected — forcing software GL, skipping picom." >&2
     fi
 fi
 
-# picom is best-effort (a VM may lack compositing; the shell still renders).
-picom --config "$HOME/.config/picom/picom.conf" >/dev/null 2>&1 &
+# picom is purely cosmetic (shadows / vsync) and its glx backend needs real
+# OpenGL. In a VM the software framebuffer has no usable GLX, and a
+# half-working glx compositor REDIRECTS every window and then paints it BLACK
+# — the Electron window appears but stays dark. So only run picom on real
+# hardware, where KMS gives working GL. The desktop renders fine without it.
+if [ "$OUTLAW_IN_VM" = "0" ]; then
+    picom --config "$HOME/.config/picom/picom.conf" >/dev/null 2>&1 &
+fi
 
 # Electron flag set (adds --disable-gpu inside a VM). Used for greeter + shell.
 ELECTRON_FLAGS="$(outlaw-electron-flags 2>/dev/null | tr '\n' ' ')"
