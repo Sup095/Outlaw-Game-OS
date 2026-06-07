@@ -34,7 +34,7 @@
     "self_heal_poll_seconds": 8
   },
   "ui": {
-    "theme": "dark",
+    "theme": "gold",
     "window_width": 1600,
     "window_height": 1000,
     "font_family": "Segoe UI",

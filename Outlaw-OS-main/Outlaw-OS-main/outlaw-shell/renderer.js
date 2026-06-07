@@ -816,6 +816,13 @@ async function tuneRefreshStatus() {
     } catch { el.textContent = ''; }
 }
 
+// P1 — apply a visual theme by toggling a body class. The actual palette lives
+// in styles.css (body.theme-gold { --term: …; }), so this is a zero-cost swap
+// of CSS custom properties; nothing re-renders beyond a repaint.
+function applyTheme(theme) {
+    document.body.classList.toggle('theme-gold', theme === 'gold');
+}
+
 async function loadSettings() {
     let s = {};
     try { s = await api.settings.get(); } catch {}
@@ -823,6 +830,11 @@ async function loadSettings() {
     document.body.classList.toggle('glow', !!s.glow);
     $('#crt-toggle').checked = !!s.crtFx;
     $('#glow-toggle').checked = !!s.glow;
+    // P1 — theme. 'gold' adds body.theme-gold which re-points the CSS palette
+    // variables to the gold-on-gunmetal scheme. Default 'green' = no class.
+    applyTheme(s.theme || 'green');
+    const themeSel = $('#theme-select');
+    if (themeSel) themeSel.value = s.theme || 'green';
     // LM Studio handles model selection itself — no dropdown to seed.
     $('#perf-toggle').checked = !!s.performanceMode;
     $('#update-repo').value = s.updateRepo || '';
@@ -1030,6 +1042,13 @@ function wire() {
     // Settings toggles
     $('#crt-toggle').addEventListener('change', (e) => { document.body.classList.toggle('crt', e.target.checked); setSetting({ crtFx: e.target.checked }); });
     $('#glow-toggle').addEventListener('change', (e) => { document.body.classList.toggle('glow', e.target.checked); setSetting({ glow: e.target.checked }); });
+    const _themeSel = $('#theme-select');
+    if (_themeSel) _themeSel.addEventListener('change', (e) => {
+        const t = e.target.value === 'gold' ? 'gold' : 'green';
+        applyTheme(t);
+        setSetting({ theme: t });
+        toast(t === 'gold' ? 'Gold Gunmetal engaged.' : 'Green Phosphor restored.');
+    });
     $('#perf-toggle').addEventListener('change', async (e) => { await api.gaming.setPerformance(e.target.checked); toast('Performance mode ' + (e.target.checked ? 'ON' : 'OFF')); });
     // SC7 — Aggressive VRAM saver dropdown. setMode immediately invalidates
     // the probe cache + fires the tier-changed event, so the System Core

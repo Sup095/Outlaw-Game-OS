@@ -1,10 +1,10 @@
 {
   "name": "outlaw-os",
-  "version": "2.0.19",
+  "version": "2.0.20",
   "description": "Outlaw OS - lightweight, secure Linux desktop for AI-driven Godot game development with LM Studio + Steam",
   "main": "main.js",
   "author": "Outlaw OS",
-  "license": "MIT",
+  "license": "SEE LICENSE IN LICENSE",
   "scripts": {
     "start": "electron .",
     "dist": "electron-builder"

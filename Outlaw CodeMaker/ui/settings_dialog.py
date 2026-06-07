@@ -101,11 +101,24 @@ class SettingsDialog(QDialog):
                 self.vram_combo.setCurrentIndex(idx)
                 break
 
+        # P1 — visual theme. Default gold-on-gunmetal (the house style); green is
+        # the classic phosphor look that matches the desktop shell. Applies on
+        # next launch (no live re-style, to keep things simple and crash-free).
+        self.theme_combo = QComboBox()
+        self.theme_combo.addItem("Gold Gunmetal · sci-fi fortress (default)", "gold")
+        self.theme_combo.addItem("Green Phosphor · classic terminal", "green")
+        current_theme = "green" if (config.get("ui") or {}).get("theme") == "green" else "gold"
+        for idx in range(self.theme_combo.count()):
+            if self.theme_combo.itemData(idx) == current_theme:
+                self.theme_combo.setCurrentIndex(idx)
+                break
+
         form.addRow("Godot project folder", self.project_row)
         form.addRow("LM Studio URL", self.url_edit)
         form.addRow("Model", self.model_edit)
         form.addRow("Temperature", self.temp_spin)
         form.addRow("Aggressive VRAM saver", self.vram_combo)
+        form.addRow("Theme (restart to apply)", self.theme_combo)
         form.addRow("Godot window title", self.title_edit)
         form.addRow("Godot log (self-heal)", self.log_row)
 
@@ -142,5 +155,6 @@ class SettingsDialog(QDialog):
         cfg.setdefault("vision", {})["godot_window_title_match"] = self.title_edit.text() or "Godot"
         cfg.setdefault("godot", {})["log_path"] = self.log_row.text()
         cfg.setdefault("vram_saver", {})["mode"] = self.vram_combo.currentData() or "auto"
+        cfg.setdefault("ui", {})["theme"] = self.theme_combo.currentData() or "gold"
         self.result_config = cfg
         self.accept()

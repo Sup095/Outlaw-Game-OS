@@ -46,6 +46,37 @@ COLORS = {
 }
 
 
+# P1 — optional "Green Phosphor" palette for the dev tool, mirroring the desktop
+# shell's classic green-terminal look. Same keys as COLORS so the QSS template
+# and palette code work unchanged. Selected when config ui.theme == "green";
+# the default stays gold-on-gunmetal (the Outlaw house style).
+COLORS_GREEN = {
+    "bg":         "#050705",
+    "bg_alt":     "#0a0e0a",
+    "panel":      "#0a0e0a",
+    "panel_hi":   "#0d130d",
+    "border":     "#143d0d",
+    "border_hi":  "#1a8000",
+    "text":       "#b9ffb0",
+    "muted":      "#5a8f52",
+    "accent":     "#33ff00",   # phosphor green
+    "accent2":    "#7dff66",   # light green
+    "accent_dim": "#1a8000",
+    "ok":         "#33ff00",
+    "warn":       "#ffd23b",
+    "err":        "#ff5a5a",
+    "info":       "#5ad0a0",
+    "thought_bg": "#07120a",
+    "code_bg":    "#030803",
+    "code_border": "#143d0d",
+}
+
+
+def _palette_for(ui_config: dict) -> dict:
+    """Pick the colour palette from config. Default = gold-on-gunmetal."""
+    return COLORS_GREEN if (ui_config or {}).get("theme") == "green" else COLORS
+
+
 QSS = """
 * {{
     outline: none;
@@ -226,22 +257,23 @@ def apply_dark_theme(app: QApplication, ui_config: dict) -> None:
     font_family = ui_config.get("font_family", "Cascadia Mono")
     mono_family = ui_config.get("mono_family", font_family)
     font_size = int(ui_config.get("font_size", 11))
+    colors = _palette_for(ui_config)
 
     app.setStyle("Fusion")
 
     palette = QPalette()
-    palette.setColor(QPalette.ColorRole.Window, QColor(COLORS["bg"]))
-    palette.setColor(QPalette.ColorRole.WindowText, QColor(COLORS["text"]))
-    palette.setColor(QPalette.ColorRole.Base, QColor(COLORS["panel"]))
-    palette.setColor(QPalette.ColorRole.AlternateBase, QColor(COLORS["bg_alt"]))
-    palette.setColor(QPalette.ColorRole.Text, QColor(COLORS["text"]))
-    palette.setColor(QPalette.ColorRole.Button, QColor(COLORS["panel_hi"]))
-    palette.setColor(QPalette.ColorRole.ButtonText, QColor(COLORS["text"]))
-    palette.setColor(QPalette.ColorRole.Highlight, QColor(COLORS["accent_dim"]))
-    palette.setColor(QPalette.ColorRole.HighlightedText, QColor(COLORS["text"]))
-    palette.setColor(QPalette.ColorRole.ToolTipBase, QColor(COLORS["panel_hi"]))
-    palette.setColor(QPalette.ColorRole.ToolTipText, QColor(COLORS["text"]))
-    palette.setColor(QPalette.ColorRole.PlaceholderText, QColor(COLORS["muted"]))
+    palette.setColor(QPalette.ColorRole.Window, QColor(colors["bg"]))
+    palette.setColor(QPalette.ColorRole.WindowText, QColor(colors["text"]))
+    palette.setColor(QPalette.ColorRole.Base, QColor(colors["panel"]))
+    palette.setColor(QPalette.ColorRole.AlternateBase, QColor(colors["bg_alt"]))
+    palette.setColor(QPalette.ColorRole.Text, QColor(colors["text"]))
+    palette.setColor(QPalette.ColorRole.Button, QColor(colors["panel_hi"]))
+    palette.setColor(QPalette.ColorRole.ButtonText, QColor(colors["text"]))
+    palette.setColor(QPalette.ColorRole.Highlight, QColor(colors["accent_dim"]))
+    palette.setColor(QPalette.ColorRole.HighlightedText, QColor(colors["text"]))
+    palette.setColor(QPalette.ColorRole.ToolTipBase, QColor(colors["panel_hi"]))
+    palette.setColor(QPalette.ColorRole.ToolTipText, QColor(colors["text"]))
+    palette.setColor(QPalette.ColorRole.PlaceholderText, QColor(colors["muted"]))
     app.setPalette(palette)
 
     app.setFont(QFont(font_family, font_size))
@@ -252,7 +284,7 @@ def apply_dark_theme(app: QApplication, ui_config: dict) -> None:
             font_size=font_size,
             small_size=max(8, font_size - 2),
             title_size=font_size + 5,
-            **COLORS,
+            **colors,
         )
     )
     app.setWindowIcon(make_app_icon())

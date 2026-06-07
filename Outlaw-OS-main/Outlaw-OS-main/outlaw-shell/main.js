@@ -75,6 +75,11 @@ const DEFAULT_SETTINGS = {
     aiModel: 'local-model',
     crtFx: false,            // CRT scanline/flicker effect OFF by default (crisp + readable)
     glow: false,             // text glow OFF by default (no discoloration)
+    // P1 — visual theme. 'green' = classic green-phosphor terminal (default,
+    // unchanged for existing users). 'gold' = retro gold-on-gunmetal "sci-fi
+    // fortress" look that matches Outlaw CodeMaker. Pure CSS-variable swap, so
+    // it costs nothing at runtime and can be flipped anytime in Settings.
+    theme: 'green',
     performanceMode: false,  // gaming CPU governor / gamemode hint
     updateRepo: 'Sup095/Outlaw-Game-OS',  // "owner/repo" the self-updater checks for releases (overridable in Settings)
     updateChannel: 'stable', // 'stable' = latest non-prerelease; 'beta' = newest release of any kind

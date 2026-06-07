@@ -1,15 +1,28 @@
 # Outlaw OS v2.0
 
-**A lightweight, secure, retro green-phosphor Linux desktop** built on Arch Linux,
-tuned for **ethical hacking / security work** and **gaming + game development**.
-The desktop is a hardened Electron shell; the ISO doubles as a live boot manager
-and installer.
+**A lightweight, secure Linux desktop** built on Arch Linux, tuned for
+**ethical hacking / security work** and **gaming + game development**. The
+desktop is a hardened Electron shell; the ISO doubles as a live boot manager
+and installer. It ships in two looks — classic **green-phosphor terminal** or
+optional **gold-on-gunmetal** — switchable anytime in *Settings → Appearance*.
 
 > v2.0 is a near-complete rewrite. The shell is now actually functional and
 > secure (the v1 shell could not run a single command), arbitrary disk-wipes are
 > guarded, the installer is real and supports **optional, non-destructive**
 > installs + an uninstall path, the AI assistant is real and resource-light, and
 > there is a one-press **hotswap** to your other OS.
+
+> 🜲 **The vibe is deliberate.** The retro gold-on-gunmetal aesthetic and the
+> "sci-fi fortress AI" voice of the **System Core** are on purpose — Outlaw OS is
+> meant to feel like a centuries-old machine that has seen everything and is
+> mildly amused by you. Prefer the crisp green-phosphor terminal instead? Both
+> themes ship; flip between them whenever you like in *Settings → Appearance*.
+
+> 👥 **Who made this.** Outlaw OS is built by a small team with help from an AI.
+> We try our best to test everything before it goes out, but it's built *mainly
+> for us* — we just wanted to share it with anyone who might find it useful. If
+> something works (or breaks) for you, tell us with the in-OS **reviewer** so we
+> can make it better.
 
 ---
 
@@ -48,10 +61,12 @@ and installer.
   The agent also **recalls past solved problems** via a CPU-only similarity
   search over its evolution log, so once a bug is fixed it doesn't have to
   be re-derived next time.
-- **Crisp green-terminal UI by default** — no scanlines, no flicker, no glow
-  bleeding over text. The retro CRT effect is still there, but it's an **opt-in
-  toggle** in *Settings → Appearance*, so apps and games render exactly as
-  intended with no discoloration.
+- **Crisp UI, two themes** — ships clean and readable by default (no scanlines,
+  no flicker, no glow bleed). Pick **Green Phosphor** (classic terminal) or
+  **Gold Gunmetal** (the sci-fi-fortress look that matches Outlaw CodeMaker) in
+  *Settings → Appearance → Theme* — it's a zero-cost CSS swap you can flip
+  anytime. The retro CRT scanline effect is a separate **opt-in toggle** in the
+  same place, off by default so apps and games render exactly as intended.
 - **Hardened by design**
   - Renderer runs sandboxed with `contextIsolation` on and `nodeIntegration`
     off. It never gets a raw shell — every privileged action is a named,
@@ -91,6 +106,47 @@ and installer.
   touching anything else, or (explicitly) erase a whole disk. Built-in
   **uninstall** removes only Outlaw OS so you can switch back to Windows/another
   OS without losing other data.
+
+---
+
+## 🗺 Roadmap
+
+Outlaw OS is built one phase at a time, in the open. Every phase ships as a beta,
+gets tested (tell us how it went with the in-OS **reviewer**), and the moment one
+lands the **next** phase moves to *In progress* — even before work starts on it.
+
+**Legend:** ✅ Shipped &nbsp;·&nbsp; 🚧 In progress &nbsp;·&nbsp; 🔭 Planned
+
+### Foundations &nbsp;`▰▰▰▰▰▰▰▰▰▰` 100% &nbsp;✅
+
+The hard part is done — and as of **v2.0.19** it boots cleanly on BIOS **and**
+UEFI, on real hardware **and** in VMs:
+
+- ✅ Hardened Electron shell · two-session **greeter** (Dev / Desktop) · self-healing boot watchdog + safe mode
+- ✅ **Outlaw CodeMaker** AI agent (LM Studio) · VRAM saver (Full / Lean / Minimal) · context cache · past-problem recall
+- ✅ Safe **optional installer** + clean uninstall · one-press **hotswap** · performance mode
+- ✅ **System Core** centerpiece (telemetry · diagnostics · voice) · **Tune-This-PC** stress test + auto-settings
+- ✅ **Self-updater** + stable / beta channels · community stability voting · CI package preflight
+
+### v2.1 — Completeness & Polish
+
+| | Phase | What you get |
+|:--:|:--|:--|
+| ✅ | **1 · Identity** | Optional **Gold Gunmetal** theme (the sci-fi-fortress look, matching CodeMaker), switchable anytime in Settings — desktop **and** dev. New source-available **license**. |
+| 🚧 | **2 · Your apps, found** | Anything you install — even something downloaded from a browser — shows up in the **Apps** page automatically, one click to launch. |
+| 🔭 | **3 · Task Manager** | A Windows-style task manager (**End task** / **End process tree**) with live **CPU · RAM · GPU + VRAM** readouts, in the Outlaw look. |
+| 🔭 | **4 · Help + Quickstart** | A **skippable first-boot tour** showing where everything is, plus a searchable **Help database** that explains the whole OS and how to troubleshoot it. |
+| 🔭 | **5 · Reviewer that works** | One-click *"it worked / it broke"* reporting per version, so testing actually feeds back to the maintainer (and the stable channel). |
+| 🔭 | **6 · Pre-flight diagnostics** | Before you even enter the OS, optionally scan your PC and see the best settings for your hardware. |
+| 🔭 | **7 · Session driver profiles** | Choose the driver / package stack per session — **dev-tuned** vs **gaming / desktop** — applied safely *after* boot, never touching the bootloader. |
+
+`▰▱▱▱▱▱▱` **Phase 1 of 7 shipped**
+
+> **Why does it say "2.0.x — Beta"?** The `2.0.x` is a deliberate nod to the
+> *original* Outlaw OS this one is built on (which was never finished). And
+> **-Beta means exactly that:** this isn't actually finished or "ready" yet —
+> it's a genuine work in progress that we ship and improve as we go. Expect rough
+> edges; the in-OS reviewer is how you help us file them down.
 
 ---
 
@@ -317,4 +373,18 @@ responsible for how you use it.
 
 ## License
 
-MIT.
+**Outlaw OS License v1.0** — source-available, *not* open-source. See
+[`LICENSE`](LICENSE) for the full text. In short:
+
+- ✅ **You may** use it on your own machines, study the source, modify it
+  locally, test pre-release builds, and **suggest changes** (issues / pull
+  requests) — all free, no permission needed.
+- 🚫 **You may not** redistribute it (no re-hosting, mirroring, forks-for-
+  download, or repackaged ISOs) or **monetize** it. The maintainer is the **sole
+  distributor** of Outlaw OS.
+- 💛 **Donations** are welcome and entirely optional — they buy no extra rights
+  and are never required.
+
+Bundled third-party components (the Linux kernel, Arch packages, Electron, Steam,
+Godot, Python libraries, fonts, etc.) keep their **own** upstream licenses; this
+license covers only Outlaw OS's own code, configuration, and branding.
