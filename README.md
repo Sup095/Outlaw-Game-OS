@@ -131,24 +131,31 @@ Everything below is for people who want to test in a VM, run the pieces from sou
 
 If you want to try Outlaw in a virtual machine first, **the VM settings matter** — wrong settings are the #1 cause of a black screen.
 
+> ### ⚠️ The single most important setting: **turn EFI OFF**
+> VirtualBox's built-in **EFI firmware is buggy** and frequently hangs *before* it even loads the boot menu — you get a pure black screen and the machine "never does anything." This is a VirtualBox problem, not an Outlaw one (our ISO hasn't started running yet at that point). **Leave "Enable EFI" unchecked** so the VM boots in BIOS mode via syslinux, which is rock-solid. The Outlaw ISO supports both, but **BIOS is the reliable path in VirtualBox.**
+>
+> Already created the VM with EFI on and it black-screens? Either remake it with EFI off, or close VirtualBox and delete the VM's `*.nvram` file (next to its `.vbox` file) to clear the corrupted EFI state — then make sure EFI is unchecked.
+
 **Create the VM:** VirtualBox → **New** → Name `Outlaw OS`, Type **Linux**, Version **Arch Linux (64-bit)**. Skip unattended install if asked (we use our own installer). Then open the VM's **Settings**:
 
 | Section | Setting | Value | Why |
 |---|---|---|---|
+| **System → Motherboard** | **Enable EFI** | **❌ OFF (most important!)** | VirtualBox's EFI firmware can hang before boot. BIOS boot via syslinux is bulletproof. |
 | **System → Motherboard** | Base Memory | **4096 MB+** (8192 recommended) | Electron + the installer need headroom |
 | **System → Processor** | Processors | **2+** | Smoother desktop |
 | **Display → Screen** | Video Memory | **128 MB** | Avoids low-VRAM display glitches |
-| **Display → Screen** | Graphics Controller | **VBoxVGA** *(most reliable)* or VMSVGA | VBoxVGA gives the most dependable framebuffer for the live console. If you use VMSVGA and get a black screen, switch to VBoxVGA. |
+| **Display → Screen** | Graphics Controller | **VBoxVGA** *(most reliable)* or VMSVGA | VBoxVGA gives the most dependable framebuffer. If VMSVGA black-screens, switch to VBoxVGA. |
 | **Display → Screen** | Enable 3D Acceleration | **❌ OFF** | Outlaw renders with software GL in VMs; 3D off is the reliable path. |
-| **System → Motherboard** | Enable EFI | **Optional** | The ISO boots in both BIOS and UEFI. If a UEFI boot black-screens, turn EFI **off** (BIOS boot via syslinux is the most bulletproof for the live ISO). |
 | **Storage** | Add Optical Drive → pick `outlaw-os-v*.iso` | — | The boot medium |
 | **Storage** | Add a Hard Disk | **30 GB+** (only if you'll install) | Target for a real install |
 
 Boot the VM → you land **directly on the Outlaw desktop**. To install to the virtual disk, click **Install Outlaw OS** (or run `sudo outlaw-install`). The installer auto-detects the VM and bakes the same display-compatibility settings into your installed system. After install, power off, **remove the ISO**, and boot the disk.
 
-> **Black screen right after the boot menu (before any desktop)?** Graphics-mode issue. Fix in order: (1) **Graphics Controller → VBoxVGA**, (2) **disable EFI** (BIOS boot), (3) confirm **3D Acceleration is OFF**. The ISO already boots with `nomodeset` + a framebuffer X driver to help, so one of these almost always does it.
->
-> **Black screen *after* the desktop tries to start?** Switch to a text console with **Right-Ctrl + F2**, log in, and run `cat ~/.outlaw-x.log` — it records exactly what the graphical session did. (Outlaw also drops you to a usable shell automatically if the desktop fails to start, instead of looping.)
+### Troubleshooting a black screen, in order
+
+1. **Pure black, never shows a boot menu, "nothing happens"** → VirtualBox EFI firmware hang. **Turn EFI OFF** (and delete the VM's `.nvram` file if it was on). This is the most common cause.
+2. **Boot menu shows, then black** → graphics mode. Set **Graphics Controller → VBoxVGA** and confirm **3D Acceleration is OFF**. (The ISO already boots with `nomodeset` + a framebuffer X driver to help.)
+3. **Desktop tries to start, then black** → switch to a text console with **Right-Ctrl + F2**, log in, and run `cat ~/.outlaw-x.log` — it records exactly what the graphical session did. (Outlaw also drops you to a usable shell automatically instead of looping.)
 
 ---
 
