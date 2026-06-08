@@ -34,8 +34,8 @@ Your **first boot goes straight to the Desktop** and runs a quick setup wizard (
 Outlaw Game OS is built in the open, one phase at a time.
 
 ```
-Foundations  ▰▰▰▰▰▰▰▰▰▰  done
-This era      ▰▰▰▰▰▰▰▰▰▰  Phases 1–6 shipped — now testing + polishing
+Foundations  ▰▰▰▰▰▰▰▰▰▰  done — 3 roadmaps, 25 slices, all shipped
+v2.1 Polish  ▰▱▱▱▱▱▱      Phase 1 of 7 shipped — Completeness & Polish underway
 ```
 
 > **Legend:** ✅ shipped & in your hands · 🚧 building now · 🔭 on the horizon
@@ -60,9 +60,19 @@ This era      ▰▰▰▰▰▰▰▰▰▰  Phases 1–6 shipped — now testi
 - **Phase 5 · Tune This PC** — a Settings panel that scans your hardware, runs an optional thermal-watched CPU stress test, and applies the best settings for *your* machine: CPU governor, swappiness, zram on low-RAM rigs, dev-friendly file-watcher/mmap limits, and CodeMaker's VRAM default. One click to apply, one to reset.
 - **Phase 6 · Low-VRAM CodeMaker** — the dev agent now runs on modest GPUs. On tight VRAM it recommends (and can apply via LM Studio) a GPU-offload split that **spills the model into system RAM**, suggests a right-sized model, and **caches recall/roadmap context to disk** so the AI keeps its working memory without re-stuffing RAM each turn.
 
-### 🚧 Building now
+### 🚧 v2.1 — Completeness & Polish
 
-*The planned roadmap is fully shipped — now in testing + polish, and open to what the community reports.*
+The foundations boot and run; this era makes the desktop feel *finished*. Every phase ships as a beta — and the moment one lands, the **next** moves to *building now*, even before work starts on it.
+
+| | Phase | What you get |
+|:--:|:--|:--|
+| ✅ | **1 · Identity** | Optional **Gold Gunmetal** theme — the sci-fi-fortress look that matches Outlaw CodeMaker — switchable anytime in *Settings → Appearance*, on **both** the desktop and the dev tool. New source-available **license**. |
+| 🚧 | **2 · Your apps, found** | Anything you install — even something downloaded from a browser — shows up in the **Apps** page automatically, one click to launch. |
+| 🔭 | **3 · Task Manager** | A Windows-style task manager (**End task** / **End process tree**) with live **CPU · RAM · GPU + VRAM** readouts, in the Outlaw look. |
+| 🔭 | **4 · Help + Quickstart** | A **skippable first-boot tour** showing where everything is, plus a searchable **Help database** that explains the whole OS and how to troubleshoot it. |
+| 🔭 | **5 · Reviewer that works** | One-click *"it worked / it broke"* reporting per version, so testing actually feeds back to the maintainer (and the stable channel). |
+| 🔭 | **6 · Boot splash + pre-flight** | A cinematic ~2-second boot splash on every boot — a holographic green Outlaw sigil flickering with CRT scanlines (skippable) — then optionally scan your PC for the best settings before you even enter the OS. |
+| 🔭 | **7 · Session driver profiles** | Choose the driver/package stack per session — **dev-tuned** vs **gaming/desktop** — applied safely *after* boot, never touching the bootloader. |
 
 ### 🌌 Beyond
 
@@ -136,13 +146,20 @@ If you want to try Outlaw in a virtual machine first, **the VM settings matter**
 >
 > Already created the VM with EFI on and it black-screens? Either remake it with EFI off, or close VirtualBox and delete the VM's `*.nvram` file (next to its `.vbox` file) to clear the corrupted EFI state — then make sure EFI is unchecked.
 
+> ### ⚠️ Just as important: let VirtualBox use **VT-x** (disable Hyper-V)
+> If Windows is using **Hyper-V** — via *Core Isolation / Memory Integrity*, *Virtual Machine Platform*, *Windows Sandbox*, *WSL2*, or Docker Desktop — it **takes exclusive control of your CPU's VT-x**, so VirtualBox can't get it. VirtualBox then silently falls back to a slow, fragile **NEM** mode, and Linux guests **hang in early boot**: the kernel starts, brings up the CPUs, and freezes on one line for minutes — it looks exactly like the OS crashed, but the OS never really got to run.
+> You can confirm it from the VM's log (`Machine → Show Log`, or the `VBox.log` next to the `.vbox` file): a line like
+> `HM: HMR3Init: Attempting fall back to NEM: VT-x is not available` means Hyper-V has grabbed VT-x.
+>
+> **Fix:** open an **Administrator** PowerShell and run `bcdedit /set hypervisorlaunchtype off`, then reboot Windows. Also turn **off** *Windows Security → Device security → Core isolation → Memory integrity*. (To re-enable Hyper-V later: `bcdedit /set hypervisorlaunchtype auto`.) After the reboot, the VM log should show it's **using VT-x**, and boot is fast and reliable. If you can't disable Hyper-V, keep the VM at **2 CPUs** — NEM mode tolerates few cores far better than many.
+
 **Create the VM:** VirtualBox → **New** → Name `Outlaw OS`, Type **Linux**, Version **Arch Linux (64-bit)**. Skip unattended install if asked (we use our own installer). Then open the VM's **Settings**:
 
 | Section | Setting | Value | Why |
 |---|---|---|---|
 | **System → Motherboard** | **Enable EFI** | **❌ OFF (most important!)** | VirtualBox's EFI firmware can hang before boot. BIOS boot via syslinux is bulletproof. |
 | **System → Motherboard** | Base Memory | **4096 MB+** (8192 recommended) | Electron + the installer need headroom |
-| **System → Processor** | Processors | **2+** | Smoother desktop |
+| **System → Processor** | Processors | **2–4** | A couple of cores is plenty. **Avoid high counts (8+)** — especially if VirtualBox is in NEM/Hyper-V mode, many vCPUs can hang the guest at boot. |
 | **Display → Screen** | Video Memory | **128 MB** | Avoids low-VRAM display glitches |
 | **Display → Screen** | Graphics Controller | **VBoxVGA** *(most reliable)* or VMSVGA | VBoxVGA gives the most dependable framebuffer. If VMSVGA black-screens, switch to VBoxVGA. |
 | **Display → Screen** | Enable 3D Acceleration | **❌ OFF** | Outlaw renders with software GL in VMs; 3D off is the reliable path. |
@@ -154,8 +171,9 @@ Boot the VM → you land **directly on the Outlaw desktop**. To install to the v
 ### Troubleshooting a black screen, in order
 
 1. **Pure black, never shows a boot menu, "nothing happens"** → VirtualBox EFI firmware hang. **Turn EFI OFF** (and delete the VM's `.nvram` file if it was on). This is the most common cause.
-2. **Boot menu shows, then black** → graphics mode. Set **Graphics Controller → VBoxVGA** and confirm **3D Acceleration is OFF**. (Outlaw uses the kernel's standard mode-setting driver with a VESA fallback, so a screen is found on either controller.)
-3. **Desktop tries to start, then black** → switch to a text console with **Right-Ctrl + F2**, log in, and run `cat ~/.outlaw-x.log` — it records exactly what the graphical session did. (Outlaw also drops you to a usable shell automatically instead of looping.)
+2. **Boot menu shows, kernel starts, then freezes on one line of text for minutes** → VirtualBox is running in **NEM / Hyper-V** mode because it can't get VT-x. **Disable Hyper-V** (see the VT-x box above) and/or drop the VM to **2 CPUs**. Confirm it in the VM log: a `fall back to NEM: VT-x is not available` line is the giveaway. *(This one isn't an Outlaw bug at all — the OS never gets to run.)*
+3. **Boot menu shows, then black** → graphics mode. Set **Graphics Controller → VBoxVGA** and confirm **3D Acceleration is OFF**. (Outlaw uses the kernel's standard mode-setting driver with a VESA fallback, so a screen is found on either controller.)
+4. **Desktop tries to start, then black** → switch to a text console with **Right-Ctrl + F2**, log in, and run `cat ~/.outlaw-x.log` — it records exactly what the graphical session did. (Outlaw also drops you to a usable shell automatically instead of looping.)
 
 ---
 
@@ -295,7 +313,13 @@ When adding a new `/usr/local/bin/outlaw-*` script: drop it in `outlaw-installer
 
 ## 📄 License
 
-MIT. See [LICENSE](./LICENSE).
+**Outlaw OS License v1.0** — source-available, *not* open-source. See [LICENSE](./LICENSE). In short:
+
+- ✅ **You may** use it on your own machines, study the source, modify it locally, test pre-release builds, and **suggest changes** (issues / pull requests) — free, no permission needed.
+- 🚫 **You may not** redistribute it (no re-hosting, mirrors, forks-for-download, or repackaged ISOs) or **monetize** it. The maintainer is the **sole distributor**.
+- 💛 **Donations** are welcome and entirely optional — they buy no extra rights.
+
+Bundled third-party components (the Linux kernel, Arch packages, Electron, Steam, Godot, Python libraries, fonts, etc.) keep their **own** upstream licenses; this license covers only Outlaw's own code, configuration, and branding.
 
 ---
 
