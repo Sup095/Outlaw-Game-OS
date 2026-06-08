@@ -226,6 +226,100 @@ function launchDetached(bin, args = [], opts = {}) {
     return child;
 }
 
+// --- App auto-discovery (Phase 2) ------------------------------------------
+// Surface apps the user installed themselves — freedesktop `.desktop` entries
+// and AppImages dropped into common folders — so they appear in the Apps page
+// next to the curated catalog and launch in one click. Pure filesystem reads,
+// Linux-only, and tolerant of missing dirs / unreadable files (never throws).
+function _parseDesktopEntry(txt) {
+    const e = {};
+    let inMain = false;
+    for (const raw of String(txt).split('\n')) {
+        const line = raw.trim();
+        if (line.startsWith('[')) { inMain = (line === '[Desktop Entry]'); continue; }
+        if (!inMain || !line || line.startsWith('#')) continue;
+        const i = line.indexOf('=');
+        if (i < 0) continue;
+        const k = line.slice(0, i).trim();
+        const v = line.slice(i + 1).trim();
+        if (k === 'Name' && !e.name) e.name = v;            // locale-less Name= wins
+        else if (k === 'Exec' && !e.exec) e.exec = v;
+        else if (k === 'NoDisplay') e.noDisplay = /true/i.test(v);
+        else if (k === 'Hidden') e.hidden = /true/i.test(v);
+        else if (k === 'Type') e.type = v;
+        else if (k === 'Terminal') e.terminal = /true/i.test(v);
+    }
+    return e;
+}
+function _cleanExec(exec) {
+    // Strip desktop-entry field codes (%f %F %u %U %i %c %k %d %n %v %m …).
+    return String(exec).replace(/%[a-zA-Z]/g, '').replace(/\s+/g, ' ').trim();
+}
+function _splitExec(s) {
+    const out = []; let cur = ''; let q = null;
+    for (const ch of s) {
+        if (q) { if (ch === q) q = null; else cur += ch; }
+        else if (ch === '"' || ch === "'") q = ch;
+        else if (ch === ' ') { if (cur) { out.push(cur); cur = ''; } }
+        else cur += ch;
+    }
+    if (cur) out.push(cur);
+    return out;
+}
+function discoverApps() {
+    if (!IS_LINUX) return [];
+    const home = os.homedir();
+    const desktopDirs = [
+        '/usr/share/applications',
+        '/usr/local/share/applications',
+        path.join(home, '.local/share/applications'),
+        '/var/lib/flatpak/exports/share/applications',
+        path.join(home, '.local/share/flatpak/exports/share/applications'),
+        '/var/lib/snapd/desktop/applications',
+    ];
+    const appImageDirs = [
+        path.join(home, 'Downloads'),
+        path.join(home, 'Applications'),
+        path.join(home, 'Desktop'),
+        path.join(home, 'AppImages'),
+        home,
+    ];
+    const out = [];
+    const seen = new Set();
+    for (const dir of desktopDirs) {
+        let files;
+        try { files = fs.readdirSync(dir); } catch { continue; }
+        for (const f of files) {
+            if (!f.endsWith('.desktop')) continue;
+            const full = path.join(dir, f);
+            let txt;
+            try { txt = fs.readFileSync(full, 'utf8'); } catch { continue; }
+            const e = _parseDesktopEntry(txt);
+            if (!e.name || !e.exec) continue;
+            if (e.noDisplay || e.hidden) continue;
+            if (e.type && e.type !== 'Application') continue;
+            const key = e.name.toLowerCase();
+            if (seen.has(key)) continue;
+            seen.add(key);
+            out.push({ id: 'd:' + full, name: e.name, exec: e.exec, kind: 'desktop', path: full, terminal: !!e.terminal });
+        }
+    }
+    for (const dir of appImageDirs) {
+        let files;
+        try { files = fs.readdirSync(dir); } catch { continue; }
+        for (const f of files) {
+            if (!/\.appimage$/i.test(f)) continue;
+            const full = path.join(dir, f);
+            const key = 'ai:' + full.toLowerCase();
+            if (seen.has(key)) continue;
+            seen.add(key);
+            out.push({ id: 'a:' + full, name: f.replace(/\.appimage$/i, ''), exec: full, kind: 'appimage', path: full });
+        }
+    }
+    out.sort((a, b) => a.name.localeCompare(b.name));
+    return out;
+}
+
 // ---------------------------------------------------------------------------
 // Destructive command guard — the "don't accidentally nuke the PC" layer
 // ---------------------------------------------------------------------------
@@ -996,6 +1090,39 @@ function registerIpc() {
         if (!IS_LINUX) return { ok: false, error: 'Runs on Outlaw OS.' };
         const r = await runShell('pkexec pacman -Sy --noconfirm', { timeout: 1000 * 60 * 5 });
         return { ok: r.code === 0, log: (r.stdout || r.stderr).slice(-2000) };
+    });
+
+    // ----- App auto-discovery (Phase 2): apps the user installed themselves --
+    ipcMain.handle('apps:discover', async () => {
+        try { return discoverApps(); } catch { return []; }
+    });
+
+    ipcMain.handle('apps:launch-discovered', async (_e, id) => {
+        if (!IS_LINUX) return { ok: false, error: 'Runs on Outlaw OS.' };
+        // Re-scan and match by id so the renderer can only launch something that
+        // genuinely exists on disk — never an arbitrary command from the page.
+        const item = discoverApps().find((a) => a.id === id);
+        if (!item) return { ok: false, error: 'App not found — try refreshing.' };
+        try {
+            if (item.kind === 'appimage') {
+                try { fs.chmodSync(item.path, 0o755); } catch {}
+                launchDetached(item.path, [], { focus: path.basename(item.path) });
+                return { ok: true, label: item.name };
+            }
+            const parts = _splitExec(_cleanExec(item.exec));
+            if (!parts.length) return { ok: false, error: 'No runnable command in the .desktop entry.' };
+            const bin = parts[0];
+            const args = parts.slice(1);
+            if (item.terminal) {
+                // Terminal apps need a terminal + focus (no WM) — reuse outlaw-term.
+                launchDetached('outlaw-term', [item.name, bin, ...args], { focus: false });
+            } else {
+                launchDetached(bin, args, { focus: path.basename(bin) });
+            }
+            return { ok: true, label: item.name };
+        } catch (err) {
+            return { ok: false, error: err.message };
+        }
     });
 
     // Inspect a command WITHOUT running it (UI uses this to warn before submit).

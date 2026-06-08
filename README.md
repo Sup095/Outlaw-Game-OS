@@ -35,7 +35,7 @@ Outlaw Game OS is built in the open, one phase at a time.
 
 ```
 Foundations  ▰▰▰▰▰▰▰▰▰▰  done — 3 roadmaps, 25 slices, all shipped
-v2.1 Polish  ▰▱▱▱▱▱▱      Phase 1 of 7 shipped — Completeness & Polish underway
+v2.1 Polish  ▰▰▱▱▱▱▱      Phase 2 of 7 shipped — Completeness & Polish underway
 ```
 
 > **Legend:** ✅ shipped & in your hands · 🚧 building now · 🔭 on the horizon
@@ -67,11 +67,11 @@ The foundations boot and run; this era makes the desktop feel *finished*. Every 
 | | Phase | What you get |
 |:--:|:--|:--|
 | ✅ | **1 · Identity** | Optional **Gold Gunmetal** theme — the sci-fi-fortress look that matches Outlaw CodeMaker — switchable anytime in *Settings → Appearance*, on **both** the desktop and the dev tool. New source-available **license**. |
-| 🚧 | **2 · Your apps, found** | Anything you install — even something downloaded from a browser — shows up in the **Apps** page automatically, one click to launch. |
-| 🔭 | **3 · Task Manager** | A Windows-style task manager (**End task** / **End process tree**) with live **CPU · RAM · GPU + VRAM** readouts, in the Outlaw look. |
+| ✅ | **2 · Your apps, found** | The Apps page now has an **"On this PC"** view that auto-discovers everything you've installed — `.desktop` apps *and* AppImages you download — so they're one click to launch, no manual refresh. |
+| 🚧 | **3 · Task Manager** | A Windows-style task manager (**End task** / **End process tree**) with live **CPU · RAM · GPU + VRAM** readouts, in the Outlaw look. |
 | 🔭 | **4 · Help + Quickstart** | A **skippable first-boot tour** showing where everything is, plus a searchable **Help database** that explains the whole OS and how to troubleshoot it. |
 | 🔭 | **5 · Reviewer that works** | One-click *"it worked / it broke"* reporting per version, so testing actually feeds back to the maintainer (and the stable channel). |
-| 🔭 | **6 · Boot splash + pre-flight** | A cinematic ~2-second boot splash on every boot — a holographic green Outlaw sigil flickering with CRT scanlines (skippable) — then optionally scan your PC for the best settings before you even enter the OS. |
+| 🔭 | **6 · Boot sequence + pre-flight** | A cinematic boot every time: real system boot data scrolling on a green, CRT-scanline screen, with the holographic Outlaw sigil flickering to life (~3s) in the middle — skippable — then optionally scan your PC for the best settings before you even enter the OS. |
 | 🔭 | **7 · Session driver profiles** | Choose the driver/package stack per session — **dev-tuned** vs **gaming/desktop** — applied safely *after* boot, never touching the bootloader. |
 
 ### 🌌 Beyond

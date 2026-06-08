@@ -158,6 +158,7 @@ let _appsState = {
     busy: new Set(),
     filter: 'all',
     search: '',
+    discovered: [],   // Phase 2 — apps found on this PC (.desktop + AppImages)
 };
 
 function _escapeHtml(s) {
@@ -165,9 +166,47 @@ function _escapeHtml(s) {
         ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 
+function _renderDiscoveredList(root) {
+    // Phase 2 — apps already on this PC (installed .desktop entries + AppImages
+    // the user downloaded). These are already installed, so the only action is
+    // Launch (the no-WM focus fix makes the launched window actually focusable).
+    const q = (_appsState.search || '').trim().toLowerCase();
+    let list = _appsState.discovered || [];
+    if (q) list = list.filter((a) => (a.name || '').toLowerCase().includes(q));
+    if (!list.length) {
+        root.innerHTML = '<div class="muted" style="padding:24px;text-align:center;">'
+            + 'Nothing found on this PC yet. Install something from the catalog, or drop an '
+            + 'AppImage in your <b>Downloads</b> folder — it shows up here automatically.</div>';
+        return;
+    }
+    const html = [
+        `<h3 style="margin-top:18px;">💾  On this PC <span class="muted" style="font-weight:400;">(${list.length})</span></h3>`,
+        '<div class="grid cols-2">',
+    ];
+    for (const a of list) {
+        const tag = a.kind === 'appimage' ? 'AppImage' : 'Installed app';
+        html.push(`
+            <div class="card">
+                <div class="row" style="align-items:flex-start;gap:10px;">
+                    <div style="flex:1;min-width:0;">
+                        <div style="font-weight:600;word-break:break-word;">${_escapeHtml(a.name)}</div>
+                        <div class="muted" style="font-size:11px;margin-top:3px;">${tag}</div>
+                    </div>
+                    <div class="row" style="gap:6px;flex:0 0 auto;">
+                        <button data-launch-disc="${_escapeHtml(a.id)}">Launch</button>
+                    </div>
+                </div>
+            </div>
+        `);
+    }
+    html.push('</div>');
+    root.innerHTML = html.join('');
+}
+
 function _renderAppsList() {
     const root = $('#apps-list');
     if (!root) return;
+    if (_appsState.filter === 'discovered') { _renderDiscoveredList(root); return; }
     const { catalog, installed, busy, filter, search } = _appsState;
     if (!catalog.length) {
         root.innerHTML = '<div class="muted" style="padding:24px;text-align:center;">No apps in catalog.</div>';
@@ -244,15 +283,18 @@ function setAppsSearch(q) {
 
 async function loadAppsCatalog() {
     try {
-        const [catalog, installedList] = await Promise.all([
+        const [catalog, installedList, discovered] = await Promise.all([
             api.apps.catalog(),
             api.apps.installedList(),
+            api.apps.discover(),
         ]);
         _appsState.catalog = catalog || [];
         _appsState.installed = new Set((installedList || []).filter((x) => x.installed).map((x) => x.id));
+        _appsState.discovered = discovered || [];
     } catch {
         _appsState.catalog = [];
         _appsState.installed = new Set();
+        _appsState.discovered = [];
     }
     _renderAppsList();
 }
@@ -309,6 +351,15 @@ async function handleAppsUninstall(id) {
     }
     _appsState.busy.delete(id);
     await refreshAppsInstalledOnly();
+}
+
+async function launchDiscoveredApp(id) {
+    try {
+        const r = await api.apps.launchDiscovered(id);
+        toast(r && r.ok ? `Launching ${r.label}…` : (r && r.error ? r.error : 'Could not launch.'));
+    } catch (e) {
+        toast('Launch failed: ' + e.message);
+    }
 }
 
 async function loadSysInfo() {
@@ -947,6 +998,8 @@ function wire() {
     document.body.addEventListener('click', async (e) => {
         const launch = e.target.closest('[data-launch]');
         if (launch) { launchApp(launch.dataset.launch); return; }
+        const launchDisc = e.target.closest('[data-launch-disc]');
+        if (launchDisc) { launchDiscoveredApp(launchDisc.dataset.launchDisc); return; }
         const installBtn = e.target.closest('[data-install-id]');
         if (installBtn) { handleAppsInstall(installBtn.dataset.installId); return; }
         const uninstallBtn = e.target.closest('[data-uninstall-id]');
@@ -1034,6 +1087,16 @@ function wire() {
     if (appsSearchEl) {
         appsSearchEl.addEventListener('input', (e) => setAppsSearch(e.target.value));
     }
+
+    // Phase 2 — re-scan apps "On this PC" when the shell regains focus (e.g. after
+    // downloading an AppImage in the browser and tabbing back), so it appears
+    // without a manual refresh. Only does work while the Apps screen is open.
+    window.addEventListener('focus', () => {
+        if (!document.querySelector('#screen-apps.active')) return;
+        api.apps.discover()
+            .then((d) => { _appsState.discovered = d || []; if (_appsState.filter === 'discovered') _renderAppsList(); })
+            .catch(() => {});
+    });
 
     // Confirm modal
     $('#confirm-input').addEventListener('input', (e) => { $('#confirm-go').disabled = e.target.value.trim() !== 'CONFIRM'; });

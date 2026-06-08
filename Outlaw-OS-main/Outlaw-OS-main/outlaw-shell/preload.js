@@ -53,6 +53,10 @@ contextBridge.exposeInMainWorld('outlaw', {
         uninstall: (id) => ipcRenderer.invoke('apps:uninstall', id),
         // Refresh local pacman DB. Useful before an install if the DB is stale.
         refreshDb: () => ipcRenderer.invoke('apps:refresh-db'),
+        // Phase 2 — apps the user installed themselves (.desktop entries +
+        // AppImages), so they appear in the Apps page and launch in one click.
+        discover: () => ipcRenderer.invoke('apps:discover'),
+        launchDiscovered: (id) => ipcRenderer.invoke('apps:launch-discovered', id),
     },
 
     // --- Terminal (guarded executor) ----------------------------------------
