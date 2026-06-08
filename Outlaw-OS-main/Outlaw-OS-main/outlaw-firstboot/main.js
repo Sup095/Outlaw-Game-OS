@@ -155,9 +155,12 @@ ipcMain.handle('bundles:install', async (_event, bundleId) => {
     // after). We pass --noconfirm so pacman doesn't sit waiting for "y".
     // --needed skips packages that are already current — important for
     // re-runs and for packages we deliberately keep in ESSENTIAL_PKGS.
+    // -Sy (sync + install) refreshes the databases first so a fresh install
+    // with absent/stale sync DBs doesn't fail with "database file for 'core'
+    // does not exist (use '-Sy')".
     return await new Promise((resolve) => {
         const args = [
-            'pacman', '-S', '--needed', '--noconfirm',
+            'pacman', '-Sy', '--needed', '--noconfirm',
             ...bundle.packages,
         ];
         let proc;

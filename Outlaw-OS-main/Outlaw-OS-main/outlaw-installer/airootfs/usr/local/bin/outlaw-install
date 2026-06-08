@@ -41,6 +41,10 @@ ESSENTIAL_PKGS=(
 
   # X / desktop runtime
   xorg-server xorg-xinit picom feh rofi thunar xfce4-terminal electron
+  # polkit-gnome: authentication agent so `pkexec pacman …` (Apps panel +
+  # updater) can prompt for the password. The session has no WM/agent
+  # otherwise, which makes package installs fail on the installed system.
+  polkit-gnome
   ttf-jetbrains-mono noto-fonts mesa
   # Xorg video fallbacks. Primary path is modesetting over the GPU's KMS
   # driver (vmwgfx / vboxvideo / real GPU); these two are auto-fallbacks Xorg

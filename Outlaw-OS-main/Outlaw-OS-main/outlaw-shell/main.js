@@ -208,10 +208,22 @@ async function resolveBinary(entry) {
     return null;
 }
 
-function launchDetached(bin, args = []) {
+function launchDetached(bin, args = [], opts = {}) {
     const child = spawn(bin, args, { detached: true, stdio: 'ignore' });
     child.on('error', (e) => console.error(`launch ${bin} failed:`, e.message));
     child.unref();
+    // No-WM focus fix: the Outlaw session runs without a window manager, so a
+    // newly-launched window appears on top but never receives X keyboard focus
+    // — you can see it but can't type into it. outlaw-focus sets input focus
+    // directly (xdotool) once the window maps. `opts.focus` is a window
+    // name/class substring; it defaults to the binary's basename (matches most
+    // apps' WM_CLASS). Pass `focus: false` for launchers that focus themselves
+    // (e.g. outlaw-term). Best-effort, Linux-only, never throws.
+    if (IS_LINUX && opts.focus !== false) {
+        const pat = (typeof opts.focus === 'string' && opts.focus) || String(bin).split('/').pop();
+        try { spawn('outlaw-focus', [pat], { detached: true, stdio: 'ignore' }).unref(); } catch {}
+    }
+    return child;
 }
 
 // ---------------------------------------------------------------------------
@@ -942,15 +954,24 @@ function registerIpc() {
         if (!app) return { ok: false, error: 'Unknown app id.' };
         // pkexec prompts for the user's password via polkit; --needed avoids
         // re-installing already-current packages; --noconfirm skips y/n prompts.
+        // -Sy (sync + install) refreshes the package databases first — REQUIRED
+        // on the live ISO and a fresh install, where the sync DBs are absent
+        // ("error: database file for 'core' does not exist (use '-Sy')"). It's
+        // the partial-upgrade pattern, but acceptable for installing a single
+        // curated leaf package; the system updater does full -Syu upgrades.
         // 20-minute timeout — large multilib packages on slow connections.
-        const cmd = `pkexec pacman -S --needed --noconfirm ${app.pkg}`;
+        const cmd = `pkexec pacman -Sy --needed --noconfirm ${app.pkg}`;
         const r = await runShell(cmd, { timeout: 1000 * 60 * 20 });
         const tail = (r.stdout || r.stderr || `exit ${r.code}`).slice(-3000);
         if (r.code !== 0) {
-            // Common cause: stale local DB. Surface a useful hint.
-            const hint = /not found in AUR|target not found/i.test(tail)
-                ? '\n\nHint: your package database may be out of date. Run Settings → Updates → Apply Updates first.'
-                : '';
+            // Surface a useful hint for the most common failure modes.
+            const hint = /database file for|use ['"]?-Sy/i.test(tail)
+                ? '\n\nHint: the package database could not be refreshed. Check your network connection and try again.'
+                : /not found in AUR|target not found/i.test(tail)
+                    ? '\n\nHint: that package name was not found. Your mirror list or database may need attention.'
+                    : /not authorized|authentication agent|polkit/i.test(tail)
+                        ? '\n\nHint: no authorization agent answered. (On the installed system this is handled automatically.)'
+                        : '';
             return { ok: false, error: tail + hint };
         }
         return { ok: true, label: app.label, log: tail };
@@ -1092,7 +1113,7 @@ function registerIpc() {
     });
     ipcMain.handle('power:hotswap', async () => {
         if (!IS_LINUX) return { ok: false, error: 'Hotswap runs on Outlaw OS.' };
-        launchDetached('xfce4-terminal', ['-e', 'outlaw-hotswap']);
+        launchDetached('outlaw-term', ['Outlaw Hotswap', 'outlaw-hotswap'], { focus: false });
         return { ok: true };
     });
     ipcMain.handle('power:reboot', async () => { if (IS_LINUX) await runShell('systemctl reboot'); return { ok: true }; });
@@ -1163,7 +1184,11 @@ function registerIpc() {
     });
     ipcMain.handle('installer:launch', async () => {
         if (!IS_LINUX) return { ok: false, error: 'Installer runs from the live boot media.' };
-        launchDetached('xfce4-terminal', ['-e', 'outlaw-install']);
+        // outlaw-term opens the installer in a titled terminal AND pulls
+        // keyboard focus to it (the desktop has no window manager, so otherwise
+        // the window appears but won't accept typing). focus:false because
+        // outlaw-term handles focus itself.
+        launchDetached('outlaw-term', ['Outlaw OS Installer', 'outlaw-install'], { focus: false });
         return { ok: true };
     });
 

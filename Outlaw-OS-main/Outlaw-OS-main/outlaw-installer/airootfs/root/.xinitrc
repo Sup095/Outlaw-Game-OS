@@ -38,6 +38,18 @@ if [ "$OUTLAW_IN_VM" = "0" ]; then
     picom --config /root/.config/picom/picom.conf >/dev/null 2>&1 &
 fi
 
+# Polkit authentication agent (see skel/.xinitrc for the rationale). The live
+# ISO runs as root, so pkexec doesn't actually need an agent here, and the live
+# package set doesn't ship one — this loop is a harmless no-op on the ISO, but
+# keeps the live and installed session launchers consistent.
+for _agent in \
+    /usr/lib/polkit-gnome/polkit-gnome-authentication-agent-1 \
+    /usr/lib/polkit-kde-authentication-agent-1 \
+    /usr/lib/xfce-polkit/xfce-polkit \
+    /usr/bin/lxqt-policykit-agent; do
+    if [ -x "$_agent" ]; then "$_agent" >/dev/null 2>&1 & break; fi
+done
+
 ELECTRON_FLAGS="$(outlaw-electron-flags 2>/dev/null | tr '\n' ' ')"
 [ -z "$ELECTRON_FLAGS" ] && ELECTRON_FLAGS="--no-sandbox"
 

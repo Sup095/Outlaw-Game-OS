@@ -46,6 +46,19 @@ if [ "$OUTLAW_IN_VM" = "0" ]; then
     picom --config "$HOME/.config/picom/picom.conf" >/dev/null 2>&1 &
 fi
 
+# Polkit authentication agent. The Apps panel + updater use `pkexec pacman …`
+# to install packages; pkexec needs a running authentication agent to prompt
+# for the password. Outlaw runs without a WM, so nothing starts one by default
+# — without this, installs FAIL on the installed system ("no authentication
+# agent"). Start the first agent that's present; harmless (no-op) if none is.
+for _agent in \
+    /usr/lib/polkit-gnome/polkit-gnome-authentication-agent-1 \
+    /usr/lib/polkit-kde-authentication-agent-1 \
+    /usr/lib/xfce-polkit/xfce-polkit \
+    /usr/bin/lxqt-policykit-agent; do
+    if [ -x "$_agent" ]; then "$_agent" >/dev/null 2>&1 & break; fi
+done
+
 # Electron flag set (adds --disable-gpu inside a VM). Used for greeter + shell.
 ELECTRON_FLAGS="$(outlaw-electron-flags 2>/dev/null | tr '\n' ' ')"
 [ -z "$ELECTRON_FLAGS" ] && ELECTRON_FLAGS="--no-sandbox"

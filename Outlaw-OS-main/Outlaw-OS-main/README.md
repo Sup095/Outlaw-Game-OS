@@ -137,7 +137,7 @@ UEFI, on real hardware **and** in VMs:
 | 🔭 | **3 · Task Manager** | A Windows-style task manager (**End task** / **End process tree**) with live **CPU · RAM · GPU + VRAM** readouts, in the Outlaw look. |
 | 🔭 | **4 · Help + Quickstart** | A **skippable first-boot tour** showing where everything is, plus a searchable **Help database** that explains the whole OS and how to troubleshoot it. |
 | 🔭 | **5 · Reviewer that works** | One-click *"it worked / it broke"* reporting per version, so testing actually feeds back to the maintainer (and the stable channel). |
-| 🔭 | **6 · Pre-flight diagnostics** | Before you even enter the OS, optionally scan your PC and see the best settings for your hardware. |
+| 🔭 | **6 · Boot splash + pre-flight diagnostics** | A cinematic ~2-second boot splash on every boot — a holographic green Outlaw sigil flickering with CRT scanlines (skippable) — then optionally scan your PC for the best settings before you even enter the OS. |
 | 🔭 | **7 · Session driver profiles** | Choose the driver / package stack per session — **dev-tuned** vs **gaming / desktop** — applied safely *after* boot, never touching the bootloader. |
 
 `▰▱▱▱▱▱▱` **Phase 1 of 7 shipped**
