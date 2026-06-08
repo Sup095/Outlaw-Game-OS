@@ -1331,6 +1331,28 @@ function registerIpc() {
         }, 350);
         return { ok: true };
     });
+
+    // Is the Dev session actually runnable here? It is iff a Python interpreter
+    // (the CodeMaker venv first, else system python3) can import PyQt6 — i.e.
+    // CodeMaker will start instead of crashing. Mirrors /usr/local/bin/
+    // outlaw-codemaker. On the live ISO this is false until outlaw-setup-dev
+    // builds the venv. Lets the UI offer to download the dev env before a switch.
+    ipcMain.handle('session:dev-status', async () => {
+        if (!IS_LINUX) return { ready: false, reason: 'not-linux' };
+        const probe = 'p=/opt/outlaw-codemaker/.venv/bin/python; [ -x "$p" ] || p="$(command -v python3)"; '
+            + '{ [ -n "$p" ] && "$p" -c "import PyQt6.QtCore" >/dev/null 2>&1 && echo READY; } || echo NOPE';
+        const r = await runShell(probe, { timeout: 8000 });
+        return { ready: /READY/.test(r.stdout || '') };
+    });
+
+    // Download + build the Dev environment on demand (live ISO / repair). It's
+    // long and network-heavy, so run it in a visible terminal (outlaw-term
+    // focuses it + holds it open) rather than silently in the background.
+    ipcMain.handle('session:setup-dev', async () => {
+        if (!IS_LINUX) return { ok: false, error: 'Runs on Outlaw OS.' };
+        launchDetached('outlaw-term', ['Set up Dev session', 'outlaw-setup-dev'], { focus: false });
+        return { ok: true };
+    });
 }
 
 // ---------------------------------------------------------------------------

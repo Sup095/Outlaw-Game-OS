@@ -128,6 +128,11 @@ contextBridge.exposeInMainWorld('outlaw', {
         // Mark the next X session as Dev (Outlaw CodeMaker), bypassing the
         // greeter once, and end this X session so the switch can happen.
         switchToDev: () => ipcRenderer.invoke('session:switch-dev'),
+        // Is the Dev session runnable here yet? (PyQt6 importable.) Lets the UI
+        // offer to download the dev environment before attempting a switch.
+        devStatus: () => ipcRenderer.invoke('session:dev-status'),
+        // Download + build the Dev environment on demand (opens a terminal).
+        setupDev: () => ipcRenderer.invoke('session:setup-dev'),
         // Reset the persistent greeter preference back to "ask" so the
         // session greeter shows again on the next boot. Useful when the user
         // ticked "Always start in this session" and now wants to flip.

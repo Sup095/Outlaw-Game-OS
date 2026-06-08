@@ -1176,13 +1176,34 @@ function wire() {
     const sessSwitchBtn = $('#session-switch-dev');
     if (sessSwitchBtn) {
         sessSwitchBtn.addEventListener('click', async () => {
+            sessSwitchBtn.disabled = true;
+            // First check the Dev session can actually run here. On the live ISO
+            // (and any system where the dev env isn't built) CodeMaker's Python
+            // deps are missing — switching would just bounce back to the desktop.
+            // Offer to download + build them instead of failing.
+            let ready = true;
+            try { const s = await api.session.devStatus(); ready = !!(s && s.ready); } catch { ready = true; }
+            if (!ready) {
+                const setup = window.confirm(
+                    "The Dev session isn't set up on this machine yet.\n\n" +
+                    "Outlaw CodeMaker needs Python and its dependencies (PyQt6, etc.). " +
+                    "Download and build them now? This opens a terminal and needs an " +
+                    "internet connection — a few minutes. When it finishes, click " +
+                    "'Switch to Dev session' again.",
+                );
+                if (setup) {
+                    try { await api.session.setupDev(); toast('Setting up the Dev session in a terminal — switch again once it finishes.'); }
+                    catch (err) { toast('Could not start setup: ' + err.message); }
+                }
+                sessSwitchBtn.disabled = false;
+                return;
+            }
             const ok = window.confirm(
                 'Switch to the Dev session now?\n\n' +
                 'This closes the desktop and opens Outlaw CodeMaker. ' +
                 'The screen will go black for a few seconds while X restarts.',
             );
-            if (!ok) return;
-            sessSwitchBtn.disabled = true;
+            if (!ok) { sessSwitchBtn.disabled = false; return; }
             toast('Switching to Dev session…');
             try {
                 const r = await api.session.switchToDev();

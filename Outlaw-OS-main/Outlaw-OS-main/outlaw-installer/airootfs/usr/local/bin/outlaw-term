@@ -28,18 +28,25 @@ if [ -z "$TERMBIN" ]; then
     exit 3
 fi
 
-# Launch <command> with our title. Flag syntax differs per emulator;
-# --disable-server (xfce4-terminal) forces a standalone process (no daemon) so
-# the window is predictable and titled exactly as we ask.
+# Wrap the command so the window does NOT vanish the instant it exits — errors
+# and "install complete" must stay readable, and with no window manager there's
+# no way to reopen a terminal that closed. The user presses Enter to close.
+CMD="$*"
+HOLD="$CMD; __rc=\$?; echo; echo '----------------------------------------'; echo \"[Outlaw] finished (exit \$__rc). Press Enter to close.\"; read __dummy"
+
+# Launch the wrapper, titled, in the first available terminal. Running it via
+# `sh -c` uniformly sidesteps per-emulator quoting differences;
+# --disable-server (xfce4-terminal) forces a standalone, predictably-titled
+# process; -x / -e take the remaining args as the command to run.
 case "$TERMBIN" in
-    xfce4-terminal) "$TERMBIN" --disable-server --title="$TITLE" --command="$*" & ;;
-    xterm)          "$TERMBIN" -T "$TITLE" -e "$@" & ;;
-    alacritty)      "$TERMBIN" --title "$TITLE" -e "$@" & ;;
-    kitty)          "$TERMBIN" --title "$TITLE" "$@" & ;;
-    konsole)        "$TERMBIN" -p tabtitle="$TITLE" -e "$@" & ;;
-    foot)           "$TERMBIN" --title="$TITLE" "$@" & ;;
-    lxterminal)     "$TERMBIN" --title="$TITLE" --command="$*" & ;;
-    *)              "$TERMBIN" -e "$@" & ;;
+    xfce4-terminal) "$TERMBIN" --disable-server --title="$TITLE" -x sh -c "$HOLD" & ;;
+    xterm)          "$TERMBIN" -T "$TITLE" -e sh -c "$HOLD" & ;;
+    alacritty)      "$TERMBIN" --title "$TITLE" -e sh -c "$HOLD" & ;;
+    kitty)          "$TERMBIN" --title "$TITLE" sh -c "$HOLD" & ;;
+    konsole)        "$TERMBIN" -p tabtitle="$TITLE" -e sh -c "$HOLD" & ;;
+    foot)           "$TERMBIN" --title="$TITLE" sh -c "$HOLD" & ;;
+    lxterminal)     "$TERMBIN" -e "sh -c \"$HOLD\"" & ;;
+    *)              "$TERMBIN" -e sh -c "$HOLD" & ;;
 esac
 TPID=$!
 

@@ -113,11 +113,18 @@ banner() {
 }
 
 pick_from_lsblk() {
-    # $1 = prompt; echoes the chosen /dev path on fd 3
+    # $1 = prompt; echoes the chosen /dev path on stdout
     echo >&2
     lsblk -o NAME,SIZE,TYPE,FSTYPE,LABEL,MOUNTPOINTS >&2
     echo >&2
-    read -rp "$1 (e.g. /dev/sda2): " dev
+    read -rp "$1 (e.g. /dev/sda2, or just sda2): " dev
+    # The lsblk list above shows bare kernel names (sda, nvme0n1p2), so users
+    # naturally type "sda" — accept that and normalize to a real /dev/ path.
+    # (Without this, "sda" fails the block-device check and the installer exits,
+    # which — with no window manager — just closes the terminal window.)
+    if [[ -n "$dev" && "$dev" != "0" && "$dev" != /dev/* ]]; then
+        dev="/dev/$dev"
+    fi
     echo "$dev"
 }
 
