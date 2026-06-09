@@ -1239,11 +1239,24 @@ function wire() {
     const sessSwitchBtn = $('#session-switch-dev');
     if (sessSwitchBtn) {
         sessSwitchBtn.addEventListener('click', async () => {
+            // Live demo: the Dev session needs the fully-installed system. Don't
+            // offer to download a dev env into the ephemeral live overlay — just
+            // tell the user to install first.
+            if (_isLive) {
+                window.alert(
+                    "The Dev session isn't available in the live demo.\n\n" +
+                    "Outlaw CodeMaker needs the full system. Install Outlaw OS to your " +
+                    "disk first (click “Install Outlaw OS” on the desktop), then come " +
+                    "back and switch to the Dev session.\n\n" +
+                    "The live environment is a limited preview — install to unlock everything.",
+                );
+                return;
+            }
             sessSwitchBtn.disabled = true;
-            // First check the Dev session can actually run here. On the live ISO
-            // (and any system where the dev env isn't built) CodeMaker's Python
-            // deps are missing — switching would just bounce back to the desktop.
-            // Offer to download + build them instead of failing.
+            // First check the Dev session can actually run here. On a freshly
+            // installed system where the dev env didn't build, CodeMaker's Python
+            // deps may be missing — switching would just bounce back to the
+            // desktop. Offer to download + build them instead of failing.
             let ready = true;
             try { const s = await api.session.devStatus(); ready = !!(s && s.ready); } catch { ready = true; }
             if (!ready) {
@@ -1357,15 +1370,32 @@ window.addEventListener('DOMContentLoaded', async () => {
 
 async function refreshLiveWelcome() {
     const card = $('#live-welcome');
-    if (!card || !api.system || !api.system.liveIso) return;
+    if (!api.system || !api.system.liveIso) return;
     try {
         const r = await api.system.liveIso();
-        if (r && r.live && !r.dismissed) {
-            card.hidden = false;
-        } else {
-            card.hidden = true;
-        }
+        _isLive = !!(r && r.live);
+        if (card) card.hidden = !(r && r.live && !r.dismissed);
+        applyLiveLocks();
     } catch {
-        card.hidden = true;
+        if (card) card.hidden = true;
     }
+}
+
+// Live-mode ("broken mode", basic form): the live ISO is an ephemeral, limited
+// preview — a teaser of the real thing. Lock the features that can't or
+// shouldn't run until the OS is actually installed, and flag the limited state.
+// The full glitch/fake-error aesthetic + a selectable "Broken" theme come later
+// (roadmap). Installed systems never hit any of this.
+let _isLive = false;
+function applyLiveLocks() {
+    if (!_isLive) return;
+    document.body.classList.add('live-mode');
+    const badge = $('#live-badge'); if (badge) badge.hidden = false;
+    const reason = 'Locked in the live demo — install Outlaw OS to unlock this.';
+    // Controls that don't make sense on a throwaway live system.
+    ['#perf-toggle'].forEach((sel) => {
+        const el = $(sel); if (el) { el.disabled = true; el.title = reason; }
+    });
+    const dev = $('#session-switch-dev');
+    if (dev) dev.title = 'Install Outlaw OS first to use the Dev session.';
 }

@@ -35,7 +35,7 @@ Outlaw Game OS is built in the open, one phase at a time.
 
 ```
 Foundations  ▰▰▰▰▰▰▰▰▰▰  done — 3 roadmaps, 25 slices, all shipped
-v2.1 Polish  ▰▰▱▱▱▱▱      Phase 2 of 7 shipped — Completeness & Polish underway
+v2.1 Polish  ▰▰▱▱▱▱▱▱▱    Phase 2 of 9 shipped — Completeness & Polish underway
 ```
 
 > **Legend:** ✅ shipped & in your hands · 🚧 building now · 🔭 on the horizon
@@ -73,6 +73,8 @@ The foundations boot and run; this era makes the desktop feel *finished*. Every 
 | 🔭 | **5 · Reviewer that works** | One-click *"it worked / it broke"* reporting per version, so testing actually feeds back to the maintainer (and the stable channel). |
 | 🔭 | **6 · Boot sequence + pre-flight** | A cinematic boot every time: real system boot data scrolling on a green, CRT-scanline screen, with the holographic Outlaw sigil flickering to life (~3s) in the middle — skippable — then optionally scan your PC for the best settings before you even enter the OS. |
 | 🔭 | **7 · Session driver profiles** | Choose the driver/package stack per session — **dev-tuned** vs **gaming/desktop** — applied safely *after* boot, never touching the bootloader. |
+| 🔭 | **8 · Windowed desktop** | Real windows — title bars with **minimize / maximize / close**, drag & resize, and a **taskbar** to find minimized windows — plus filling the screen at its native resolution. |
+| 🔭 | **9 · "Broken" mode** | A third theme where the system looks like it's *barely holding together* — glitches, scanlines, the System Core throwing (fake) errors. It's also the live-demo vibe: a broken machine you repair by installing. *(Basic live-mode feature-locks already shipped.)* |
 
 ### 🌌 Beyond
 

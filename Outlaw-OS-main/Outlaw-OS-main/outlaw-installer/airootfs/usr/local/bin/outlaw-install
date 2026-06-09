@@ -151,12 +151,16 @@ do_install() {
     echo
     echo "  3) Show me my disk layout first (read-only, decide afterwards)"
     echo
+    echo "  4) Use FREE / unallocated space on a disk — I'll create the partition"
+    echo "     for you (you choose how many GB). Other partitions stay untouched."
+    echo
     echo "  0) Back to main menu"
     read -rp "> " strat
     case "$strat" in
         1) install_into_partition ;;
         2) install_wipe_disk ;;
         3) show_disk_layout; return ;;
+        4) install_free_space ;;
         *) return ;;
     esac
 }
@@ -270,12 +274,181 @@ install_wipe_disk() {
     fi
 }
 
+# Install into free/unallocated space, creating the partition automatically at a
+# size the user chooses. This is the "I shrank Windows in gparted but the empty
+# space doesn't show as a partition" path — free space has no /dev node, so the
+# other options (which list partitions) can't see it. We create the partition in
+# the largest free region, format ONLY that new partition, and never touch the
+# user's existing partitions.
+install_free_space() {
+    banner
+    grn "INSTALL INTO FREE / UNALLOCATED SPACE"
+    echo
+    echo "I'll create a new partition in the free space on a disk and install"
+    echo "Outlaw into it. Your existing partitions are NOT touched or formatted."
+    echo
+    ylw "No free space yet?"
+    echo "  -> Cancel (0), then run \`sudo gparted\`: click the partition you want"
+    echo "     to shrink (e.g. Windows C:), choose Resize/Move, drag its RIGHT edge"
+    echo "     left to leave 'unallocated' space, click the green Apply ✓, then run"
+    echo "     \`sudo outlaw-install\` again and pick this option."
+    echo
+    local disk
+    disk="$(pick_from_lsblk 'Disk that has free space (or 0 to cancel)')"
+    if [[ "$disk" == "0" || -z "$disk" ]]; then echo "Cancelled."; return; fi
+    [[ -b "$disk" ]] || die "Not a block device: $disk"
+
+    grn "Free space on $disk:"
+    echo
+    parted -s "$disk" unit GiB print free 2>/dev/null | sed -n '1,40p' || true
+    echo
+
+    # Find the largest free region (in MiB) from parted's free-space rows.
+    local best_start_mib=0 best_size_mib=0
+    while read -r f_start f_end f_size _label; do
+        local s="${f_start%MiB}" z="${f_size%MiB}"
+        [[ "$s" =~ ^[0-9.]+$ && "$z" =~ ^[0-9.]+$ ]] || continue
+        local si="${s%.*}" zi="${z%.*}"
+        if (( zi > best_size_mib )); then best_size_mib="$zi"; best_start_mib="$si"; fi
+    done < <(parted -s "$disk" unit MiB print free 2>/dev/null | grep -iE 'free space')
+
+    if (( best_size_mib < 8192 )); then
+        red "No usable free region found on $disk (need at least ~8 GiB unallocated)."
+        echo "Shrink a partition with \`sudo gparted\` first (see above), then retry."
+        return
+    fi
+    local free_gib=$(( best_size_mib / 1024 ))
+    grn "Largest free region: about ${free_gib} GiB."
+    echo
+    local want_gib
+    read -rp "How many GiB for Outlaw? [Enter = all ${free_gib}] " want_gib
+    [[ -z "$want_gib" ]] && want_gib="$free_gib"
+    [[ "$want_gib" =~ ^[0-9]+$ ]] || die "Enter a whole number of GiB."
+    (( want_gib >= 8 ))         || die "Outlaw needs at least 8 GiB."
+    (( want_gib <= free_gib ))  || die "Only ${free_gib} GiB is free."
+
+    local start_mib="$best_start_mib"
+    local end_mib=$(( start_mib + want_gib * 1024 ))
+
+    # EFI needs an EFI System Partition. Reuse an existing one (the normal
+    # Windows-dual-boot case) — never create a second. Bail with guidance if
+    # we're in EFI mode and the disk has no ESP.
+    local esp=""
+    if is_efi; then
+        esp="$(lsblk -nrpo NAME,PARTTYPE "$disk" 2>/dev/null | awk 'tolower($2)=="c12a7328-f81f-11d2-ba4b-00a0c93ec93b"{print $1; exit}')"
+    fi
+
+    echo
+    red "PLAN — review carefully:"
+    echo "   • Create a new ~${want_gib} GiB ext4 partition in the free space on ${disk}."
+    echo "   • Existing partitions on ${disk}: left alone (NOT formatted)."
+    if is_efi; then
+        if [[ -n "$esp" ]]; then
+            echo "   • EFI: reuse the existing EFI System Partition ${esp} (mounted, NOT formatted)."
+        else
+            red "   • EFI mode, but no EFI System Partition exists on ${disk}."
+            echo "     To keep your disk safe I won't guess one. Install alongside an OS"
+            echo "     that already has an ESP, or create a small FAT32 ESP first."
+            return
+        fi
+    else
+        echo "   • BIOS: GRUB will be installed to ${disk} (MBR)."
+    fi
+    echo
+    confirm_word "CREATE" || { echo "Cancelled — nothing was changed."; return; }
+
+    # Snapshot partitions, create the new one, then diff to find it — robust
+    # across sd*/nvme* naming and partition numbering.
+    local before after newpart
+    before="$(lsblk -nrpo NAME "$disk" | tail -n +2 | sort)"
+    grn "Creating the partition…"
+    parted -a optimal -s "$disk" mkpart primary ext4 "${start_mib}MiB" "${end_mib}MiB" \
+        || die "parted couldn't create the partition (is the partition table full?)."
+    partprobe "$disk" 2>/dev/null || true
+    sleep 1
+    after="$(lsblk -nrpo NAME "$disk" | tail -n +2 | sort)"
+    newpart="$(comm -13 <(printf '%s\n' "$before") <(printf '%s\n' "$after") | head -n1)"
+    if [[ -z "$newpart" || ! -b "$newpart" ]]; then
+        partprobe "$disk" 2>/dev/null || true; sleep 1
+        after="$(lsblk -nrpo NAME "$disk" | tail -n +2 | sort)"
+        newpart="$(comm -13 <(printf '%s\n' "$before") <(printf '%s\n' "$after") | head -n1)"
+    fi
+    [[ -n "$newpart" && -b "$newpart" ]] || die "Couldn't find the new partition. Check \`lsblk\` and use option 1 to point at it directly."
+
+    grn "Formatting $newpart as ext4…"
+    mkfs.ext4 -F "$newpart" || die "mkfs failed on $newpart."
+    mount "$newpart" "$TARGET" || die "mount failed."
+
+    if is_efi; then
+        mkdir -p "$TARGET/boot/efi"
+        mount "$esp" "$TARGET/boot/efi" || die "Couldn't mount the ESP $esp."
+        ESP="$esp"
+    else
+        ESP=""
+        BIOS_DISK="$disk"
+    fi
+    read -rp "Username for the operator account: " USERNAME
+    [[ "$USERNAME" =~ ^[a-z_][a-z0-9_-]*$ ]] || die "Invalid username."
+    pacstrap_and_configure "$newpart"
+}
+
+# Make sure pacstrap will actually be able to download packages. The slim live
+# ISO ships a small default mirrorlist (Arch global CDN first) but no reflector,
+# so we guarantee a usable mirror, init the keyring if empty, check we're online,
+# and refresh the databases — turning the old silent "pacstrap failed (check
+# your mirrors)" into a clear, early, fixable message.
+prepare_network_and_mirrors() {
+    local ML=/etc/pacman.d/mirrorlist
+    grn "Preparing package mirrors…"
+    # Guarantee at least one active Server line (a stock all-commented mirrorlist
+    # is the #1 cause of "could not connect to server").
+    if ! grep -qE '^[[:space:]]*Server[[:space:]]*=' "$ML" 2>/dev/null; then
+        ylw "No active mirror found — adding the Arch global CDN."
+        { echo 'Server = https://geo.mirror.pkgbuild.com/$repo/os/$arch'
+          cat "$ML" 2>/dev/null; } > "$ML.outlaw" && mv "$ML.outlaw" "$ML"
+    fi
+    # Initialise signing keys on the live system if the keyring is empty.
+    if [[ ! -s /etc/pacman.d/gnupg/pubring.gpg ]]; then
+        ylw "Initialising package-signing keys…"
+        pacman-key --init >/dev/null 2>&1 || true
+        pacman-key --populate archlinux >/dev/null 2>&1 || true
+    fi
+    # Fail EARLY (with guidance) if there's no internet, instead of deep in pacstrap.
+    if ! curl -fsS --max-time 15 -o /dev/null "https://geo.mirror.pkgbuild.com/lastsync" 2>/dev/null; then
+        ylw "WARNING: couldn't reach the Arch package servers."
+        echo "  Installing needs an internet connection."
+        echo "  Connect now with:  nmtui   (choose Wi-Fi or Ethernet), confirm you"
+        echo "  can reach the internet, then continue."
+        confirm_word "CONTINUE" || die "No network — cancelled. Connect, then re-run: sudo outlaw-install"
+    fi
+    grn "Refreshing package databases…"
+    pacman -Syy --noconfirm >/dev/null 2>&1 || pacman -Syy --noconfirm || \
+        ylw "Database refresh hit a snag — pacstrap will retry mirrors as it installs."
+}
+
 pacstrap_and_configure() {
     local rootdev="$1"
+    prepare_network_and_mirrors
     grn "Installing base system (this can take a while)…"
-    pacstrap -K "$TARGET" "${PKGS[@]}" || die "pacstrap failed (check your network/mirrors)."
+    if ! pacstrap -K "$TARGET" "${PKGS[@]}"; then
+        red "pacstrap failed — the base system did not install."
+        echo "  Almost always this is a network / mirror problem:"
+        echo "   • Connect to the internet:   nmtui   (Wi-Fi or Ethernet)"
+        echo "   • Then run again:            sudo outlaw-install"
+        echo "  The Arch global CDN is already first in /etc/pacman.d/mirrorlist,"
+        echo "  so a single slow mirror shouldn't stop you — just retry."
+        die "Install aborted."
+    fi
 
     genfstab -U "$TARGET" >> "$TARGET/etc/fstab"
+
+    # Carry our working mirrorlist into the installed system. pacstrap installs a
+    # fresh `pacman-mirrorlist` whose /etc/pacman.d/mirrorlist is ALL COMMENTED,
+    # so without this the installed system's pacman (Apps panel, updates) would
+    # fail to connect just like the live ISO did before this fix.
+    if [[ -s /etc/pacman.d/mirrorlist ]]; then
+        cp -f /etc/pacman.d/mirrorlist "$TARGET/etc/pacman.d/mirrorlist" 2>/dev/null || true
+    fi
 
     # Bring the shell + helper tools into the installed system.
     mkdir -p "$TARGET/usr/share/outlaw-os"
