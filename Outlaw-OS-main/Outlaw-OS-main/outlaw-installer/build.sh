@@ -20,7 +20,7 @@ RELENG="/usr/share/archiso/configs/releng"
 # Default version baked in for local builds. CI overrides this from the git
 # tag via OUTLAW_ISO_VERSION (see .github/workflows/build-iso.yml) so the
 # artifact filename always matches the tag the user pushed.
-ISO_VERSION="${OUTLAW_ISO_VERSION:-2.0.25}"
+ISO_VERSION="${OUTLAW_ISO_VERSION:-2.0.26}"
 ISO_FINAL="$OUT_DIR/outlaw-os-v${ISO_VERSION}.iso"
 
 echo "========================================"
@@ -102,6 +102,15 @@ if [[ -d "$REPO_ROOT/outlaw-firstboot" ]]; then
     rm -rf "$PROFILE_DIR/airootfs/usr/share/outlaw-firstboot/node_modules" 2>/dev/null || true
 fi
 
+# Graphical installer wizard (point-and-click front-end over outlaw-install's
+# machine modes — the default path from the desktop's Install button).
+if [[ -d "$REPO_ROOT/outlaw-installer-gui" ]]; then
+    echo "[3c/7] Syncing graphical installer…"
+    install -d "$PROFILE_DIR/airootfs/usr/share/outlaw-installer-gui"
+    cp -rT "$REPO_ROOT/outlaw-installer-gui" "$PROFILE_DIR/airootfs/usr/share/outlaw-installer-gui"
+    rm -rf "$PROFILE_DIR/airootfs/usr/share/outlaw-installer-gui/node_modules" 2>/dev/null || true
+fi
+
 # Bundle Outlaw CodeMaker into /opt/outlaw-codemaker. The path can be
 # overridden with OUTLAW_CODEMAKER_SRC for non-standard checkouts. We try a
 # few sensible defaults so a sibling clone works out of the box. If nothing
@@ -164,7 +173,8 @@ for f in outlaw-install outlaw-install-aur outlaw-electron-flags \
          outlaw-firstboot outlaw-start-session outlaw-hotswap outlaw-perf \
          outlaw-tune outlaw-update-apply outlaw-update-rollback outlaw-greeter \
          outlaw-codemaker outlaw-lm-studio outlaw-session-watchdog \
-         outlaw-diagnose outlaw-focus outlaw-term outlaw-setup-dev; do
+         outlaw-diagnose outlaw-focus outlaw-term outlaw-setup-dev \
+         outlaw-install-gui; do
     if ! grep -q "/usr/local/bin/$f" "$PD"; then
         sed -i "/^file_permissions=(/a\\  [\"/usr/local/bin/$f\"]=\"0:0:755\"" "$PD"
     fi

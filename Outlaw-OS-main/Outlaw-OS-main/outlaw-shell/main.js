@@ -1311,11 +1311,10 @@ function registerIpc() {
     });
     ipcMain.handle('installer:launch', async () => {
         if (!IS_LINUX) return { ok: false, error: 'Installer runs from the live boot media.' };
-        // outlaw-term opens the installer in a titled terminal AND pulls
-        // keyboard focus to it (the desktop has no window manager, so otherwise
-        // the window appears but won't accept typing). focus:false because
-        // outlaw-term handles focus itself.
-        launchDetached('outlaw-term', ['Outlaw OS Installer', 'outlaw-install'], { focus: false });
+        // outlaw-install-gui opens the point-and-click installer wizard (and
+        // handles its own focus poke + falls back to the terminal installer if
+        // the GUI app is missing). focus:false — the launcher does it itself.
+        launchDetached('outlaw-install-gui', [], { focus: false });
         return { ok: true };
     });
 

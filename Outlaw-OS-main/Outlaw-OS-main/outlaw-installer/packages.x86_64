@@ -58,6 +58,11 @@ edk2-shell
 # OS partitions from the live environment if they need to make space for
 # Outlaw, without bloating the post-install footprint.
 gparted
+# ntfs-3g provides ntfsresize, which the installer's "install alongside
+# Windows" path uses to shrink NTFS partitions automatically (probed
+# read-only first; refuses dirty volumes). gparted only lists it as an
+# optional dependency, so it must be named explicitly here.
+ntfs-3g
 
 # --- Security hardening ---
 apparmor

@@ -104,18 +104,20 @@ A welcome card on the Dashboard asks: **Install Outlaw OS** · **Try it first** 
 
 ### Two install paths — your choice
 
-When you click *Install Outlaw OS*, you're asked how:
+Clicking *Install Outlaw OS* opens a **point-and-click installer wizard** — no terminal, no partitioning knowledge needed:
 
 | Option | What it does | Other data |
 |---|---|---|
-| **1. Install alongside other OSes** *(recommended)* | Outlaw goes into a single empty partition you pick. GRUB picks up Windows / other Linux installs and adds them to the boot menu. | **Untouched.** Anything not on the chosen partition stays exactly as it was. |
-| **2. Erase a whole disk** *(destructive)* | Wipes every partition on the chosen drive, makes Outlaw the only OS on it. You type the device name *and* the word `ERASE` to confirm. | Anything on the chosen disk is **gone**. Other disks are untouched. |
+| **1. Keep my other OS** *(recommended)* | Fully automatic: Outlaw uses free space on the disk — or **shrinks your biggest partition for you** (your files are kept; the partition just gets smaller). Pick the size with a slider. GRUB adds Windows / other Linux installs to the boot menu. | **Untouched.** Existing partitions are never formatted; shrinking is test-checked read-only first and refuses unsafe disks. |
+| **2. Erase this computer** *(destructive)* | Wipes one whole disk and makes Outlaw the only OS on it. You type `ERASE` in the wizard to confirm. | Anything on the chosen disk is **gone**. Other disks are untouched. |
 
-**Don't have an empty partition yet?** Open a terminal in the live system and run `sudo gparted` — it's pre-installed in the live ISO. Shrink Windows (or any other partition), make a fresh blank partition in the freed space, then run the installer.
+The wizard checks your internet connection up front, shows exactly what it's going to do before anything is touched, and streams live progress while it installs. (Prefer a terminal? `sudo outlaw-install` runs the same engine as text menus; `sudo gparted` is also still on the live ISO.)
 
-You can also **try Outlaw without installing**. Everything works — diagnostics, the System Core, the shell, CodeMaker — your changes just disappear on reboot.
+> 💡 **Shrinking a Windows disk:** Windows must be cleanly shut down. If the wizard refuses, boot Windows, turn off *Fast Startup*, run `chkdsk /f`, shut down fully (don't restart), then try again. Windows runs a quick disk check on its next boot afterwards — that's normal.
 
-**Removing Outlaw OS later:** boot the USB again and pick **Remove Outlaw OS**. It deletes Outlaw's boot entry and (optionally) frees the partition. Your other OSes and their data stay intact.
+You can also **try Outlaw without installing**. The live session is a limited preview — the full system (including the Dev session) unlocks once installed; your live changes disappear on reboot.
+
+**Removing Outlaw OS later:** boot the USB again, open a terminal, and run `sudo outlaw-install --uninstall`. It deletes Outlaw's boot entry and (optionally) frees the partition. Your other OSes and their data stay intact.
 
 ---
 
@@ -168,7 +170,7 @@ If you want to try Outlaw in a virtual machine first, **the VM settings matter**
 | **Storage** | Add Optical Drive → pick `outlaw-os-v*.iso` | — | The boot medium |
 | **Storage** | Add a Hard Disk | **30 GB+** (only if you'll install) | Target for a real install |
 
-Boot the VM → you land **directly on the Outlaw desktop**. To install to the virtual disk, click **Install Outlaw OS** (or run `sudo outlaw-install`). The installer auto-detects the VM and bakes the same display-compatibility settings into your installed system. After install, power off, **remove the ISO**, and boot the disk.
+Boot the VM → you land **directly on the Outlaw desktop**. To install to the virtual disk, click **Install Outlaw OS** — the point-and-click wizard opens (pick *Erase this computer* for the empty virtual disk). After install, power off, **remove the ISO**, and boot the disk.
 
 ### Troubleshooting a black screen, in order
 
