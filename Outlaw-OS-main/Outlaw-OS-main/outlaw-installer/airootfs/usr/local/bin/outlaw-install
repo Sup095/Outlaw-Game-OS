@@ -117,6 +117,7 @@ pick_from_lsblk() {
     echo >&2
     lsblk -o NAME,SIZE,TYPE,FSTYPE,LABEL,MOUNTPOINTS >&2
     echo >&2
+    flush_stdin
     read -rp "$1 (e.g. /dev/sda2, or just sda2): " dev
     # The lsblk list above shows bare kernel names (sda, nvme0n1p2), so users
     # naturally type "sda" — accept that and normalize to a real /dev/ path.
@@ -128,11 +129,48 @@ pick_from_lsblk() {
     echo "$dev"
 }
 
+# Drop any keystrokes typed while a long non-interactive step (mkfs, pacstrap,
+# parted…) was running. The terminal buffers them, and the next `read` silently
+# consumes a stale Enter as its answer. That exact failure made the installer
+# "just close" right after formatting: mkfs printed its superblock lines, the
+# user pressed Enter a few times, the buffered empty line became the USERNAME,
+# validation died, and another buffered Enter dismissed the exit prompt.
+flush_stdin() {
+    local _junk
+    while read -r -t 0 2>/dev/null; do
+        read -r _junk || break
+    done
+}
+
 confirm_word() {
     # $1 = the exact word the user must type
     local typed
+    flush_stdin
     read -rp "Type '$1' to proceed: " typed
     [[ "$typed" == "$1" ]]
+}
+
+# Ask for the operator account. Re-prompts on bad input instead of dying — a
+# typo (or a stale buffered Enter) must never abort an install that already
+# formatted a partition. Sets globals USERNAME and PW.
+ask_username() {
+    flush_stdin
+    while :; do
+        read -rp "Username for the operator account (lowercase, e.g. 'outlaw'): " USERNAME
+        [[ "$USERNAME" =~ ^[a-z_][a-z0-9_-]*$ ]] && return 0
+        ylw "Invalid username — use lowercase letters/digits/'-'/'_', starting with a letter. Try again."
+    done
+}
+
+ask_password() {
+    local pw2
+    flush_stdin
+    while :; do
+        read -rsp "Password for $USERNAME (also used for sudo): " PW; echo
+        read -rsp "Confirm password: " pw2; echo
+        [[ "$PW" == "$pw2" && -n "$PW" ]] && return 0
+        red "Passwords did not match (or were empty). Try again."
+    done
 }
 
 # ---------------------------------------------------------------------------
@@ -192,8 +230,8 @@ prepare_common() {
         mount "$ESP" "$TARGET/boot/efi" || die "Could not mount ESP."
     fi
     echo
-    read -rp "Username for the operator account: " USERNAME
-    [[ "$USERNAME" =~ ^[a-z_][a-z0-9_-]*$ ]] || die "Invalid username."
+    ask_username
+    ask_password
 }
 
 install_into_partition() {
@@ -254,8 +292,8 @@ install_wipe_disk() {
         mkdir -p "$TARGET/boot/efi"
         ESP="$p1"
         mount "$ESP" "$TARGET/boot/efi"
-        read -rp "Username for the operator account: " USERNAME
-        [[ "$USERNAME" =~ ^[a-z_][a-z0-9_-]*$ ]] || die "Invalid username."
+        ask_username
+        ask_password
         pacstrap_and_configure "$p2"
     else
         sgdisk --zap-all "$disk" 2>/dev/null || true
@@ -267,8 +305,8 @@ install_wipe_disk() {
         mkfs.ext4 -F "$p1"
         mount "$p1" "$TARGET"
         ESP=""
-        read -rp "Username for the operator account: " USERNAME
-        [[ "$USERNAME" =~ ^[a-z_][a-z0-9_-]*$ ]] || die "Invalid username."
+        ask_username
+        ask_password
         BIOS_DISK="$disk"
         pacstrap_and_configure "$p1"
     fi
@@ -321,11 +359,15 @@ install_free_space() {
     grn "Largest free region: about ${free_gib} GiB."
     echo
     local want_gib
-    read -rp "How many GiB for Outlaw? [Enter = all ${free_gib}] " want_gib
-    [[ -z "$want_gib" ]] && want_gib="$free_gib"
-    [[ "$want_gib" =~ ^[0-9]+$ ]] || die "Enter a whole number of GiB."
-    (( want_gib >= 8 ))         || die "Outlaw needs at least 8 GiB."
-    (( want_gib <= free_gib ))  || die "Only ${free_gib} GiB is free."
+    flush_stdin
+    while :; do
+        read -rp "How many GiB for Outlaw? [Enter = all ${free_gib}] " want_gib
+        [[ -z "$want_gib" ]] && want_gib="$free_gib"
+        if [[ ! "$want_gib" =~ ^[0-9]+$ ]]; then ylw "Enter a whole number of GiB."; continue; fi
+        if (( want_gib < 8 ));        then ylw "Outlaw needs at least 8 GiB.";   continue; fi
+        if (( want_gib > free_gib )); then ylw "Only ${free_gib} GiB is free."; continue; fi
+        break
+    done
 
     local start_mib="$best_start_mib"
     local end_mib=$(( start_mib + want_gib * 1024 ))
@@ -387,8 +429,8 @@ install_free_space() {
         ESP=""
         BIOS_DISK="$disk"
     fi
-    read -rp "Username for the operator account: " USERNAME
-    [[ "$USERNAME" =~ ^[a-z_][a-z0-9_-]*$ ]] || die "Invalid username."
+    ask_username
+    ask_password
     pacstrap_and_configure "$newpart"
 }
 
@@ -429,6 +471,11 @@ prepare_network_and_mirrors() {
 pacstrap_and_configure() {
     local rootdev="$1"
     prepare_network_and_mirrors
+    echo
+    grn "All questions are done — the install now runs UNATTENDED."
+    echo "Downloading + installing takes roughly 10–40 minutes depending on your"
+    echo "connection. No input is needed (you don't have to press anything)."
+    echo
     grn "Installing base system (this can take a while)…"
     if ! pacstrap -K "$TARGET" "${PKGS[@]}"; then
         red "pacstrap failed — the base system did not install."
@@ -498,14 +545,8 @@ pacstrap_and_configure() {
         cp -rT /etc/skel "$TARGET/etc/skel" 2>/dev/null || true
     fi
 
-    # Ask for the password here so it is passed into the chroot securely.
-    local pw1 pw2
-    while :; do
-        read -rsp "Password for $USERNAME (and disk): " pw1; echo
-        read -rsp "Confirm password: " pw2; echo
-        [[ "$pw1" == "$pw2" && -n "$pw1" ]] && break
-        red "Passwords did not match (or were empty). Try again."
-    done
+    # Credentials were collected up-front (ask_username/ask_password) so the
+    # long pacstrap above could run unattended; PW is consumed below.
 
     # For BIOS, GRUB is written to the parent disk's MBR (never a partition).
     local BOOT_TARGET="${BIOS_DISK:-}"
@@ -595,14 +636,23 @@ CHROOT
     rm -f "$TARGET/root/outlaw-chroot.sh"
 
     # Set passwords via stdin so they are never written to a file or argv.
-    printf '%s:%s\n' "$USERNAME" "$pw1" | arch-chroot "$TARGET" chpasswd
-    printf 'root:%s\n' "$pw1"           | arch-chroot "$TARGET" chpasswd
-    unset pw1 pw2
+    printf '%s:%s\n' "$USERNAME" "$PW" | arch-chroot "$TARGET" chpasswd
+    printf 'root:%s\n' "$PW"           | arch-chroot "$TARGET" chpasswd
+    unset PW
 
     echo
+    hr
     grn "✅ Outlaw OS installed successfully."
-    echo "Remove the USB and reboot. Your other operating systems remain in the boot menu."
-    echo "Switch between them any time with the HOTSWAP button or 'outlaw-hotswap'."
+    hr
+    echo "Next steps:"
+    echo "  1. Remove the USB / detach the ISO."
+    echo "  2. Reboot — pick 'Outlaw OS' in the boot menu (your other operating"
+    echo "     systems are still there too)."
+    echo "  3. On first boot, the setup wizard offers Steam / Firefox / Godot."
+    echo "Switch OSes any time with the HOTSWAP button or 'outlaw-hotswap'."
+    echo
+    flush_stdin
+    read -rp "Press Enter to continue…" _
 }
 
 # ---------------------------------------------------------------------------
@@ -663,5 +713,5 @@ while :; do
         0) systemctl reboot ;;
         *) ;;
     esac
-    echo; read -rp "Press Enter to return to the menu…" _
+    echo; flush_stdin; read -rp "Press Enter to return to the menu…" _
 done

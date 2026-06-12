@@ -31,8 +31,13 @@ fi
 # Wrap the command so the window does NOT vanish the instant it exits — errors
 # and "install complete" must stay readable, and with no window manager there's
 # no way to reopen a terminal that closed. The user presses Enter to close.
+# Before that final read we DRAIN any buffered keystrokes (Enters pressed while
+# the command was busy) — otherwise a stale Enter dismisses the window the
+# instant it appears and the user never sees why it ended. (`read -t 0` is a
+# bash-ism; on Arch /bin/sh IS bash, and the 2>/dev/null guard makes any other
+# sh skip the drain harmlessly.)
 CMD="$*"
-HOLD="$CMD; __rc=\$?; echo; echo '----------------------------------------'; echo \"[Outlaw] finished (exit \$__rc). Press Enter to close.\"; read __dummy"
+HOLD="$CMD; __rc=\$?; echo; echo '----------------------------------------'; echo \"[Outlaw] finished (exit \$__rc). Press Enter to close.\"; while read -r -t 0 __j 2>/dev/null; do read -r __j || break; done; read __dummy"
 
 # Launch the wrapper, titled, in the first available terminal. Running it via
 # `sh -c` uniformly sidesteps per-emulator quoting differences;
