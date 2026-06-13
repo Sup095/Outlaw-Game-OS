@@ -224,7 +224,14 @@ function fitToScreen(winRef) {
         try {
             const { width, height } = screen.getPrimaryDisplay().size;
             if (winRef.isFullScreen()) winRef.setFullScreen(false);
-            winRef.setBounds({ x: 0, y: 0, width, height });
+            // Idempotent: only move the window if it isn't already filling the
+            // screen. Calling setBounds needlessly (e.g. on every spurious
+            // display-metrics event) can dismiss a just-opened native popup such
+            // as a <select> dropdown.
+            const b = winRef.getBounds();
+            if (b.x !== 0 || b.y !== 0 || b.width !== width || b.height !== height) {
+                winRef.setBounds({ x: 0, y: 0, width, height });
+            }
         } catch { /* window may be gone */ }
     };
     winRef.once('ready-to-show', apply);
@@ -1143,28 +1150,24 @@ function registerIpc() {
         if (!IS_LINUX) return { ok: false, error: 'Install runs on Outlaw OS.' };
         const app = APP_CATALOG.find((a) => a.id === id);
         if (!app) return { ok: false, error: 'Unknown app id.' };
-        // pkexec prompts for the user's password via polkit; --needed avoids
-        // re-installing already-current packages; --noconfirm skips y/n prompts.
-        // -Sy (sync + install) refreshes the package databases first — REQUIRED
-        // on the live ISO and a fresh install, where the sync DBs are absent
-        // ("error: database file for 'core' does not exist (use '-Sy')"). It's
-        // the partial-upgrade pattern, but acceptable for installing a single
-        // curated leaf package; the system updater does full -Syu upgrades.
+        // Route through the outlaw-pkg-install helper (via pkexec). It enables
+        // [multilib] on demand for Steam / lib32 packages, force-refreshes the
+        // databases (fixes "failed to synchronize databases"), inits the keyring
+        // if empty, then installs. `extra` packages install with the primary;
+        // install-state is still tracked on the primary `pkg`.
         // 20-minute timeout — large multilib packages on slow connections.
-        // Some catalog entries (e.g. Steam) pull a small set of companion
-        // packages via `extra`; install-state is still tracked on the primary.
         const pkgList = [app.pkg, ...(app.extra || [])].join(' ');
-        const cmd = `pkexec pacman -Sy --needed --noconfirm ${pkgList}`;
+        const cmd = `pkexec outlaw-pkg-install ${pkgList}`;
         const r = await runShell(cmd, { timeout: 1000 * 60 * 20 });
         const tail = (r.stdout || r.stderr || `exit ${r.code}`).slice(-3000);
         if (r.code !== 0) {
             // Surface a useful hint for the most common failure modes.
-            const hint = /database file for|use ['"]?-Sy/i.test(tail)
-                ? '\n\nHint: the package database could not be refreshed. Check your network connection and try again.'
-                : /not found in AUR|target not found/i.test(tail)
-                    ? '\n\nHint: that package name was not found. Your mirror list or database may need attention.'
-                    : /not authorized|authentication agent|polkit/i.test(tail)
-                        ? '\n\nHint: no authorization agent answered. (On the installed system this is handled automatically.)'
+            const hint = /could not synchronize|failed to synchronize|database file for|use ['"]?-Sy/i.test(tail)
+                ? '\n\nHint: couldn\'t reach the package servers. Open Settings → Network & Wi-Fi, get online, then try again.'
+                : /target not found|could not find/i.test(tail)
+                    ? '\n\nHint: a package wasn\'t found. If this is Steam, the multilib repo is needed — the installer enables it automatically, so just try once more.'
+                    : /not authorized|authentication agent|polkit|dismissed/i.test(tail)
+                        ? '\n\nHint: the password prompt was cancelled or no authorization agent answered.'
                         : '';
             return { ok: false, error: tail + hint };
         }

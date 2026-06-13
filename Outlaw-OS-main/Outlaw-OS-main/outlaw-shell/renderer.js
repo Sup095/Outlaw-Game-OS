@@ -985,6 +985,68 @@ async function tuneRefreshStatus() {
     } catch { el.textContent = ''; }
 }
 
+// Custom dropdowns. Native <select> popups are a separate OS-level window that
+// needs a window manager to stay open; in Outlaw's no-WM session they open and
+// vanish instantly. We hide each <select> and drive it from an inline,
+// DOM-only dropdown (no OS popup) — and dispatch a real 'change' event so all
+// the existing select handlers keep working unchanged.
+function enhanceSelects(root) {
+    (root || document).querySelectorAll('select:not([data-enhanced])').forEach((sel) => {
+        sel.dataset.enhanced = '1';
+        sel.style.display = 'none';
+        const wrap = document.createElement('div');
+        wrap.className = 'cselect';
+        wrap.style.minWidth = sel.style.minWidth || '160px';
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'cselect-btn';
+        const list = document.createElement('div');
+        list.className = 'cselect-list';
+        list.hidden = true;
+
+        const sync = () => {
+            const o = sel.options[sel.selectedIndex];
+            btn.textContent = o ? o.textContent : '';
+            list.querySelectorAll('.cselect-opt').forEach((it) =>
+                it.classList.toggle('active', it.dataset.value === sel.value));
+        };
+        [...sel.options].forEach((o) => {
+            const item = document.createElement('div');
+            item.className = 'cselect-opt';
+            item.textContent = o.textContent;
+            item.dataset.value = o.value;
+            item.addEventListener('click', (e) => {
+                e.stopPropagation();
+                sel.value = o.value;
+                sel.dispatchEvent(new Event('change', { bubbles: true }));
+                sync();
+                list.hidden = true; wrap.classList.remove('open');
+            });
+            list.appendChild(item);
+        });
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const willOpen = list.hidden;
+            document.querySelectorAll('.cselect.open').forEach((w) => {
+                if (w !== wrap) { w.classList.remove('open'); w.querySelector('.cselect-list').hidden = true; }
+            });
+            list.hidden = !willOpen;
+            wrap.classList.toggle('open', willOpen);
+            if (willOpen) sync();
+        });
+        sel.after(wrap);
+        wrap.append(btn, list);
+        sel.addEventListener('change', sync);  // keep label in sync with code changes
+        sync();
+    });
+}
+// Any click outside an open dropdown closes it.
+document.addEventListener('click', () => {
+    document.querySelectorAll('.cselect.open').forEach((w) => {
+        w.classList.remove('open'); w.querySelector('.cselect-list').hidden = true;
+    });
+});
+
 // P1 — apply a visual theme by toggling a body class. The actual palette lives
 // in styles.css (body.theme-gold { --term: …; }), so this is a zero-cost swap
 // of CSS custom properties; nothing re-renders beyond a repaint.
@@ -1474,6 +1536,7 @@ function wire() {
 window.addEventListener('DOMContentLoaded', async () => {
     wire();
     await loadSettings();
+    enhanceSelects();   // replace native <select> popups (broken with no WM)
     await renderTiles();
     await loadSysInfo();
     // Probe whether a previous shell version exists on disk so the Rollback
