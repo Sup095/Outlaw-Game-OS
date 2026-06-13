@@ -24,11 +24,32 @@
 //     would conflict otherwise, and serial progress is easier to read.
 // ============================================================================
 
-const { app, BrowserWindow, ipcMain } = require('electron');
+const { app, BrowserWindow, ipcMain, screen } = require('electron');
 const path = require('node:path');
 const fs = require('node:fs');
 const os = require('node:os');
-const { spawn } = require('node:child_process');
+const { spawn, execFile } = require('node:child_process');
+
+// nmcli helper + terse-line parser (escaped colons come through as '\:').
+function nmrun(args, timeoutMs = 30000) {
+    return new Promise((resolve) => {
+        execFile('nmcli', args, { timeout: timeoutMs, maxBuffer: 4 * 1024 * 1024 },
+            (err, stdout, stderr) => resolve({ err, stdout: stdout || '', stderr: stderr || '' }));
+    });
+}
+// Split an nmcli terse line on UNescaped colons. '\:' is a literal colon inside
+// a field (e.g. an SSID containing a colon); spaces in SSIDs are preserved.
+function splitTerse(line) {
+    const out = []; let cur = '';
+    for (let i = 0; i < line.length; i++) {
+        const c = line[i];
+        if (c === '\\' && line[i + 1] === ':') { cur += ':'; i++; }
+        else if (c === ':') { out.push(cur); cur = ''; }
+        else cur += c;
+    }
+    out.push(cur);
+    return out;
+}
 
 // ----------------------------------------------------------------------------
 // Bundle definitions — the SINGLE source of truth shown in index.html.
@@ -85,12 +106,15 @@ const DONE_MARKER = path.join(os.homedir(), '.outlaw-firstboot-done');
 let mainWindow = null;
 
 function createWindow() {
+    // Fill the screen (the old fixed 760x620 window showed as a small box in the
+    // centre on real hardware). No window manager in the Outlaw session, so size
+    // the frameless window to the display directly and re-fit on resize.
+    const onLinux = process.platform === 'linux';
+    const disp = screen.getPrimaryDisplay().size;
     mainWindow = new BrowserWindow({
-        width: 760,
-        height: 620,
-        resizable: false,
-        // Frameless-ish — keep a normal title bar for accessibility, but
-        // remove all menu chrome that might let the user wander away.
+        ...(onLinux
+            ? { x: 0, y: 0, width: disp.width, height: disp.height, frame: false }
+            : { width: 900, height: 700 }),
         autoHideMenuBar: true,
         title: 'Outlaw OS — Setup',
         backgroundColor: '#0d0f12',
@@ -102,6 +126,17 @@ function createWindow() {
         },
     });
 
+    if (onLinux) {
+        const fit = () => {
+            try {
+                const { width, height } = screen.getPrimaryDisplay().size;
+                if (mainWindow.isFullScreen()) mainWindow.setFullScreen(false);
+                mainWindow.setBounds({ x: 0, y: 0, width, height });
+            } catch {}
+        };
+        mainWindow.once('ready-to-show', fit);
+        screen.on('display-metrics-changed', fit);
+    }
     mainWindow.loadFile(path.join(__dirname, 'index.html'));
     mainWindow.setMenu(null);
 }
@@ -126,6 +161,48 @@ app.on('window-all-closed', () => {
 
 // bundles:list — return the BUNDLES array (renderer renders the checkboxes).
 ipcMain.handle('bundles:list', () => BUNDLES);
+
+// --- Network / Wi-Fi -------------------------------------------------------
+// The bundles install over the network, so first boot must be able to connect
+// (a fresh install often has no connection yet). Same nmcli surface as the
+// desktop shell, scoped to this wizard.
+ipcMain.handle('net:online', async () => {
+    const r = await nmrun(['networking', 'connectivity', 'check'], 10000);
+    return { online: (r.stdout || '').trim() === 'full' };
+});
+
+ipcMain.handle('net:wifi-list', async () => {
+    await nmrun(['radio', 'wifi', 'on'], 8000);
+    const r = await nmrun(['-t', '-f', 'IN-USE,SSID,SIGNAL,SECURITY', 'dev', 'wifi', 'list', '--rescan', 'yes'], 30000);
+    if (r.err) return { ok: false, networks: [], error: 'Wi-Fi scan failed (no Wi-Fi adapter?).' };
+    const seen = new Set();
+    const networks = [];
+    for (const line of r.stdout.split('\n')) {
+        if (!line.trim()) continue;
+        const t = splitTerse(line);
+        const ssid = t[1];
+        if (!ssid || seen.has(ssid)) continue;
+        seen.add(ssid);
+        networks.push({ inUse: t[0] === '*', ssid, signal: parseInt(t[2], 10) || 0, security: (t[3] || '').trim() });
+    }
+    networks.sort((a, b) => (b.inUse - a.inUse) || (b.signal - a.signal));
+    return { ok: true, networks };
+});
+
+ipcMain.handle('net:wifi-connect', async (_e, payload) => {
+    const ssid = String((payload && payload.ssid) || '');
+    const password = String((payload && payload.password) || '');
+    if (!ssid || ssid.length > 64) return { ok: false, error: 'Bad network name.' };
+    const args = ['dev', 'wifi', 'connect', ssid];
+    if (password) args.push('password', password);
+    const r = await nmrun(args, 45000);
+    if (r.err) {
+        let msg = (r.stderr || r.stdout || r.err.message).trim().slice(0, 300);
+        if (/secrets were required|802-11-wireless-security|invalid/i.test(msg)) msg = 'Wrong password (or the network rejected it). Try again.';
+        return { ok: false, error: msg };
+    }
+    return { ok: true };
+});
 
 // bundles:install — install one bundle, streaming output. `bundleId` is the
 // `id` field of one BUNDLES entry. Returns { ok, exitCode, errorMessage }.

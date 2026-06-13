@@ -10,7 +10,7 @@
 // Degrades gracefully on non-Linux hosts so the UI can be previewed anywhere.
 // ============================================================================
 
-const { app, BrowserWindow, ipcMain, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, shell, screen } = require('electron');
 const { spawn, execFile } = require('child_process');
 const path = require('path');
 const fs = require('fs');
@@ -155,6 +155,14 @@ const APP_REGISTRY = {
 // it can never name an arbitrary package — the catalog IS the allowlist.
 // ---------------------------------------------------------------------------
 const APP_CATALOG = [
+    // ----- Essentials (the first-boot bundles, also installable here any time
+    // if you skipped them on first login). `extra` packages install alongside
+    // the primary `pkg`; install-state is tracked on `pkg`. -----
+    { id: 'steam',       pkg: 'steam',             category: 'Essentials',   label: 'Steam + gaming stack', description: 'Steam client plus GameMode, Gamescope, MangoHud and the Vulkan / 32-bit gaming libraries.', bin: 'steam',
+      extra: ['gamemode', 'lib32-gamemode', 'gamescope', 'mangohud', 'lib32-mangohud', 'vulkan-icd-loader', 'lib32-vulkan-icd-loader', 'vulkan-tools', 'lib32-mesa'] },
+    { id: 'firefox',     pkg: 'firefox',           category: 'Essentials',   label: 'Firefox',         description: 'The Firefox web browser.',                                        bin: 'firefox' },
+    { id: 'godot',       pkg: 'godot',             category: 'Essentials',   label: 'Godot Engine',    description: 'The Godot game engine (GDScript) — what Outlaw CodeMaker builds games in.', bin: 'godot' },
+
     // ----- Game Dev -----
     { id: 'blender',     pkg: 'blender',           category: 'Game Dev',     label: 'Blender',         description: '3D modeling, rigging, animation, and sculpting.',                 bin: 'blender' },
     { id: 'gimp',        pkg: 'gimp',              category: 'Game Dev',     label: 'GIMP',            description: 'Raster image editor for sprites and textures.',                   bin: 'gimp' },
@@ -206,6 +214,23 @@ async function resolveBinary(entry) {
         if (await which(c)) return c;
     }
     return null;
+}
+
+// Pin a frameless window to the full primary display and keep it there when the
+// display resizes. Works without a window manager (where `fullscreen: true` is
+// a no-op). Forcing fullscreen OFF first guarantees setBounds isn't ignored.
+function fitToScreen(winRef) {
+    const apply = () => {
+        try {
+            const { width, height } = screen.getPrimaryDisplay().size;
+            if (winRef.isFullScreen()) winRef.setFullScreen(false);
+            winRef.setBounds({ x: 0, y: 0, width, height });
+        } catch { /* window may be gone */ }
+    };
+    winRef.once('ready-to-show', apply);
+    const onChange = () => apply();
+    screen.on('display-metrics-changed', onChange);
+    winRef.on('closed', () => { try { screen.removeListener('display-metrics-changed', onChange); } catch {} });
 }
 
 function launchDetached(bin, args = [], opts = {}) {
@@ -1126,7 +1151,10 @@ function registerIpc() {
         // the partial-upgrade pattern, but acceptable for installing a single
         // curated leaf package; the system updater does full -Syu upgrades.
         // 20-minute timeout — large multilib packages on slow connections.
-        const cmd = `pkexec pacman -Sy --needed --noconfirm ${app.pkg}`;
+        // Some catalog entries (e.g. Steam) pull a small set of companion
+        // packages via `extra`; install-state is still tracked on the primary.
+        const pkgList = [app.pkg, ...(app.extra || [])].join(' ');
+        const cmd = `pkexec pacman -Sy --needed --noconfirm ${pkgList}`;
         const r = await runShell(cmd, { timeout: 1000 * 60 * 20 });
         const tail = (r.stdout || r.stderr || `exit ${r.code}`).slice(-3000);
         if (r.code !== 0) {
@@ -1557,10 +1585,18 @@ function registerIpc() {
 // Window
 // ---------------------------------------------------------------------------
 function createWindow() {
+    // Fill the WHOLE screen. The Outlaw session runs with no window manager, so
+    // a plain `fullscreen: true` request is often ignored and the window opens
+    // as a small box in the centre (the symptom users hit on real hardware).
+    // Sizing the frameless window to the primary display's exact resolution
+    // fills the screen WITH or WITHOUT a WM, and fitToScreen() re-applies it on
+    // any display-size change (e.g. a VM window being resized). Off-Linux (dev
+    // preview on Windows/macOS) we keep a normal resizable window.
+    const disp = screen.getPrimaryDisplay().size;
     mainWindow = new BrowserWindow({
-        fullscreen: true,
-        frame: false,
-        kiosk: IS_LINUX,            // kiosk on the real OS; windowed for desktop preview
+        ...(IS_LINUX
+            ? { x: 0, y: 0, width: disp.width, height: disp.height, frame: false }
+            : { width: 1280, height: 820 }),
         backgroundColor: '#050505',
         webPreferences: {
             preload: path.join(__dirname, 'preload.js'),
@@ -1571,6 +1607,7 @@ function createWindow() {
         },
     });
     mainWindow.setMenu(null);
+    if (IS_LINUX) fitToScreen(mainWindow);
     mainWindow.loadFile('index.html');
 
     // Open all external links in the system browser, never inside the shell.

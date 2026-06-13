@@ -583,6 +583,13 @@ ExecStart=-/usr/bin/agetty --autologin $USERNAME --noclear %I 38400 linux
 GETTY
 
 systemctl enable NetworkManager apparmor
+
+# Enable the multilib repo so Steam and the 32-bit gaming libraries can install
+# (the first-boot wizard's Steam bundle + the Apps panel both need it). Arch
+# ships /etc/pacman.conf with [multilib] commented out — uncomment the header
+# and its Include line.
+sed -i '/^#\[multilib\]/{s/^#//; n; s/^#//}' /etc/pacman.conf
+
 # AI is provided by LM Studio (a user-installed desktop app, not a systemd
 # service). The shell talks to it on 127.0.0.1:1234 only when the user toggles
 # the AI on. Nothing to enable/disable here.

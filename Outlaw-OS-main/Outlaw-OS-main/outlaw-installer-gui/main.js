@@ -14,7 +14,7 @@
 // system it refuses with a friendly message instead of half-working.
 // ============================================================================
 
-const { app, BrowserWindow, ipcMain } = require('electron');
+const { app, BrowserWindow, ipcMain, screen } = require('electron');
 const path = require('node:path');
 const { spawn, execFile } = require('node:child_process');
 
@@ -24,10 +24,24 @@ const IS_LINUX = process.platform === 'linux';
 let win = null;
 let child = null; // the running install process (only one ever)
 
+// Fill the whole screen even with no window manager (a plain `fullscreen: true`
+// is ignored there and opens a small centred box). Re-fit on display resize.
+function fitToScreen(w) {
+    const apply = () => {
+        try {
+            const { width, height } = screen.getPrimaryDisplay().size;
+            if (w.isFullScreen()) w.setFullScreen(false);
+            w.setBounds({ x: 0, y: 0, width, height });
+        } catch {}
+    };
+    w.once('ready-to-show', apply);
+    screen.on('display-metrics-changed', apply);
+}
+
 function createWindow() {
+    const disp = screen.getPrimaryDisplay().size;
     win = new BrowserWindow({
-        fullscreen: true,
-        frame: false,
+        x: 0, y: 0, width: disp.width, height: disp.height, frame: false,
         backgroundColor: '#050705',
         webPreferences: {
             preload: path.join(__dirname, 'preload.js'),
@@ -38,6 +52,7 @@ function createWindow() {
         },
     });
     win.setMenu(null);
+    fitToScreen(win);
     win.loadFile('index.html');
 }
 

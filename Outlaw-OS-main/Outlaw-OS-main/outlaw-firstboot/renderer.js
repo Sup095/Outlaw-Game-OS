@@ -30,6 +30,60 @@
         }
     }
 
+    // ----- Network setup (the bundles download from the internet) ----------
+    const netWarn = document.getElementById('net-warn');
+    const wifiArea = document.getElementById('wifi-area');
+    const escHtml = (s) => String(s || '').replace(/[&<>"']/g,
+        (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+    async function checkNet() {
+        try { const r = await window.firstboot.netOnline(); netWarn.hidden = !!(r && r.online); }
+        catch { netWarn.hidden = false; }
+    }
+    async function scanWifi() {
+        wifiArea.hidden = false;
+        wifiArea.innerHTML = '<div class="dim">Scanning for networks…</div>';
+        let r; try { r = await window.firstboot.wifiList(); } catch (e) { r = { ok: false, error: e.message }; }
+        if (!r.ok || !r.networks || !r.networks.length) {
+            wifiArea.innerHTML = `<div class="dim">${escHtml(r.error || 'No Wi-Fi networks found. A network cable works automatically.')}</div>`;
+            return;
+        }
+        wifiArea.innerHTML = '';
+        for (const n of r.networks) {
+            const bars = n.signal >= 70 ? '▂▄▆█' : n.signal >= 45 ? '▂▄▆' : n.signal >= 20 ? '▂▄' : '▂';
+            const row = document.createElement('div');
+            row.className = 'wifi-row';
+            row.innerHTML =
+                `<span class="wifi-name">${n.inUse ? '✔ ' : ''}${escHtml(n.ssid)}</span>` +
+                `<span class="wifi-meta">${n.security ? '🔒' : 'open'} ${bars}</span>` +
+                `<button class="wifi-join btn-secondary" ${n.inUse ? 'disabled' : ''}>${n.inUse ? 'Connected' : 'Connect'}</button>`;
+            row.querySelector('.wifi-join').addEventListener('click', () => {
+                wifiArea.querySelectorAll('.wifi-pwform').forEach((f) => f.remove());
+                if (!n.security) { joinWifi(n.ssid, '', row); return; }
+                const form = document.createElement('div');
+                form.className = 'wifi-pwform';
+                form.innerHTML = `<input type="password" placeholder="Password for ${escHtml(n.ssid)}"><button class="btn-primary">Join</button>`;
+                row.after(form);
+                const input = form.querySelector('input');
+                const go = () => { if (input.value) joinWifi(n.ssid, input.value, row, form); };
+                form.querySelector('button').addEventListener('click', go);
+                input.addEventListener('keydown', (e) => { if (e.key === 'Enter') go(); });
+                input.focus();
+            });
+            wifiArea.appendChild(row);
+        }
+    }
+    async function joinWifi(ssid, password, row, form) {
+        const btn = row.querySelector('.wifi-join');
+        btn.disabled = true; btn.textContent = 'Connecting…';
+        let r; try { r = await window.firstboot.wifiConnect(ssid, password); } catch (e) { r = { ok: false, error: e.message }; }
+        if (r.ok) { if (form) form.remove(); btn.textContent = 'Connected'; await checkNet(); }
+        else { btn.disabled = false; btn.textContent = 'Connect'; if (form) { const i = form.querySelector('input'); i.value = ''; i.placeholder = (r.error || 'Failed').slice(0, 80); i.focus(); } }
+    }
+    document.getElementById('wifi-show').addEventListener('click', scanWifi);
+    document.getElementById('net-retry').addEventListener('click', checkNet);
+    checkNet();
+
     // ----- Load bundle list -----------------------------------------------
     let bundles = [];
     try {

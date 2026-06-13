@@ -143,6 +143,7 @@ async function renderTiles() {
 // Apps panel (on-demand installer over the curated catalog)
 // ---------------------------------------------------------------------------
 const CATEGORY_ICONS = {
+    'Essentials':   '⭐',
     'Game Dev':     '🛠',
     'Gaming':       '🎮',
     'Browsers':     '🌐',
@@ -875,6 +876,17 @@ function shareStabilityFeedback() {
 
 // --- P5: per-machine hardware tuning ----------------------------------------
 let _tuneRec = null;
+// Once BOTH the hardware scan and the stress test have run, apply the best
+// settings automatically (the user asked for this). Fires once per session.
+let _tuneScanned = false, _tuneStressed = false, _autoTuned = false;
+async function maybeAutoTune() {
+    if (_autoTuned || !_tuneScanned || !_tuneStressed || !_tuneRec) return;
+    _autoTuned = true;
+    const st = $('#tune-status');
+    if (st) st.textContent = 'scan + stress complete — applying the best settings for your PC…';
+    toast('Auto-applying the best settings for your hardware…');
+    await tuneApply();
+}
 
 function _fmtMB(mb) {
     if (mb == null || mb < 0) return 'n/a';
@@ -914,6 +926,7 @@ async function tuneScan() {
         out.textContent = _renderTune(p.data, _tuneRec);
         st.textContent = 'scan complete';
         const btn = $('#tune-apply-btn'); if (btn) btn.disabled = !_tuneRec;
+        _tuneScanned = true; maybeAutoTune();
     } catch (e) { st.textContent = ''; out.textContent = 'error: ' + e.message; }
 }
 
@@ -933,6 +946,7 @@ async function tuneStress() {
         L.push('  Thermals     : ' + (d.thermal_ok ? 'OK' : '⚠ HOT (≥95°C) — check cooling'));
         out.textContent = L.join('\n');
         st.textContent = 'stress test done';
+        _tuneStressed = true; maybeAutoTune();
     } catch (e) { st.textContent = ''; out.textContent = 'error: ' + e.message; }
 }
 

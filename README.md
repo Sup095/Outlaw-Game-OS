@@ -31,50 +31,41 @@ Your **first boot goes straight to the Desktop** and runs a quick setup wizard (
 
 ## 🗺 The Road So Far
 
-Outlaw Game OS is built in the open, one phase at a time.
+Outlaw Game OS is built in the open, one phase at a time. Each **completed** roadmap collapses into a single line below; the **current** roadmap stays expanded with every phase, and when it's truly finished it becomes the next numbered release (v2.1).
 
 ```
-Foundations  ▰▰▰▰▰▰▰▰▰▰  done — 3 roadmaps, 25 slices, all shipped
-v2.1 Polish  ▰▰▱▱▱▱▱▱▱    Phase 2 of 9 shipped — Completeness & Polish underway
+Foundations   ▰▰▰▰▰▰▰▰▰▰  done — 4 roadmaps, all shipped & tested
+This cycle    ▰▰▱▱▱▱▱▱▱▱  Completeness & Polish — 2 of 10 shipped, phase 3 underway
 ```
 
 > **Legend:** ✅ shipped & in your hands · 🚧 building now · 🔭 on the horizon
 
-### ✅ Shipped & solid
-
-**🏗 The foundations** — three complete roadmaps, 25 slices, all landed and tested:
+### ✅ Shipped & solid — completed roadmaps
 
 | | Roadmap | What it delivered |
 |---|---|---|
 | 🧩 | **Product** | Merged the two original codebases — Project Picker, New Game wizard, single LM Studio backend, stripped install + Apps panel, boot greeter, Steam pipeline, VRAM saver. |
 | 🛡 | **Reliability** | Auto-snapshots, Steam dry-run, emergency stop, LM Studio reconnect, prompt pre-flight, diagnostic dump, project templates, OS shell rollback. |
 | 🛰 | **System Core** | The sci-fi centerpiece — live telemetry, three-tier diagnostics, scheduled checks, cold-mode dialogue + local TTS, Live AI with tool calls, two-layer VRAM tiering. |
+| ⚙ | **Release & boot hardening** | Automated ISO build + publish on tag, live-ISO welcome card, GParted in the live environment, on-demand AUR install for `steamcmd`, the first-boot setup wizard, a boot crash-guard, and the long boot-anywhere fight (real hardware **and** VM). |
+| 🔄 | **Updates, channels & control** | Package/driver updater · OS self-updater with one-click rollback · **stable / beta** channels · *Works / Broken* community testing · System Core **System Control** panel · CI package preflight · **Tune This PC** (hardware scan + thermal-watched stress test + auto-settings) · **low-VRAM CodeMaker** (spills the model into system RAM, right-sizes the model, caches context to disk). |
 
-**⚙ Release & boot hardening** — automated ISO build + publish on tag, live-ISO welcome card, GParted in the live environment, a polished installer, on-demand AUR install for `steamcmd`, the first-boot setup wizard, and a boot crash-guard.
+### 🚧 Completeness & Polish — current cycle *(the road to v2.1)*
 
-**🔄 Update system, channels & control**
-- **Phase 1 · Updates & channels** — package/driver updater, OS self-updater (in-place swap + one-click rollback), and **stable / beta** release channels.
-- **Phase 2 · Community testing & desktop control** — in-OS *Works / Broken* stability reporting, plus the System Core **System Control** panel.
-- **Phase 3 · Boot anywhere** — the ISO now boots reliably on real hardware *and* inside VirtualBox/QEMU (correct login shell, auto framebuffer + software-GL fallback, self-reporting boot failures), instead of dropping to a black screen.
-- **Phase 4 · Bulletproof builds** — a CI preflight validates every package name against the Arch repos *before* the 20-minute ISO build, so a typo, a renamed package, or one dropped from the repos fails in seconds with a clear message instead of deep inside the build.
-- **Phase 5 · Tune This PC** — a Settings panel that scans your hardware, runs an optional thermal-watched CPU stress test, and applies the best settings for *your* machine: CPU governor, swappiness, zram on low-RAM rigs, dev-friendly file-watcher/mmap limits, and CodeMaker's VRAM default. One click to apply, one to reset.
-- **Phase 6 · Low-VRAM CodeMaker** — the dev agent now runs on modest GPUs. On tight VRAM it recommends (and can apply via LM Studio) a GPU-offload split that **spills the model into system RAM**, suggests a right-sized model, and **caches recall/roadmap context to disk** so the AI keeps its working memory without re-stuffing RAM each turn.
-
-### 🚧 v2.1 — Completeness & Polish
-
-The foundations boot and run; this era makes the desktop feel *finished*. Every phase ships as a beta — and the moment one lands, the **next** moves to *building now*, even before work starts on it.
+The foundations boot and run; this cycle makes the desktop feel *finished* and rock-solid on real hardware. We keep iterating here through the `2.0.x` betas — when it's genuinely complete, this becomes the **v2.1** release. When a phase ships, the next moves to *building now*.
 
 | | Phase | What you get |
 |:--:|:--|:--|
 | ✅ | **1 · Identity** | Optional **Gold Gunmetal** theme — the sci-fi-fortress look that matches Outlaw CodeMaker — switchable anytime in *Settings → Appearance*, on **both** the desktop and the dev tool. New source-available **license**. |
-| ✅ | **2 · Your apps, found** | The Apps page now has an **"On this PC"** view that auto-discovers everything you've installed — `.desktop` apps *and* AppImages you download — so they're one click to launch, no manual refresh. |
-| 🚧 | **3 · Task Manager** | A Windows-style task manager (**End task** / **End process tree**) with live **CPU · RAM · GPU + VRAM** readouts, in the Outlaw look. |
-| 🔭 | **4 · Help + Quickstart** | A **skippable first-boot tour** showing where everything is, plus a searchable **Help database** that explains the whole OS and how to troubleshoot it. |
-| 🔭 | **5 · Reviewer that works** | One-click *"it worked / it broke"* reporting per version, so testing actually feeds back to the maintainer (and the stable channel). |
-| 🔭 | **6 · Boot sequence + pre-flight** | A cinematic boot every time: real system boot data scrolling on a green, CRT-scanline screen, with the holographic Outlaw sigil flickering to life (~3s) in the middle — skippable — then optionally scan your PC for the best settings before you even enter the OS. |
-| 🔭 | **7 · Session driver profiles** | Choose the driver/package stack per session — **dev-tuned** vs **gaming/desktop** — applied safely *after* boot, never touching the bootloader. |
-| 🔭 | **8 · Windowed desktop** | Real windows — title bars with **minimize / maximize / close**, drag & resize, and a **taskbar** to find minimized windows — plus filling the screen at its native resolution. |
-| 🔭 | **9 · "Broken" mode** | A third theme where the system looks like it's *barely holding together* — glitches, scanlines, the System Core throwing (fake) errors. It's also the live-demo vibe: a broken machine you repair by installing. *(Basic live-mode feature-locks already shipped.)* |
+| ✅ | **2 · Your apps, found** | The Apps page has an **"On this PC"** view that auto-discovers everything you've installed — `.desktop` apps *and* AppImages you download — one click to launch, no manual refresh. |
+| 🚧 | **3 · Stabilization — make it fully functional** | The real-hardware shakedown: a **point-and-click installer** that shrinks Windows for you automatically, **Wi-Fi everywhere** (installer, first boot, Settings), the desktop **filling the whole screen**, working **diagnostics + stress test that auto-apply the best settings**, Steam / Firefox / Godot installable any time from **Apps**, and a steady stream of fixes so *everything works end-to-end* before new features land. |
+| 🔭 | **4 · Task Manager** | A Windows-style task manager (**End task** / **End process tree**) with live **CPU · RAM · GPU + VRAM** readouts, in the Outlaw look. |
+| 🔭 | **5 · Help + Quickstart** | A **skippable first-boot tour** showing where everything is, plus a searchable **Help database** that explains the whole OS and how to troubleshoot it. |
+| 🔭 | **6 · Reviewer that works** | One-click *"it worked / it broke"* reporting per version, so testing actually feeds back to the maintainer (and the stable channel). |
+| 🔭 | **7 · Boot sequence + pre-flight** | A cinematic boot every time: real system boot data scrolling on a green, CRT-scanline screen, with the holographic Outlaw sigil flickering to life (~3s) in the middle — skippable — then optionally scan your PC for the best settings before you even enter the OS. |
+| 🔭 | **8 · Session driver profiles** | Choose the driver/package stack per session — **dev-tuned** vs **gaming/desktop** — applied safely *after* boot, never touching the bootloader. |
+| 🔭 | **9 · Windowed desktop** | Real windows — title bars with **minimize / maximize / close**, drag & resize, and a **taskbar** to find minimized windows. |
+| 🔭 | **10 · "Broken" mode** | A third theme where the system looks like it's *barely holding together* — glitches, scanlines, the System Core throwing (fake) errors. It's also the live-demo vibe: a broken machine you repair by installing. *(Basic live-mode feature-locks already shipped.)* |
 
 ### 🌌 Beyond
 
@@ -330,5 +321,3 @@ Bundled third-party components (the Linux kernel, Arch packages, Electron, Steam
 ## 🙏 Acknowledgements
 
 Built on Arch Linux + Electron + PyQt6 + LM Studio + Godot Engine + Steam.
-
-The retro gold-on-gunmetal aesthetic and the "sci-fi fortress AI" voice of the System Core are deliberate — Outlaw OS is meant to feel like a centuries-old machine that has seen everything and is mildly amused by you.

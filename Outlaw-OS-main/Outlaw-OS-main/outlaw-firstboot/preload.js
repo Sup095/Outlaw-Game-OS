@@ -31,4 +31,9 @@ contextBridge.exposeInMainWorld('firstboot', {
 
     /** Mark wizard complete and quit Electron. */
     finish: () => ipcRenderer.invoke('bundles:done'),
+
+    /** Network — bundles install over the internet, so let first boot connect. */
+    netOnline:   () => ipcRenderer.invoke('net:online'),
+    wifiList:    () => ipcRenderer.invoke('net:wifi-list'),
+    wifiConnect: (ssid, password) => ipcRenderer.invoke('net:wifi-connect', { ssid, password }),
 });

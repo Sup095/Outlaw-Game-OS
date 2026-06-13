@@ -20,6 +20,16 @@
                 </p>
             </header>
 
+            <div id="net-warn" class="net-warn" hidden>
+                ⚠ <strong>No internet connection.</strong> These bundles download
+                from the internet. Plug in a network cable (automatic) or join Wi-Fi:
+                <div class="net-btns">
+                    <button id="wifi-show" class="btn-secondary">📶 Show Wi-Fi networks</button>
+                    <button id="net-retry" class="btn-secondary">⟳ Check again</button>
+                </div>
+                <div id="wifi-area" class="wifi-list" hidden></div>
+            </div>
+
             <ul id="bundle-list" class="bundles"></ul>
 
             <footer class="actions">
