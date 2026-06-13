@@ -89,6 +89,13 @@ rofi
 thunar
 xfce4-terminal
 electron
+# openbox: a tiny window manager so launched app windows get real title bars
+# (minimize / maximize / close) + drag/resize. tint2: a taskbar showing every
+# window, click to restore minimized ones. The Outlaw shell stays the frameless
+# full-screen backdrop; apps float above it. Both are guarded in .xinitrc — if
+# they're absent the session falls back to the old no-WM kiosk.
+openbox
+tint2
 ttf-jetbrains-mono
 noto-fonts
 

@@ -50,6 +50,21 @@ for _agent in \
     if [ -x "$_agent" ]; then "$_agent" >/dev/null 2>&1 & break; fi
 done
 
+# Window manager + taskbar. Gives launched app windows real title bars
+# (minimize / maximize / close) and a taskbar to reach minimized windows; the
+# Outlaw shell stays the frameless full-screen backdrop. GUARDED: if openbox
+# isn't installed or fails to start, the session continues exactly as before (a
+# no-window-manager kiosk) — so this can NEVER block boot. OUTLAW_NO_WM=1
+# forces the old no-WM behaviour.
+if [ "${OUTLAW_NO_WM:-0}" != "1" ] && command -v openbox >/dev/null 2>&1; then
+    echo "[xinitrc] starting window manager (openbox) + taskbar (tint2)." >&2
+    openbox >/dev/null 2>&1 &
+    sleep 0.4
+    command -v tint2 >/dev/null 2>&1 && tint2 >/dev/null 2>&1 &
+else
+    echo "[xinitrc] no window manager (openbox missing or OUTLAW_NO_WM=1) — kiosk mode." >&2
+fi
+
 ELECTRON_FLAGS="$(outlaw-electron-flags 2>/dev/null | tr '\n' ' ')"
 [ -z "$ELECTRON_FLAGS" ] && ELECTRON_FLAGS="--no-sandbox"
 

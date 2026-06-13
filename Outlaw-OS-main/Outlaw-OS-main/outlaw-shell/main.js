@@ -222,19 +222,28 @@ async function resolveBinary(entry) {
 function fitToScreen(winRef) {
     const apply = () => {
         try {
-            const { width, height } = screen.getPrimaryDisplay().size;
+            // workArea (not .size) so the window leaves room for the tint2
+            // taskbar. Without a WM/taskbar, workArea === the full display, so
+            // this still fills the screen. Re-fits when the taskbar appears
+            // (its strut changes the work area → display-metrics-changed).
+            const { x, y, width, height } = screen.getPrimaryDisplay().workArea;
             if (winRef.isFullScreen()) winRef.setFullScreen(false);
-            // Idempotent: only move the window if it isn't already filling the
-            // screen. Calling setBounds needlessly (e.g. on every spurious
-            // display-metrics event) can dismiss a just-opened native popup such
-            // as a <select> dropdown.
+            // Idempotent: only move the window if it isn't already correct.
+            // Calling setBounds needlessly (e.g. on a spurious display-metrics
+            // event) can dismiss a just-opened native popup.
             const b = winRef.getBounds();
-            if (b.x !== 0 || b.y !== 0 || b.width !== width || b.height !== height) {
-                winRef.setBounds({ x: 0, y: 0, width, height });
+            if (b.x !== x || b.y !== y || b.width !== width || b.height !== height) {
+                winRef.setBounds({ x, y, width, height });
             }
         } catch { /* window may be gone */ }
     };
-    winRef.once('ready-to-show', apply);
+    winRef.once('ready-to-show', () => {
+        apply();
+        // The taskbar (tint2) may reserve its strut a moment after the shell
+        // maps, shrinking the work area; re-fit once it settles. Belt-and-braces
+        // alongside the display-metrics-changed listener.
+        setTimeout(apply, 1500);
+    });
     const onChange = () => apply();
     screen.on('display-metrics-changed', onChange);
     winRef.on('closed', () => { try { screen.removeListener('display-metrics-changed', onChange); } catch {} });
@@ -1595,10 +1604,14 @@ function createWindow() {
     // fills the screen WITH or WITHOUT a WM, and fitToScreen() re-applies it on
     // any display-size change (e.g. a VM window being resized). Off-Linux (dev
     // preview on Windows/macOS) we keep a normal resizable window.
-    const disp = screen.getPrimaryDisplay().size;
+    const wa = screen.getPrimaryDisplay().workArea;
     mainWindow = new BrowserWindow({
+        // Frameless backdrop sized to the work area (leaves room for the
+        // taskbar). skipTaskbar so the desktop shell doesn't list itself in the
+        // taskbar it sits behind. With a WM, app windows float above this;
+        // without one, it's the same full-screen kiosk as before.
         ...(IS_LINUX
-            ? { x: 0, y: 0, width: disp.width, height: disp.height, frame: false }
+            ? { x: wa.x, y: wa.y, width: wa.width, height: wa.height, frame: false, skipTaskbar: true }
             : { width: 1280, height: 820 }),
         backgroundColor: '#050505',
         webPreferences: {

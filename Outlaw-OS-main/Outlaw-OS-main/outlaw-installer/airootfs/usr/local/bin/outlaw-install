@@ -51,6 +51,9 @@ ESSENTIAL_PKGS=(
 
   # X / desktop runtime
   xorg-server xorg-xinit picom feh rofi thunar xfce4-terminal electron
+  # openbox (tiny WM: title bars / minimize / maximize / close) + tint2 (taskbar
+  # for minimized windows). Guarded in .xinitrc — absent = old no-WM kiosk.
+  openbox tint2
   # polkit-gnome: authentication agent so `pkexec pacman …` (Apps panel +
   # updater) can prompt for the password. The session has no WM/agent
   # otherwise, which makes package installs fail on the installed system.
