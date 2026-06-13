@@ -96,6 +96,7 @@ function showScreen(name) {
     if (name === 'tasks') refreshTasks();
     if (name === 'gaming') refreshGaming();
     if (name === 'apps') loadAppsCatalog();
+    if (name === 'settings') refreshNetStatus();
     if (name === 'ai') $('#ai-in').focus();
     if (name === 'terminal') $('#term-in').focus();
     // System Core lifecycle — init when navigating to it, teardown otherwise.
@@ -351,6 +352,109 @@ async function handleAppsUninstall(id) {
     }
     _appsState.busy.delete(id);
     await refreshAppsInstalledOnly();
+}
+
+// ---------------------------------------------------------------------------
+// Network & Wi-Fi (Settings card + offline pill)
+// ---------------------------------------------------------------------------
+async function refreshNetStatus() {
+    const el = $('#net-status');
+    if (!el || !api.net) return;
+    try {
+        const s = await api.net.status();
+        const online = s.connectivity === 'full';
+        el.textContent = online
+            ? `✔ Online${s.active ? ' — ' + s.active : ''}`
+            : (s.connectivity === 'none' || s.connectivity === 'unknown')
+                ? '✖ No internet connection' + (s.wifi ? ' — scan for Wi-Fi below' : '')
+                : `△ Limited connection (${s.connectivity})${s.active ? ' — ' + s.active : ''}`;
+        el.className = online ? 'ok-text' : 'warn-text';
+        const pill = $('#offline-pill');
+        if (pill) pill.hidden = online;
+    } catch {
+        el.textContent = 'Network status unavailable.';
+    }
+}
+
+async function scanWifi() {
+    const list = $('#wifi-list');
+    const btn = $('#wifi-scan');
+    if (!list || !api.net) return;
+    if (btn) { btn.disabled = true; btn.textContent = 'Scanning…'; }
+    list.innerHTML = '<div class="muted" style="padding:8px;">Looking for networks (a few seconds)…</div>';
+    try {
+        const r = await api.net.wifiList();
+        if (!r.ok || !r.networks.length) {
+            list.innerHTML = '<div class="muted" style="padding:8px;">' +
+                (r.error ? _escapeHtml(r.error) : 'No Wi-Fi networks found. (Wired connections work automatically when plugged in.)') + '</div>';
+            return;
+        }
+        list.innerHTML = '';
+        for (const n of r.networks) {
+            const row = document.createElement('div');
+            row.className = 'wifi-row';
+            const bars = n.signal >= 70 ? '▂▄▆█' : n.signal >= 45 ? '▂▄▆' : n.signal >= 20 ? '▂▄' : '▂';
+            row.innerHTML =
+                `<span class="wifi-name">${n.inUse ? '✔ ' : ''}${_escapeHtml(n.ssid)}</span>` +
+                `<span class="wifi-meta">${n.security ? '🔒' : 'open'} ${bars}</span>` +
+                `<button class="wifi-join" ${n.inUse ? 'disabled' : ''}>${n.inUse ? 'Connected' : 'Connect'}</button>`;
+            const joinBtn = row.querySelector('.wifi-join');
+            joinBtn.addEventListener('click', () => {
+                // Collapse any other open password form first.
+                $$('.wifi-pwform').forEach((f) => f.remove());
+                if (!n.security) { connectWifi(n.ssid, '', row); return; }
+                const form = document.createElement('div');
+                form.className = 'wifi-pwform';
+                form.innerHTML =
+                    `<input type="password" placeholder="Wi-Fi password for ${_escapeHtml(n.ssid)}" autocomplete="off">` +
+                    `<button class="primary">Join</button>`;
+                row.after(form);
+                const input = form.querySelector('input');
+                const go = () => { if (input.value) connectWifi(n.ssid, input.value, row, form); };
+                form.querySelector('button').addEventListener('click', go);
+                input.addEventListener('keydown', (e) => { if (e.key === 'Enter') go(); });
+                input.focus();
+            });
+            list.appendChild(row);
+        }
+    } catch (e) {
+        list.innerHTML = `<div class="muted" style="padding:8px;">Scan failed: ${_escapeHtml(e.message)}</div>`;
+    } finally {
+        if (btn) { btn.disabled = false; btn.textContent = '⟳ Scan for Wi-Fi'; }
+    }
+}
+
+async function connectWifi(ssid, password, row, form) {
+    toast(`Connecting to ${ssid}…`);
+    const btn = row ? row.querySelector('.wifi-join') : null;
+    if (btn) { btn.disabled = true; btn.textContent = 'Connecting…'; }
+    try {
+        const r = await api.net.wifiConnect(ssid, password);
+        if (r.ok) {
+            toast(`✔ Connected to ${ssid}.`);
+            if (form) form.remove();
+            await refreshNetStatus();
+            await scanWifi();
+        } else {
+            toast('Could not connect: ' + (r.error || 'unknown error'));
+            if (btn) { btn.disabled = false; btn.textContent = 'Connect'; }
+        }
+    } catch (e) {
+        toast('Could not connect: ' + e.message);
+        if (btn) { btn.disabled = false; btn.textContent = 'Connect'; }
+    }
+}
+
+function wireNetworkUI() {
+    const scanBtn = $('#wifi-scan');
+    if (scanBtn) scanBtn.addEventListener('click', scanWifi);
+    const pill = $('#offline-pill');
+    if (pill) pill.addEventListener('click', () => {
+        showScreen('settings');
+        const card = $('#net-card');
+        if (card) card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        scanWifi();
+    });
 }
 
 async function launchDiscoveredApp(id) {
@@ -1364,6 +1468,11 @@ window.addEventListener('DOMContentLoaded', async () => {
     // Live-ISO welcome card. Only shows when /run/archiso exists AND the user
     // hasn't ticked "Don't show again". Installed users never see this.
     refreshLiveWelcome().catch(() => {});
+    // First-login connectivity check: if there's no internet, the topbar shows
+    // an "OFFLINE — set up Wi-Fi" pill that jumps straight to the Wi-Fi panel.
+    // (Being offline silently was the root cause of several failed installs.)
+    wireNetworkUI();
+    refreshNetStatus().catch(() => {});
     calcRender();
     runBoot();
 });

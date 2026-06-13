@@ -128,6 +128,14 @@ contextBridge.exposeInMainWorld('outlaw', {
     },
 
     // --- Session (Dev vs Desktop via the boot greeter) ---------------------
+    net: {
+        // Connectivity + device summary (full|limited|portal|none|unknown).
+        status: () => ipcRenderer.invoke('net:status'),
+        // Scan for Wi-Fi networks (sorted: connected first, then by signal).
+        wifiList: () => ipcRenderer.invoke('net:wifi-list'),
+        // Connect to an SSID; password optional for open networks.
+        wifiConnect: (ssid, password) => ipcRenderer.invoke('net:wifi-connect', { ssid, password }),
+    },
     session: {
         // Mark the next X session as Dev (Outlaw CodeMaker), bypassing the
         // greeter once, and end this X session so the switch can happen.

@@ -5,6 +5,8 @@ contextBridge.exposeInMainWorld('installer', {
     env:    () => ipcRenderer.invoke('inst:env'),
     probe:  () => ipcRenderer.invoke('inst:probe'),
     online: () => ipcRenderer.invoke('inst:online'),
+    wifiList:    () => ipcRenderer.invoke('inst:wifi-list'),
+    wifiConnect: (ssid, password) => ipcRenderer.invoke('inst:wifi-connect', { ssid, password }),
     start:  (opts) => ipcRenderer.invoke('inst:start', opts),
     reboot: () => ipcRenderer.invoke('inst:reboot'),
     quit:   () => ipcRenderer.invoke('inst:quit'),

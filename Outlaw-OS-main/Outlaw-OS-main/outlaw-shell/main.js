@@ -991,6 +991,78 @@ function registerIpc() {
         return { live, dismissed: !!settings.liveWelcomeDismissed };
     });
 
+    // ----- Network / Wi-Fi (nmcli over NetworkManager) ----------------------
+    // The live ISO ships networkmanager + linux-firmware, and installs need the
+    // network — but there was NO in-OS way to connect to Wi-Fi (the root cause
+    // behind several "couldn't reach the package servers" install failures).
+    // nmcli terse output separates fields with ':' and escapes literal colons
+    // as '\:' — splitTerse handles that.
+    const splitTerse = (line) =>
+        line.replace(/\\:/g, '\u0000').split(':').map((s) => s.replace(/\u0000/g, ':'));
+
+    ipcMain.handle('net:status', async () => {
+        if (!IS_LINUX) return { connectivity: 'unknown', wifi: false, active: '' };
+        const [conn, devs] = await Promise.all([
+            runShell('nmcli networking connectivity check 2>/dev/null', { timeout: 10000 }),
+            runShell('nmcli -t -f DEVICE,TYPE,STATE,CONNECTION dev 2>/dev/null', { timeout: 8000 }),
+        ]);
+        const lines = (devs.stdout || '').split('\n').filter(Boolean).map(splitTerse);
+        const wifi = lines.some((t) => t[1] === 'wifi');
+        const act = lines.find((t) => t[2] === 'connected' && t[1] !== 'loopback');
+        return {
+            connectivity: (conn.stdout || '').trim() || 'unknown', // full|limited|portal|none|unknown
+            wifi,
+            active: act ? `${act[3] || act[0]} (${act[1]})` : '',
+        };
+    });
+
+    ipcMain.handle('net:wifi-list', async () => {
+        if (!IS_LINUX) return { ok: false, networks: [], error: 'Wi-Fi scan runs on Outlaw OS.' };
+        await runShell('nmcli radio wifi on 2>/dev/null', { timeout: 5000 });
+        // --rescan yes forces a fresh scan; can take a few seconds.
+        const r = await runShell("nmcli -t -f IN-USE,SSID,SIGNAL,SECURITY dev wifi list --rescan yes 2>/dev/null", { timeout: 30000 });
+        const seen = new Set();
+        const networks = [];
+        for (const line of (r.stdout || '').split('\n')) {
+            if (!line.trim()) continue;
+            const t = splitTerse(line);
+            const ssid = t[1];
+            if (!ssid || seen.has(ssid)) continue; // skip hidden + duplicate APs
+            seen.add(ssid);
+            networks.push({
+                inUse: t[0] === '*',
+                ssid,
+                signal: parseInt(t[2], 10) || 0,
+                security: (t[3] || '').trim(), // '' = open network
+            });
+        }
+        networks.sort((a, b) => (b.inUse - a.inUse) || (b.signal - a.signal));
+        return { ok: true, networks };
+    });
+
+    ipcMain.handle('net:wifi-connect', async (_e, payload) => {
+        if (!IS_LINUX) return { ok: false, error: 'Wi-Fi runs on Outlaw OS.' };
+        const ssid = String((payload && payload.ssid) || '');
+        const password = String((payload && payload.password) || '');
+        if (!ssid || ssid.length > 64) return { ok: false, error: 'Bad network name.' };
+        // execFile with an argv array — no shell, so SSIDs/passwords with
+        // spaces or quotes can't break out or inject anything.
+        const args = ['dev', 'wifi', 'connect', ssid];
+        if (password) args.push('password', password);
+        const r = await new Promise((resolve) => {
+            execFile('nmcli', args, { timeout: 45000 },
+                (err, stdout, stderr) => resolve({ err, stdout: stdout || '', stderr: stderr || '' }));
+        });
+        if (r.err) {
+            let msg = (r.stderr || r.stdout || r.err.message).trim().slice(0, 300);
+            if (/secrets were required|802-11-wireless-security|invalid/i.test(msg)) {
+                msg = 'Wrong password (or the network rejected the connection). Try again.';
+            }
+            return { ok: false, error: msg };
+        }
+        return { ok: true, log: (r.stdout || '').trim().slice(0, 300) };
+    });
+
     ipcMain.handle('files:home', () => os.homedir());
     ipcMain.handle('files:list', (_e, dir) => listFiles(dir || os.homedir()));
     ipcMain.handle('files:open', (_e, target) => openPath(target));

@@ -17,6 +17,14 @@
     --err:       #f87171;
 }
 
+/* Themed scrollbars — same look as the rest of the OS apps. */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 5px; border: 2px solid var(--bg); }
+::-webkit-scrollbar-thumb:hover { background: var(--accent-dim); }
+::-webkit-scrollbar-thumb:active { background: var(--accent); }
+::-webkit-scrollbar-corner { background: var(--bg); }
+
 * {
     box-sizing: border-box;
     margin: 0;

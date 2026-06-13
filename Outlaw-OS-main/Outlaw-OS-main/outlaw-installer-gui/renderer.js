@@ -36,12 +36,83 @@ function esc(s) {
 async function checkOnline() {
     try {
         const r = await window.installer.online();
-        $('#net-warn').hidden = !!(r && r.online);
-    } catch { $('#net-warn').hidden = false; }
+        const online = !!(r && r.online);
+        $('#net-warn').hidden = online;
+        $('#net-ok').hidden = !online;
+        if (online) $('#wifi-area').hidden = true;
+        return online;
+    } catch {
+        $('#net-warn').hidden = false;
+        $('#net-ok').hidden = true;
+        return false;
+    }
 }
 
 $('#net-retry').addEventListener('click', checkOnline);
 $('#btn-exit').addEventListener('click', () => window.installer.quit());
+
+// --- Wi-Fi from inside the wizard (being offline silently was the root cause
+// --- of a string of failed installs — fix it where the user discovers it).
+$('#wifi-show').addEventListener('click', scanWifi);
+
+async function scanWifi() {
+    const area = $('#wifi-area');
+    area.hidden = false;
+    area.innerHTML = '<div class="dim">Scanning for networks (a few seconds)…</div>';
+    let r;
+    try { r = await window.installer.wifiList(); }
+    catch (e) { r = { ok: false, error: e.message }; }
+    if (!r.ok || !r.networks || !r.networks.length) {
+        area.innerHTML = `<div class="dim">${esc(r.error || 'No Wi-Fi networks found. A network cable works automatically when plugged in.')}</div>`;
+        return;
+    }
+    area.innerHTML = '';
+    for (const n of r.networks) {
+        const bars = n.signal >= 70 ? '▂▄▆█' : n.signal >= 45 ? '▂▄▆' : n.signal >= 20 ? '▂▄' : '▂';
+        const row = document.createElement('div');
+        row.className = 'wifi-row';
+        row.innerHTML =
+            `<span class="wifi-name">${n.inUse ? '✔ ' : ''}${esc(n.ssid)}</span>` +
+            `<span class="wifi-meta">${n.security ? '🔒' : 'open'} ${bars}</span>` +
+            `<button class="wifi-join" ${n.inUse ? 'disabled' : ''}>${n.inUse ? 'Connected' : 'Connect'}</button>`;
+        row.querySelector('.wifi-join').addEventListener('click', () => {
+            area.querySelectorAll('.wifi-pwform').forEach((f) => f.remove());
+            if (!n.security) { joinWifi(n.ssid, '', row); return; }
+            const form = document.createElement('div');
+            form.className = 'wifi-pwform';
+            form.innerHTML =
+                `<input type="password" placeholder="Password for ${esc(n.ssid)}" autocomplete="off">` +
+                `<button class="primary">Join</button>`;
+            row.after(form);
+            const input = form.querySelector('input');
+            const go = () => { if (input.value) joinWifi(n.ssid, input.value, row, form); };
+            form.querySelector('button').addEventListener('click', go);
+            input.addEventListener('keydown', (e) => { if (e.key === 'Enter') go(); });
+            input.focus();
+        });
+        area.appendChild(row);
+    }
+}
+
+async function joinWifi(ssid, password, row, form) {
+    const btn = row.querySelector('.wifi-join');
+    btn.disabled = true; btn.textContent = 'Connecting…';
+    let r;
+    try { r = await window.installer.wifiConnect(ssid, password); }
+    catch (e) { r = { ok: false, error: e.message }; }
+    if (r.ok) {
+        if (form) form.remove();
+        btn.textContent = 'Connected';
+        await checkOnline();   // flips the warning to the green "looks good" box
+    } else {
+        btn.disabled = false; btn.textContent = 'Connect';
+        if (form) {
+            const input = form.querySelector('input');
+            input.value = ''; input.placeholder = (r.error || 'Failed — try again').slice(0, 80);
+            input.focus();
+        }
+    }
+}
 
 $('#btn-start').addEventListener('click', async () => {
     const env = await window.installer.env();

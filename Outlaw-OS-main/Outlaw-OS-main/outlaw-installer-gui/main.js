@@ -128,6 +128,55 @@ ipcMain.handle('inst:online', async () => {
 });
 
 // ---------------------------------------------------------------------------
+// Wi-Fi (nmcli) — connect from INSIDE the wizard. Being offline with no way
+// to fix it was the root cause of a string of failed installs.
+// nmcli terse output escapes literal colons as '\:'.
+// ---------------------------------------------------------------------------
+const splitTerse = (line) =>
+    line.replace(/\\:/g, '\u0000').split(':').map((s) => s.replace(/\u0000/g, ':'));
+
+ipcMain.handle('inst:wifi-list', async () => {
+    await run('nmcli', ['radio', 'wifi', 'on'], 8_000);
+    const r = await run('nmcli', ['-t', '-f', 'IN-USE,SSID,SIGNAL,SECURITY',
+        'dev', 'wifi', 'list', '--rescan', 'yes'], 30_000);
+    if (r.err) return { ok: false, networks: [], error: 'Wi-Fi scan failed (no Wi-Fi adapter?).' };
+    const seen = new Set();
+    const networks = [];
+    for (const line of r.stdout.split('\n')) {
+        if (!line.trim()) continue;
+        const t = splitTerse(line);
+        const ssid = t[1];
+        if (!ssid || seen.has(ssid)) continue;
+        seen.add(ssid);
+        networks.push({
+            inUse: t[0] === '*',
+            ssid,
+            signal: parseInt(t[2], 10) || 0,
+            security: (t[3] || '').trim(),
+        });
+    }
+    networks.sort((a, b) => (b.inUse - a.inUse) || (b.signal - a.signal));
+    return { ok: true, networks };
+});
+
+ipcMain.handle('inst:wifi-connect', async (_e, payload) => {
+    const ssid = String((payload && payload.ssid) || '');
+    const password = String((payload && payload.password) || '');
+    if (!ssid || ssid.length > 64) return { ok: false, error: 'Bad network name.' };
+    const args = ['dev', 'wifi', 'connect', ssid];
+    if (password) args.push('password', password);
+    const r = await run('nmcli', args, 45_000);
+    if (r.err) {
+        let msg = (r.stderr || r.stdout || r.err.message).trim().slice(0, 300);
+        if (/secrets were required|802-11-wireless-security|invalid/i.test(msg)) {
+            msg = 'Wrong password (or the network rejected the connection). Try again.';
+        }
+        return { ok: false, error: msg };
+    }
+    return { ok: true };
+});
+
+// ---------------------------------------------------------------------------
 // Install — spawn the bash engine, stream lines + stage markers to the UI.
 // ---------------------------------------------------------------------------
 ipcMain.handle('inst:start', async (_e, opts) => {

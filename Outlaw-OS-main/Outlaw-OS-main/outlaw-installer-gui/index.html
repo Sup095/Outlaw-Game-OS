@@ -17,10 +17,15 @@
            the <b>recommended option keeps Windows and your files</b> — Outlaw just moves in next door.</p>
         <p class="lead dim">You can stop any time before the final confirmation. Nothing is changed until then.</p>
         <div class="warnbox" id="net-warn" hidden>
-            ⚠ <b>No internet connection.</b> Installing downloads packages, so connect Wi-Fi or
-            plug in a network cable first. (Top-right of the desktop → Terminal → <code>nmtui</code>.)
-            <button id="net-retry">Check again</button>
+            ⚠ <b>No internet connection.</b> Installing downloads packages, so connect first —
+            plug in a network cable (works automatically) or join a Wi-Fi network right here:
+            <div class="netbtns">
+                <button id="wifi-show">📶 Show Wi-Fi networks</button>
+                <button id="net-retry">⟳ Check again</button>
+            </div>
+            <div id="wifi-area" class="wifi-list" hidden></div>
         </div>
+        <div class="okbox" id="net-ok" hidden>✔ Internet connection looks good.</div>
         <div class="nav">
             <button class="ghost" id="btn-exit">Exit installer</button>
             <span class="grow"></span>

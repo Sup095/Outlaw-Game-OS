@@ -28,6 +28,7 @@
         <span class="dim">// OPERATOR</span>
         <span class="pill live-badge" id="live-badge" title="You're running the live demo — many features are locked until you install Outlaw OS to a disk." hidden>⚠ LIVE · LIMITED</span>
         <span class="spacer"></span>
+        <button class="pill offline-pill" id="offline-pill" title="No internet connection — click to set up Wi-Fi" hidden>⚠ OFFLINE — set up Wi-Fi</button>
         <span class="stat pill" id="stat-cpu">CPU --%</span>
         <span class="stat pill" id="stat-ram">RAM --</span>
         <span class="stat pill" id="stat-ai">AI OFF</span>
@@ -459,6 +460,16 @@
                         <option value="minimal">Always Minimal · bare-bones always</option>
                     </select>
                 </div>
+            </div>
+
+            <div class="card" id="net-card">
+                <h3>Network &amp; Wi-Fi</h3>
+                <div class="row" style="margin-bottom:10px;">
+                    <span id="net-status" class="muted">Checking connection…</span>
+                    <span class="spacer"></span>
+                    <button id="wifi-scan">⟳ Scan for Wi-Fi</button>
+                </div>
+                <div id="wifi-list" class="wifi-list"></div>
             </div>
 
             <div class="card">
