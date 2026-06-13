@@ -14,6 +14,7 @@ polkit.addRule(function (action, subject) {
     var prog = action.lookup("program") || "";
     var allowed = [
         "/usr/local/bin/outlaw-pkg-install",
+        "/usr/local/bin/outlaw-update-pkgs",
         "/usr/local/bin/outlaw-tune",
         "/usr/local/bin/outlaw-perf",
         "/usr/local/bin/outlaw-update-apply",

@@ -1362,13 +1362,22 @@ function wire() {
             case 'updates-check': {
                 $('#update-status').textContent = 'checking…';
                 const r = await api.updates.check();
-                $('#update-status').textContent = r.note || `${r.updates} update(s) available`;
+                $('#update-status').textContent = r.note
+                    ? r.note
+                    : (r.updates > 0 ? `${r.updates} update(s) available — click Apply updates` : '✓ everything is up to date');
                 break;
             }
             case 'updates-apply': {
-                $('#update-status').textContent = 'applying (enter password if prompted)…';
+                if (!window.confirm('Update everything now?\n\nThis downloads and installs the latest version of every app and system package. It can take several minutes and needs an internet connection. Keep the computer plugged in.')) break;
+                $('#update-status').textContent = 'updating… (this can take a few minutes)';
                 const r = await api.updates.apply();
-                $('#update-status').textContent = r.ok ? 'system updated' : (r.error || 'update failed');
+                if (r.ok) {
+                    $('#update-status').textContent = '✓ everything is up to date';
+                    toast('All apps and packages are up to date.');
+                } else {
+                    $('#update-status').textContent = 'update failed' + (r.hint || '');
+                    toast('Update failed: ' + ((r.error || '').split('\n').filter(Boolean).pop() || 'unknown error').slice(0, 140));
+                }
                 break;
             }
             case 'check-shell': checkShellUpdate(); break;

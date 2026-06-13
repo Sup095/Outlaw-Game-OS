@@ -1263,7 +1263,10 @@ function registerIpc() {
         // install-state is still tracked on the primary `pkg`.
         // 20-minute timeout — large multilib packages on slow connections.
         const pkgList = [app.pkg, ...(app.extra || [])].join(' ');
-        const cmd = `pkexec outlaw-pkg-install ${pkgList}`;
+        // ABSOLUTE path: pkexec runs with a sanitized PATH that excludes
+        // /usr/local/bin, so a bare name fails with "No such file or directory"
+        // — and the polkit rule matches on the absolute program path too.
+        const cmd = `pkexec /usr/local/bin/outlaw-pkg-install ${pkgList}`;
         const r = await runShell(cmd, { timeout: 1000 * 60 * 20 });
         const tail = (r.stdout || r.stderr || `exit ${r.code}`).slice(-3000);
         if (r.code !== 0) {
@@ -1436,7 +1439,7 @@ function registerIpc() {
         settings = saveSettings({ ...settings, performanceMode: !!on });
         if (IS_LINUX) {
             // Best-effort governor switch via the polkit-allowed helper.
-            await runShell(`pkexec outlaw-perf ${on ? 'performance' : 'schedutil'} 2>/dev/null || true`, { timeout: 8000 });
+            await runShell(`pkexec /usr/local/bin/outlaw-perf ${on ? 'performance' : 'schedutil'} 2>/dev/null || true`, { timeout: 8000 });
         }
         return { ok: true, performanceMode: settings.performanceMode };
     });
@@ -1458,14 +1461,27 @@ function registerIpc() {
     // --- Updates / installer ---
     ipcMain.handle('updates:check', async () => {
         if (!IS_LINUX) return { updates: 0, note: 'Updates run on Outlaw OS.' };
-        const r = await runShell('checkupdates 2>/dev/null | wc -l');
-        return { updates: parseInt(r.stdout || '0', 10) || 0 };
+        // checkupdates (pacman-contrib) counts updates safely without touching
+        // the live DB. It exits 2 when there are none (→ 0 lines, fine). If it's
+        // somehow missing, say so instead of silently reporting 0.
+        const has = await runShell('command -v checkupdates >/dev/null 2>&1 && echo yes');
+        if (!/yes/.test(has.stdout || '')) return { updates: 0, note: 'Update check tool missing — run a full update to refresh.' };
+        const r = await runShell('checkupdates 2>/dev/null | grep -c .', { timeout: 1000 * 60 });
+        return { updates: parseInt((r.stdout || '0').trim(), 10) || 0 };
     });
     ipcMain.handle('updates:apply', async () => {
         if (!IS_LINUX) return { ok: false, error: 'Updates run on Outlaw OS.' };
-        // pkexec prompts for the operator password (no passwordless root).
-        const r = await runShell('pkexec pacman -Syu --noconfirm', { timeout: 1000 * 60 * 20 });
-        return { ok: r.code === 0, log: (r.stdout || r.stderr).slice(-4000) };
+        // Full system upgrade via the helper (ABSOLUTE path; passwordless via
+        // the 49-outlaw polkit rule). -Syu is the only safe way to update on
+        // Arch and covers every app installed from the Apps panel too.
+        const r = await runShell('pkexec /usr/local/bin/outlaw-update-pkgs', { timeout: 1000 * 60 * 30 });
+        const tail = (r.stdout || r.stderr || `exit ${r.code}`).slice(-4000);
+        if (r.code !== 0) {
+            const hint = /could not|failed to synchronize|connect|network/i.test(tail)
+                ? ' (couldn\'t reach the servers — check Settings → Network & Wi-Fi)' : '';
+            return { ok: false, error: tail, hint };
+        }
+        return { ok: true, log: tail };
     });
 
     // Shell self-updater (downloads from your GitHub Releases).
@@ -1491,7 +1507,7 @@ function registerIpc() {
                 return { ok: false, error: `Downloaded to ${tarPath}. Installation step only runs on Outlaw OS.` };
             }
             // The privileged helper verifies SHA again, extracts atomically, and swaps /usr/share/outlaw-os.
-            const cmd = `pkexec outlaw-update-apply ${JSON.stringify(tarPath)} ${JSON.stringify(sha)}`;
+            const cmd = `pkexec /usr/local/bin/outlaw-update-apply ${JSON.stringify(tarPath)} ${JSON.stringify(sha)}`;
             const r = await runShell(cmd, { timeout: 1000 * 60 * 10 });
             if (r.code !== 0) return { ok: false, error: (r.stderr || r.stdout || `exit ${r.code}`).slice(-2000) };
             return { ok: true, log: (r.stdout || '').slice(-2000), restart: true };
@@ -1514,7 +1530,7 @@ function registerIpc() {
 
     ipcMain.handle('updates:rollback', async () => {
         if (!IS_LINUX) return { ok: false, error: 'Rollback runs on Outlaw OS.' };
-        const r = await runShell('pkexec outlaw-update-rollback', { timeout: 1000 * 60 * 2 });
+        const r = await runShell('pkexec /usr/local/bin/outlaw-update-rollback', { timeout: 1000 * 60 * 2 });
         if (r.code !== 0) return { ok: false, error: (r.stderr || r.stdout || `exit ${r.code}`).slice(-2000) };
         return { ok: true, log: (r.stdout || '').slice(-2000), restart: true };
     });
@@ -1582,7 +1598,7 @@ function registerIpc() {
 
     ipcMain.handle('tune:apply', async () => {
         if (!IS_LINUX) return { ok: false, error: 'Hardware tuning runs on Outlaw OS.' };
-        const r = await runShell('pkexec outlaw-tune apply', { timeout: 1000 * 60 * 2 });
+        const r = await runShell('pkexec /usr/local/bin/outlaw-tune apply', { timeout: 1000 * 60 * 2 });
         if (r.code !== 0) return { ok: false, error: (r.stderr || r.stdout || `exit ${r.code}`).slice(-800) };
         // The helper prints OUTLAW_VRAM_MODE=<mode>; mirror it into the shell's
         // own VRAM-saver setting so CodeMaker's default matches the hardware.
@@ -1596,7 +1612,7 @@ function registerIpc() {
 
     ipcMain.handle('tune:reset', async () => {
         if (!IS_LINUX) return { ok: false, error: 'Hardware tuning runs on Outlaw OS.' };
-        const r = await runShell('pkexec outlaw-tune reset', { timeout: 1000 * 60 });
+        const r = await runShell('pkexec /usr/local/bin/outlaw-tune reset', { timeout: 1000 * 60 });
         if (r.code !== 0) return { ok: false, error: (r.stderr || r.stdout || `exit ${r.code}`).slice(-800) };
         return { ok: true, log: (r.stdout || '').slice(-400) };
     });
