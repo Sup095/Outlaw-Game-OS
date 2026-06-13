@@ -64,6 +64,33 @@ body.live-mode .topbar { box-shadow: inset 0 -2px 0 rgba(255, 210, 59, 0.22); }
 body.live-mode button:disabled,
 body.live-mode input:disabled { opacity: .35; }
 
+/* ---- Sign-in / lock screen (Phase 3c) ---- */
+#signin {
+    position: fixed; inset: 0; z-index: 10000; display: none;
+    align-items: center; justify-content: center;
+    background: radial-gradient(circle at 50% 32%, #0a140a, var(--bg));
+}
+.signin-card { text-align: center; width: 320px; max-width: 90vw; }
+.signin-logo { font-size: 46px; color: var(--term); filter: drop-shadow(0 0 10px rgba(var(--term-rgb), 0.6)); }
+.signin-title { letter-spacing: 0.3em; color: var(--term); margin: 6px 0 2px; font-weight: 700; }
+.signin-user { color: var(--text); opacity: 0.8; margin-bottom: 22px; }
+.pin-dots { display: flex; gap: 16px; justify-content: center; margin: 8px 0 20px; }
+.pin-dots span { width: 14px; height: 14px; border-radius: 50%; border: 1px solid var(--term-dim); transition: background .1s; }
+.pin-dots span.filled { background: var(--term); border-color: var(--term); box-shadow: 0 0 8px rgba(var(--term-rgb), 0.7); }
+.pin-pad { display: grid; grid-template-columns: repeat(3, 70px); gap: 12px; justify-content: center; }
+.pin-pad button {
+    width: 70px; height: 70px; border-radius: 50%; font-size: 23px; padding: 0;
+    background: var(--panel-2); color: var(--text); border: 1px solid var(--line);
+}
+.pin-pad button:hover { background: rgba(var(--term-rgb), 0.10); color: var(--term); border-color: var(--term-dim); }
+.pin-pad button:active { background: var(--term); color: #001400; }
+.pin-pad span { display: inline-block; }
+#signin-pw-mode { display: flex; flex-direction: column; gap: 12px; }
+#signin-pw-mode input { text-align: center; font-size: 16px; }
+.signin-link { display: inline-block; margin-top: 16px; color: var(--term-dim); font-size: 13px; text-decoration: none; }
+.signin-link:hover { color: var(--term); }
+.signin-msg { margin-top: 14px; color: var(--warn); min-height: 18px; font-size: 13px; }
+
 /* ===========================================================================
  * Themed scrollbars — every scrollable surface in the shell wears the OS
  * identity instead of the stock grey widgets. Uses the palette variables, so

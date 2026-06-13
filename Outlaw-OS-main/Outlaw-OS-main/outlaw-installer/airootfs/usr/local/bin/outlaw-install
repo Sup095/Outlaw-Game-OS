@@ -491,6 +491,14 @@ pacstrap_and_configure() {
         cp -f /etc/pacman.d/mirrorlist "$TARGET/etc/pacman.d/mirrorlist" 2>/dev/null || true
     fi
 
+    # Passwordless Outlaw helpers for the operator (polkit rule) — so ordinary
+    # app installs don't prompt every time. The shell still gates IMPORTANT
+    # installs with the PIN. Single source: copied from the live image.
+    if [[ -f /etc/polkit-1/rules.d/49-outlaw.rules ]]; then
+        install -Dm644 /etc/polkit-1/rules.d/49-outlaw.rules \
+            "$TARGET/etc/polkit-1/rules.d/49-outlaw.rules"
+    fi
+
     # Bring the shell + helper tools into the installed system.
     mkdir -p "$TARGET/usr/share/outlaw-os"
     cp -rT /usr/share/outlaw-os "$TARGET/usr/share/outlaw-os" 2>/dev/null || true

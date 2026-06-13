@@ -30,6 +30,146 @@ function toast(msg) {
 // ---------------------------------------------------------------------------
 // Boot sequence
 // ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// Sign-in / PIN (Phase 3c)
+// ---------------------------------------------------------------------------
+let _signinReauth = false;
+let _signinResolve = null;
+let _signinHasPin = false;
+let _pinBuf = '';
+
+// Startup gate — show the lock screen first (if enabled), then the boot screen.
+async function startupGate() {
+    let st;
+    try { st = await api.auth.status(); } catch { st = { lockEnabled: false }; }
+    if (!st || !st.lockEnabled) { runBoot(); return; }
+    openSignin({ reauth: false, user: st.user, hasPin: st.hasPin });
+}
+
+function renderPinDots() {
+    const dots = $('#pin-dots'); if (!dots) return;
+    [...dots.children].forEach((d, i) => d.classList.toggle('filled', i < _pinBuf.length));
+}
+function showSigninMode(m) {
+    $('#signin-pin-mode').hidden = m !== 'pin';
+    $('#signin-pw-mode').hidden = m !== 'pw';
+    if (m === 'pw') setTimeout(() => { const e = $('#signin-pw'); if (e) { e.value = ''; e.focus(); } }, 30);
+    if (m === 'pin') { _pinBuf = ''; renderPinDots(); }
+}
+function openSignin({ reauth, user, hasPin }) {
+    _signinReauth = !!reauth;
+    _signinHasPin = !!hasPin;
+    _pinBuf = '';
+    $('#signin-user').textContent = user || 'operator';
+    $('#signin-msg').textContent = reauth ? 'Confirm it\'s you to continue.' : '';
+    $('#use-password').hidden = !hasPin;
+    $('#use-pin').hidden = !hasPin;
+    showSigninMode(hasPin ? 'pin' : 'pw');
+    $('#signin').style.display = 'flex';
+    if (reauth) return new Promise((res) => { _signinResolve = res; });
+}
+async function submitUnlock(payload) {
+    const r = await api.auth.unlock(payload);
+    if (r && r.ok) { signinSuccess(); return; }
+    $('#signin-msg').textContent = (r && r.error) || 'Incorrect — try again.';
+    _pinBuf = ''; renderPinDots();
+    const pw = $('#signin-pw'); if (pw) pw.value = '';
+}
+function signinSuccess() {
+    $('#signin').style.display = 'none';
+    if (_signinReauth) {
+        const res = _signinResolve; _signinResolve = null; _signinReauth = false;
+        if (res) res(true);
+    } else {
+        runBoot();
+    }
+}
+function signinCancel() {
+    if (!_signinReauth) return;   // startup sign-in can't be cancelled
+    $('#signin').style.display = 'none';
+    const res = _signinResolve; _signinResolve = null; _signinReauth = false;
+    if (res) res(false);
+}
+// Require auth for an "important" action (essentials/security installs, etc.).
+// Returns true if allowed. No-ops on the live demo / when nothing is configured.
+async function requireImportantAuth() {
+    let st;
+    try { st = await api.auth.status(); } catch { return true; }
+    if (!st || st.live) return true;
+    if (!st.hasPin && !st.lockEnabled) return true;
+    return await openSignin({ reauth: true, user: st.user, hasPin: st.hasPin });
+}
+
+function wireAuth() {
+    const pad = $('#pin-pad');
+    if (pad) pad.addEventListener('click', (e) => {
+        const b = e.target.closest('button'); if (!b) return;
+        if (b.hasAttribute('data-pin-back')) { _pinBuf = _pinBuf.slice(0, -1); renderPinDots(); return; }
+        const d = b.dataset.d; if (d == null) return;
+        if (_pinBuf.length < 4) { _pinBuf += d; renderPinDots(); }
+        if (_pinBuf.length === 4) submitUnlock({ pin: _pinBuf });
+    });
+    const up = $('#use-password'); if (up) up.addEventListener('click', (e) => { e.preventDefault(); showSigninMode('pw'); });
+    const ui = $('#use-pin'); if (ui) ui.addEventListener('click', (e) => { e.preventDefault(); showSigninMode('pin'); });
+    const go = $('#signin-pw-go'); if (go) go.addEventListener('click', () => submitUnlock({ password: $('#signin-pw').value }));
+    const pwIn = $('#signin-pw'); if (pwIn) pwIn.addEventListener('keydown', (e) => { if (e.key === 'Enter') submitUnlock({ password: pwIn.value }); });
+    // Hardware keyboard for the PIN pad + Escape to cancel a reauth prompt.
+    document.addEventListener('keydown', (e) => {
+        if ($('#signin').style.display === 'none' || $('#signin').style.display === '') return;
+        if (e.key === 'Escape') { signinCancel(); return; }
+        if ($('#signin-pin-mode').hidden) return;
+        if (/^[0-9]$/.test(e.key)) {
+            if (_pinBuf.length < 4) { _pinBuf += e.key; renderPinDots(); if (_pinBuf.length === 4) submitUnlock({ pin: _pinBuf }); }
+        } else if (e.key === 'Backspace') { _pinBuf = _pinBuf.slice(0, -1); renderPinDots(); }
+    });
+
+    // --- Settings: Security card ---
+    let _pinFormMode = 'set';
+    const refreshSecurityUi = async () => {
+        let st; try { st = await api.auth.status(); } catch { return; }
+        const lt = $('#lock-toggle'); if (lt) lt.checked = !!st.lockEnabled;
+        const has = !!st.hasPin;
+        $('#pin-state').textContent = has
+            ? 'A PIN is set — use it instead of your password.'
+            : 'A 4-digit PIN you can use instead of your password.';
+        $('#pin-set-btn').textContent = has ? 'Change PIN' : 'Set PIN';
+        $('#pin-remove-btn').hidden = !has;
+    };
+    window._refreshSecurityUi = refreshSecurityUi;
+    const closePinForm = () => { $('#pin-form').hidden = true; ['pin-current', 'pin-new', 'pin-confirm'].forEach((id) => { const x = $('#' + id); if (x) x.value = ''; }); $('#pin-form-msg').textContent = ''; };
+    const ltog = $('#lock-toggle'); if (ltog) ltog.addEventListener('change', async (e) => { try { await api.auth.setLock(e.target.checked); } catch {} });
+    const setBtn = $('#pin-set-btn'); if (setBtn) setBtn.addEventListener('click', async () => {
+        _pinFormMode = 'set';
+        let st; try { st = await api.auth.status(); } catch { st = {}; }
+        $('#pin-current').hidden = !st.hasPin;
+        $('#pin-new').hidden = false; $('#pin-confirm').hidden = false;
+        $('#pin-save').textContent = 'Save PIN';
+        $('#pin-form').hidden = false; $('#pin-form-msg').textContent = '';
+    });
+    const rmBtn = $('#pin-remove-btn'); if (rmBtn) rmBtn.addEventListener('click', () => {
+        _pinFormMode = 'remove';
+        $('#pin-current').hidden = false; $('#pin-new').hidden = true; $('#pin-confirm').hidden = true;
+        $('#pin-save').textContent = 'Remove PIN';
+        $('#pin-form').hidden = false; $('#pin-form-msg').textContent = 'Enter your current PIN to remove it.';
+    });
+    const cancelBtn = $('#pin-cancel'); if (cancelBtn) cancelBtn.addEventListener('click', closePinForm);
+    const saveBtn = $('#pin-save'); if (saveBtn) saveBtn.addEventListener('click', async () => {
+        const cur = $('#pin-current').value, nw = $('#pin-new').value, cf = $('#pin-confirm').value;
+        const msg = $('#pin-form-msg');
+        if (_pinFormMode === 'remove') {
+            const r = await api.auth.clearPin({ pin: cur });
+            if (r && r.ok) { closePinForm(); toast('PIN removed.'); refreshSecurityUi(); }
+            else { msg.textContent = (r && r.error) || 'Could not remove PIN.'; }
+            return;
+        }
+        if (!/^\d{4}$/.test(nw)) { msg.textContent = 'PIN must be exactly 4 digits.'; return; }
+        if (nw !== cf) { msg.textContent = 'The two PINs do not match.'; return; }
+        const r = await api.auth.setPin(nw, cur);
+        if (r && r.ok) { closePinForm(); toast('PIN saved.'); refreshSecurityUi(); }
+        else { msg.textContent = (r && r.error) || 'Could not save PIN.'; }
+    });
+}
+
 async function runBoot() {
     const log = $('#boot-log');
     const lines = ['INITIALIZING OUTLAW OS…'];
@@ -96,7 +236,7 @@ function showScreen(name) {
     if (name === 'tasks') refreshTasks();
     if (name === 'gaming') refreshGaming();
     if (name === 'apps') loadAppsCatalog();
-    if (name === 'settings') refreshNetStatus();
+    if (name === 'settings') { refreshNetStatus(); if (window._refreshSecurityUi) window._refreshSecurityUi(); }
     if (name === 'ai') $('#ai-in').focus();
     if (name === 'terminal') $('#term-in').focus();
     // System Core lifecycle — init when navigating to it, teardown otherwise.
@@ -313,9 +453,15 @@ async function refreshAppsInstalledOnly() {
 async function handleAppsInstall(id) {
     const app = _appsState.catalog.find((a) => a.id === id);
     if (!app) return;
+    // Important installs (Essentials + Security) require the PIN/password.
+    // Everyday apps install without prompting (passwordless via the polkit rule).
+    if (['Essentials', 'Security'].includes(app.category)) {
+        const ok = await requireImportantAuth();
+        if (!ok) { toast('Cancelled — not installed.'); return; }
+    }
     _appsState.busy.add(id);
     _renderAppsList();
-    toast(`Installing ${app.label}… you may see a password prompt.`);
+    toast(`Installing ${app.label}…`);
     try {
         const r = await api.apps.install(id);
         if (r.ok) {
@@ -1550,8 +1696,10 @@ window.addEventListener('DOMContentLoaded', async () => {
     // (Being offline silently was the root cause of several failed installs.)
     wireNetworkUI();
     refreshNetStatus().catch(() => {});
+    wireAuth();
     calcRender();
-    runBoot();
+    // Sign-in gate (Phase 3c): the lock screen first (if enabled), then boot.
+    startupGate();
 });
 
 async function refreshLiveWelcome() {

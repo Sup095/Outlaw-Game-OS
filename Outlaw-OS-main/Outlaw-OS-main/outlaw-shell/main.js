@@ -15,6 +15,7 @@ const { spawn, execFile } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
+const crypto = require('crypto');
 const aiAgent = require('./ai-agent');
 const updater = require('./updater');
 const APP_VERSION = require('./package.json').version;
@@ -102,6 +103,9 @@ const DEFAULT_SETTINGS = {
     // this flips true and persists. Installed systems never have /run/archiso
     // so the card is never shown there regardless.
     liveWelcomeDismissed: false,
+    // Phase 3c — show the sign-in lock screen on shell startup (installed
+    // systems). Off on the live demo automatically.
+    lockEnabled: true,
 };
 
 function loadSettings() {
@@ -121,6 +125,69 @@ function saveSettings(s) {
         console.error('Could not persist settings:', e.message);
     }
     return s;
+}
+
+// ---------------------------------------------------------------------------
+// Auth — 4-digit PIN (Outlaw-level convenience credential) + account password.
+// The PIN is stored ONLY as a salted scrypt hash in a 0600 file (never plain
+// text). The account password is verified against PAM via `sudo -S -v` (so the
+// real OS password always works as a fallback). The PIN gates the sign-in
+// screen and "important" installs; ordinary installs are passwordless via the
+// 49-outlaw polkit rule.
+// ---------------------------------------------------------------------------
+const AUTH_FILE = path.join(app.getPath('userData'), 'auth.json');
+const IS_LIVE = (() => { try { return process.platform === 'linux' && fs.existsSync('/run/archiso'); } catch { return false; } })();
+let _authFails = 0;       // failed unlock attempts this session (rate-limit)
+let _authLockUntil = 0;   // epoch ms; unlocking blocked until then
+
+function readAuth() {
+    try { return JSON.parse(fs.readFileSync(AUTH_FILE, 'utf8')); } catch { return null; }
+}
+function hasPin() { const a = readAuth(); return !!(a && a.pinHash && a.pinSalt); }
+function setPin(pin) {
+    if (!/^\d{4}$/.test(String(pin))) return false;
+    const salt = crypto.randomBytes(16).toString('hex');
+    const hash = crypto.scryptSync(String(pin), salt, 32).toString('hex');
+    try {
+        fs.mkdirSync(path.dirname(AUTH_FILE), { recursive: true });
+        fs.writeFileSync(AUTH_FILE, JSON.stringify({ pinSalt: salt, pinHash: hash }), { mode: 0o600 });
+        try { fs.chmodSync(AUTH_FILE, 0o600); } catch {}
+        return true;
+    } catch { return false; }
+}
+function clearPin() { try { fs.unlinkSync(AUTH_FILE); } catch {} return true; }
+function verifyPin(pin) {
+    const a = readAuth();
+    if (!a || !a.pinHash || !a.pinSalt || !/^\d{4}$/.test(String(pin))) return false;
+    try {
+        const h = crypto.scryptSync(String(pin), a.pinSalt, 32).toString('hex');
+        return crypto.timingSafeEqual(Buffer.from(h, 'hex'), Buffer.from(a.pinHash, 'hex'));
+    } catch { return false; }
+}
+function verifyPassword(pw) {
+    return new Promise((resolve) => {
+        if (process.platform !== 'linux') return resolve(false);
+        let p;
+        try { p = spawn('sudo', ['-S', '-p', '', '-v'], { stdio: ['pipe', 'ignore', 'ignore'] }); }
+        catch { return resolve(false); }
+        p.on('error', () => resolve(false));
+        p.on('close', (code) => { try { spawn('sudo', ['-k'], { stdio: 'ignore' }).unref(); } catch {} resolve(code === 0); });
+        try { p.stdin.write(String(pw || '') + '\n'); p.stdin.end(); } catch { resolve(false); }
+    });
+}
+// Unlock with either a PIN or the account password. Rate-limited.
+async function authUnlock({ pin, password }) {
+    const now = Date.now();
+    if (now < _authLockUntil) {
+        return { ok: false, error: 'Too many attempts — wait a few seconds.', waitMs: _authLockUntil - now };
+    }
+    let ok = false;
+    if (pin != null && pin !== '') ok = verifyPin(pin);
+    else if (password != null && password !== '') ok = await verifyPassword(password);
+    if (ok) { _authFails = 0; return { ok: true }; }
+    _authFails += 1;
+    if (_authFails >= 5) { _authLockUntil = Date.now() + 8000; _authFails = 0; }
+    return { ok: false, error: 'Incorrect — try again.' };
 }
 
 let settings = loadSettings();
@@ -1102,6 +1169,36 @@ function registerIpc() {
             return { ok: false, error: msg };
         }
         return { ok: true, log: (r.stdout || '').trim().slice(0, 300) };
+    });
+
+    // ----- Auth: PIN + sign-in (Phase 3c) -----------------------------------
+    ipcMain.handle('auth:status', () => ({
+        linux: IS_LINUX,
+        live: IS_LIVE,
+        hasPin: hasPin(),
+        // Sign-in lock: on for installed systems, off on the live demo (root,
+        // no password). Toggle in Settings.
+        lockEnabled: IS_LINUX && !IS_LIVE && settings.lockEnabled !== false,
+        user: (() => { try { return os.userInfo().username; } catch { return 'operator'; } })(),
+    }));
+    ipcMain.handle('auth:set-pin', (_e, payload) => {
+        const { pin, current } = payload || {};
+        if (hasPin()) {
+            const okCur = (current && /^\d{4}$/.test(current)) ? verifyPin(current) : false;
+            if (!okCur) return { ok: false, error: 'Your current PIN is incorrect.' };
+        }
+        return setPin(pin) ? { ok: true } : { ok: false, error: 'The PIN must be exactly 4 digits.' };
+    });
+    ipcMain.handle('auth:clear-pin', async (_e, payload) => {
+        const u = await authUnlock(payload || {});
+        if (!u.ok) return u;
+        clearPin();
+        return { ok: true };
+    });
+    ipcMain.handle('auth:unlock', async (_e, payload) => authUnlock(payload || {}));
+    ipcMain.handle('auth:set-lock', (_e, enabled) => {
+        settings = saveSettings({ ...settings, lockEnabled: !!enabled });
+        return { ok: true };
     });
 
     ipcMain.handle('files:home', () => os.homedir());

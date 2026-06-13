@@ -10,6 +10,42 @@
 </head>
 <body>
 
+<!-- ================= SIGN-IN ================= -->
+<div id="signin" style="display:none;">
+    <div class="signin-card">
+        <div class="signin-logo">⛨</div>
+        <div class="signin-title">OUTLAW OS</div>
+        <div class="signin-user" id="signin-user">operator</div>
+
+        <div id="signin-pin-mode" hidden>
+            <div class="pin-dots" id="pin-dots"><span></span><span></span><span></span><span></span></div>
+            <div class="pin-pad" id="pin-pad">
+                <button type="button" data-d="1">1</button>
+                <button type="button" data-d="2">2</button>
+                <button type="button" data-d="3">3</button>
+                <button type="button" data-d="4">4</button>
+                <button type="button" data-d="5">5</button>
+                <button type="button" data-d="6">6</button>
+                <button type="button" data-d="7">7</button>
+                <button type="button" data-d="8">8</button>
+                <button type="button" data-d="9">9</button>
+                <span></span>
+                <button type="button" data-d="0">0</button>
+                <button type="button" data-pin-back aria-label="Backspace">⌫</button>
+            </div>
+            <a href="#" id="use-password" class="signin-link">Use password instead</a>
+        </div>
+
+        <div id="signin-pw-mode" hidden>
+            <input id="signin-pw" type="password" autocomplete="off" placeholder="Your account password">
+            <button id="signin-pw-go" class="primary" type="button">Sign in</button>
+            <a href="#" id="use-pin" class="signin-link" hidden>Use PIN instead</a>
+        </div>
+
+        <div class="signin-msg" id="signin-msg"></div>
+    </div>
+</div>
+
 <!-- ================= BOOT ================= -->
 <div id="boot">
     <div class="log" id="boot-log"></div>
@@ -471,6 +507,31 @@
                     <button id="wifi-scan">⟳ Scan for Wi-Fi</button>
                 </div>
                 <div id="wifi-list" class="wifi-list"></div>
+            </div>
+
+            <div class="card" id="security-card">
+                <h3>Security &amp; sign-in</h3>
+                <div class="setting">
+                    <div class="label">Ask to sign in on startup<small>Lock the desktop until you enter your PIN or password</small></div>
+                    <label class="switch"><input type="checkbox" id="lock-toggle"><span class="track"></span></label>
+                </div>
+                <div class="setting">
+                    <div class="label">Unlock PIN<small id="pin-state">A 4-digit PIN you can use instead of your password</small></div>
+                    <div class="row" style="gap:6px;">
+                        <button id="pin-set-btn">Set PIN</button>
+                        <button id="pin-remove-btn" class="danger" hidden>Remove PIN</button>
+                    </div>
+                </div>
+                <div id="pin-form" hidden style="margin-top:8px;display:flex;flex-direction:column;gap:8px;max-width:320px;">
+                    <input id="pin-current" type="password" inputmode="numeric" maxlength="4" placeholder="Current PIN" hidden>
+                    <input id="pin-new" type="password" inputmode="numeric" maxlength="4" placeholder="New 4-digit PIN">
+                    <input id="pin-confirm" type="password" inputmode="numeric" maxlength="4" placeholder="Confirm new PIN">
+                    <div class="row" style="gap:6px;">
+                        <button id="pin-save" class="primary">Save PIN</button>
+                        <button id="pin-cancel">Cancel</button>
+                    </div>
+                    <div id="pin-form-msg" class="muted" style="font-size:12px;"></div>
+                </div>
             </div>
 
             <div class="card">

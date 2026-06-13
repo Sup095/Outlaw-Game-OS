@@ -128,6 +128,18 @@ contextBridge.exposeInMainWorld('outlaw', {
     },
 
     // --- Session (Dev vs Desktop via the boot greeter) ---------------------
+    auth: {
+        // Sign-in / lock state (hasPin, lockEnabled, user, live).
+        status: () => ipcRenderer.invoke('auth:status'),
+        // Unlock with a 4-digit PIN or the account password. {pin} | {password}.
+        unlock: (payload) => ipcRenderer.invoke('auth:unlock', payload),
+        // Set or change the PIN (pass {pin}; if one exists, also {current}).
+        setPin: (pin, current) => ipcRenderer.invoke('auth:set-pin', { pin, current }),
+        // Remove the PIN (needs the current PIN or the account password).
+        clearPin: (payload) => ipcRenderer.invoke('auth:clear-pin', payload),
+        // Toggle the startup sign-in screen.
+        setLock: (enabled) => ipcRenderer.invoke('auth:set-lock', enabled),
+    },
     net: {
         // Connectivity + device summary (full|limited|portal|none|unknown).
         status: () => ipcRenderer.invoke('net:status'),
