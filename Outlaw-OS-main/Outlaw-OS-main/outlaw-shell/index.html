@@ -449,6 +449,22 @@
             <div class="row"><h2>AI Assistant</h2><span class="spacer"></span>
                 <span class="badge off" id="ai-badge">offline</span>
             </div>
+
+            <details class="page-help">
+                <summary>How does the AI work?</summary>
+                <p>Outlaw runs AI <b>privately on this PC</b> — no internet, no account, nothing leaves the machine. It talks to <b>LM Studio</b> (a free local model runner). Click <b>Check my PC</b> below and Outlaw picks a model your hardware can actually run, then walks you through installing it. Weak PC? There's a tiny model that runs on almost anything — once it's loaded it can answer the rest of your setup questions itself.</p>
+            </details>
+
+            <div class="card" id="ai-setup-card">
+                <h3>Set up your private AI</h3>
+                <p class="muted" style="margin:0 0 10px;">One-time setup. Outlaw reads your RAM, GPU and CPU and recommends a model that fits.</p>
+                <div class="row" style="gap:8px;flex-wrap:wrap;">
+                    <button class="primary" id="ai-check-pc" type="button">Check my PC</button>
+                    <button id="ai-get-lmstudio" type="button">Get / Open LM Studio</button>
+                </div>
+                <div id="ai-setup-result" style="margin-top:12px;"></div>
+            </div>
+
             <div class="card">
                 <div id="ai-log"></div>
                 <div class="row" style="margin-top:10px;">
@@ -586,6 +602,9 @@
                         <option value="stable">Stable (recommended)</option>
                         <option value="beta">Beta (newest, untested)</option>
                     </select>
+                </div>
+                <div class="muted" style="margin:2px 0 8px;border-left:3px solid var(--accent,#caa64a);padding-left:8px;">
+                    Heads up: before <b>v1.0</b> there is <b>no difference</b> between Stable and Beta — every build is a pre-release, so both channels get the newest build. The split starts mattering once the first full release ships.
                 </div>
                 <div class="setting">
                     <div class="label">Background auto-check<small>Quietly polls every 6 hours; notifies you when a new release is published</small></div>

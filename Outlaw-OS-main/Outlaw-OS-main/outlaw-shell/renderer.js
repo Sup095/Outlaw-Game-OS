@@ -1333,6 +1333,35 @@ function escapeHtml(s) {
     return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 
+// Phase 4: render the spec-aware model recommendation into the AI setup card.
+function renderAiRecommendation(r) {
+    const out = $('#ai-setup-result');
+    if (!out) return;
+    const gpuTxt = r.vramGb > 0
+        ? `${escapeHtml(r.gpuName || 'GPU')} · ${r.vramGb} GB VRAM`
+        : (r.gpuName ? `${escapeHtml(r.gpuName)} · no dedicated VRAM` : 'no discrete GPU');
+    const rec = r.recommended || {};
+    const starterLine = r.sameAsStarter ? '' :
+        `<p class="muted" style="margin:6px 0 0;">Weak PC or not sure? Start with <b>${escapeHtml(r.starter.model)}</b> (${escapeHtml(r.starter.size)}) — ${escapeHtml(r.starter.note)} Once it's running you can ask <em>it</em> how to set up the bigger one.</p>`;
+    out.innerHTML = `
+        <div style="border-top:1px solid var(--line,#2a2f29);padding-top:10px;">
+            <div class="mono muted" style="font-size:12px;">
+                ${escapeHtml(r.cpu)} · ${r.cores} cores · ${r.ramGb} GB RAM · ${gpuTxt}
+            </div>
+            <p style="margin:8px 0 2px;"><b>Recommended:</b> ${escapeHtml(rec.model)}
+                <span class="muted">(${escapeHtml(rec.size)})</span></p>
+            <p class="muted" style="margin:0;">Runs on: ${escapeHtml(r.runsOn)} · context length ${rec.ctx}</p>
+            ${starterLine}
+            <ol style="margin:10px 0 0;padding-left:20px;line-height:1.6;">
+                <li>Click <b>Get / Open LM Studio</b> above. Install the AppImage (save it to your <b>Applications</b> or <b>Downloads</b> folder), then open it.</li>
+                <li>In LM Studio's search, find <b>${escapeHtml(rec.model)}</b> and download it.</li>
+                <li>Load the model. ${r.gpuOffload ? 'Turn <b>GPU offload ON</b> (you have a capable GPU).' : 'Leave GPU offload off — it runs on your CPU.'} Set context length to <b>${rec.ctx}</b>.</li>
+                <li>Click <b>Start Server</b> in LM Studio (top bar, port 1234).</li>
+                <li>Open <b>Settings → Local AI Assistant</b> and flip <b>Enable on-device AI</b> on. That's it — come back here and ask anything.</li>
+            </ol>
+        </div>`;
+}
+
 // ---------------------------------------------------------------------------
 // Event wiring (delegation)
 // ---------------------------------------------------------------------------
@@ -1558,6 +1587,29 @@ function wire() {
             } catch {
                 toast('Could not open LM Studio.');
             }
+        });
+    }
+
+    // Phase 4: AI setup guide — read this PC's specs and recommend a model.
+    const checkPcBtn = $('#ai-check-pc');
+    if (checkPcBtn) {
+        checkPcBtn.addEventListener('click', async () => {
+            const out = $('#ai-setup-result');
+            if (out) out.innerHTML = '<span class="muted">Reading your hardware…</span>';
+            try {
+                renderAiRecommendation(await api.ai.recommend());
+            } catch (err) {
+                if (out) out.innerHTML = '<span class="muted">Could not read specs: ' + escapeHtml(err.message) + '</span>';
+            }
+        });
+    }
+    const getLmBtn = $('#ai-get-lmstudio');
+    if (getLmBtn) {
+        getLmBtn.addEventListener('click', async () => {
+            try {
+                const r = await api.apps.launch('lmstudio');
+                toast(r.ok ? 'Opening LM Studio (or its download page).' : (r.error || 'Could not open LM Studio.'));
+            } catch { toast('Could not open LM Studio.'); }
         });
     }
 

@@ -576,6 +576,33 @@ function memInfo() {
 
 function fmtGb(kb) { return (kb / 1024 / 1024).toFixed(1) + 'G'; }
 
+// ---- Phase 4: local-AI model recommendation -------------------------------
+// Given total system RAM and discrete-GPU VRAM (GB), pick a model the machine
+// can realistically run in LM Studio, plus suggested settings. We always also
+// return a "starter" model that runs on practically any PC — once it's loaded
+// it can guide the user through the rest of the setup itself.
+function recommendModel(ramGb, vramGb) {
+    const gpu = vramGb >= 4;                       // a usable discrete GPU?
+    // Budget = VRAM for GPU inference, else CPU+RAM leaving ~4G for the OS.
+    const budget = gpu ? vramGb : Math.max(1, ramGb - 4);
+    const starter = { model: 'Qwen2.5 0.5B Instruct (Q4_K_M)', size: '~0.4 GB',
+                      note: 'Runs on almost anything, even old laptops.' };
+    let rec;
+    if (budget < 3)       rec = { model: 'Qwen2.5 0.5B Instruct (Q4_K_M)', size: '~0.4 GB', ctx: 2048, tier: 'tiny' };
+    else if (budget < 6)  rec = { model: 'Llama 3.2 3B Instruct (Q4_K_M)', size: '~2.2 GB', ctx: 4096, tier: 'small' };
+    else if (budget < 11) rec = { model: 'Qwen2.5 7B Instruct (Q4_K_M)',   size: '~4.7 GB', ctx: 8192, tier: 'medium' };
+    else if (budget < 20) rec = { model: 'Qwen2.5 14B Instruct (Q4_K_M)',  size: '~9 GB',   ctx: 8192, tier: 'large' };
+    else                  rec = { model: 'Qwen2.5 32B Instruct (Q4_K_M)',  size: '~19 GB',  ctx: 8192, tier: 'xl' };
+    return {
+        gpu, budgetGb: Math.round(budget * 10) / 10,
+        runsOn: gpu ? `GPU offload (${vramGb} GB VRAM — fast)`
+                    : 'CPU + RAM (works everywhere, a bit slower)',
+        gpuOffload: gpu,
+        starter, recommended: rec,
+        sameAsStarter: rec.model === starter.model,
+    };
+}
+
 async function systemInfo() {
     const mem = memInfo();
     let kernel = os.release();
@@ -1446,6 +1473,33 @@ function registerIpc() {
         // Just flips the routing bit — we don't kill LM Studio, the user owns it.
         settings = saveSettings({ ...settings, aiEnabled: false });
         return { ok: true, enabled: false };
+    });
+
+    // Phase 4: read this PC's specs and recommend a local model + settings.
+    ipcMain.handle('ai:recommend', async () => {
+        const mem = memInfo();
+        const ramGb = Math.round((mem.totalKb / 1024 / 1024) * 10) / 10;
+        let vramGb = 0, gpuName = '';
+        if (IS_LINUX) {
+            // nvidia-smi is the only reliable VRAM source from a shell; ~50ms
+            // when present, fast exit when absent. Fall back to lspci for a name.
+            const nv = await runShell(
+                'nvidia-smi --query-gpu=name,memory.total --format=csv,noheader,nounits 2>/dev/null | head -n 1',
+                { timeout: 3000 });
+            if (nv.code === 0 && nv.stdout) {
+                const p = nv.stdout.split(',').map((s) => s.trim());
+                gpuName = p[0] || 'NVIDIA GPU';
+                vramGb = Math.round((Number(p[1]) || 0) / 1024 * 10) / 10;
+            } else {
+                const lspci = await runShell(
+                    "lspci 2>/dev/null | grep -Ei 'vga|3d|display' | sed 's/^.*: //' | head -n 1",
+                    { timeout: 2000 });
+                gpuName = (lspci.stdout || '').trim();
+            }
+        }
+        const cores = os.cpus().length;
+        const cpu = (os.cpus()[0] || {}).model || 'CPU';
+        return { ok: true, ramGb, vramGb, gpuName, cores, cpu, ...recommendModel(ramGb, vramGb) };
     });
 
     ipcMain.handle('ai:ask', async (_e, prompt) => {

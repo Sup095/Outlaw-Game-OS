@@ -81,6 +81,8 @@ contextBridge.exposeInMainWorld('outlaw', {
         ask: (prompt) => ipcRenderer.invoke('ai:ask', prompt),
         // Run a tool action the AI proposed, after the user approved it.
         confirmAction: (action) => ipcRenderer.invoke('ai:confirm-action', action),
+        // Phase 4: spec-aware local-model recommendation for the setup guide.
+        recommend: () => ipcRenderer.invoke('ai:recommend'),
     },
 
     // --- Gaming -------------------------------------------------------------

@@ -61,9 +61,23 @@ async function getLatestRelease(repo, channel = 'stable') {
         return newest;
     }
 
-    // stable
-    const res = await ghFetch(`https://api.github.com/repos/${repo}/releases/latest`);
-    return res.json();
+    // stable → GitHub's /releases/latest (newest NON-prerelease).
+    try {
+        const res = await ghFetch(`https://api.github.com/repos/${repo}/releases/latest`);
+        return res.json();
+    } catch (e) {
+        // No stable release exists yet (every build is still a -Beta pre-release
+        // before v1.0). Until then there's NO real difference between channels,
+        // so fall back to the newest release so the stable channel still
+        // updates. Once a non-prerelease v1.0 ships, /releases/latest succeeds
+        // and this fallback never runs again.
+        if (!/\b404\b/.test(e.message)) throw e;
+        const all = await ghFetch(`https://api.github.com/repos/${repo}/releases?per_page=15`);
+        const list = await all.json();
+        const newest = Array.isArray(list) ? list.find((r) => !r.draft) : null;
+        if (!newest) throw new Error('No releases found yet.');
+        return newest;
+    }
 }
 
 function pickAsset(release, patterns) {
