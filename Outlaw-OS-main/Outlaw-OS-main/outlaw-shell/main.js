@@ -190,6 +190,44 @@ async function authUnlock({ pin, password }) {
     return { ok: false, error: 'Incorrect — try again.' };
 }
 
+// ---------------------------------------------------------------------------
+// Resilient package install/update. Prefer the installed /usr/local/bin helpers
+// (passwordless via the 49-outlaw polkit rule). If a helper is MISSING — e.g.
+// the shell was updated on a system installed before the helpers existed — fall
+// back to the same logic written to a temp script and run via `pkexec bash`
+// (works, but prompts since it isn't the allowlisted program). This turns the
+// fatal "no such file or directory" into a working install.
+// ---------------------------------------------------------------------------
+const PKG_INSTALL_SH = [
+    '#!/bin/bash',
+    'set -uo pipefail',
+    "if ! grep -qE '^\\[multilib\\]' /etc/pacman.conf; then sed -i '/^#\\[multilib\\]/{s/^#//; n; s/^#//}' /etc/pacman.conf; fi",
+    'if [ ! -s /etc/pacman.d/gnupg/pubring.gpg ]; then pacman-key --init >/dev/null 2>&1 || true; pacman-key --populate archlinux >/dev/null 2>&1 || true; fi',
+    'pacman -Syy --noconfirm || { echo "could not synchronize databases"; exit 4; }',
+    'pacman -S --needed --noconfirm "$@"',
+    '',
+].join('\n');
+const PKG_UPDATE_SH = '#!/bin/bash\nset -uo pipefail\npacman -Syu --noconfirm\n';
+
+function tempScript(name, content) {
+    const p = path.join(os.tmpdir(), name);
+    try { fs.writeFileSync(p, content, { mode: 0o755 }); return p; } catch { return null; }
+}
+function privInstall(pkgList, timeout) {
+    const helper = '/usr/local/bin/outlaw-pkg-install';
+    if (IS_LINUX && fs.existsSync(helper)) return runShell(`pkexec ${helper} ${pkgList}`, { timeout });
+    const tmp = tempScript('outlaw-pkg-install.sh', PKG_INSTALL_SH);
+    if (!tmp) return Promise.resolve({ code: 1, stdout: '', stderr: 'Could not prepare the installer.' });
+    return runShell(`pkexec bash ${tmp} ${pkgList}`, { timeout });
+}
+function privUpdate(timeout) {
+    const helper = '/usr/local/bin/outlaw-update-pkgs';
+    if (IS_LINUX && fs.existsSync(helper)) return runShell(`pkexec ${helper}`, { timeout });
+    const tmp = tempScript('outlaw-update-pkgs.sh', PKG_UPDATE_SH);
+    if (!tmp) return Promise.resolve({ code: 1, stdout: '', stderr: 'Could not prepare the updater.' });
+    return runShell(`pkexec bash ${tmp}`, { timeout });
+}
+
 let settings = loadSettings();
 
 // ---------------------------------------------------------------------------
@@ -1263,11 +1301,9 @@ function registerIpc() {
         // install-state is still tracked on the primary `pkg`.
         // 20-minute timeout — large multilib packages on slow connections.
         const pkgList = [app.pkg, ...(app.extra || [])].join(' ');
-        // ABSOLUTE path: pkexec runs with a sanitized PATH that excludes
-        // /usr/local/bin, so a bare name fails with "No such file or directory"
-        // — and the polkit rule matches on the absolute program path too.
-        const cmd = `pkexec /usr/local/bin/outlaw-pkg-install ${pkgList}`;
-        const r = await runShell(cmd, { timeout: 1000 * 60 * 20 });
+        // Resilient: uses the installed helper (passwordless) if present, else a
+        // temp-script fallback — so a missing helper can't break installs.
+        const r = await privInstall(pkgList, 1000 * 60 * 20);
         const tail = (r.stdout || r.stderr || `exit ${r.code}`).slice(-3000);
         if (r.code !== 0) {
             // Surface a useful hint for the most common failure modes.
@@ -1474,7 +1510,7 @@ function registerIpc() {
         // Full system upgrade via the helper (ABSOLUTE path; passwordless via
         // the 49-outlaw polkit rule). -Syu is the only safe way to update on
         // Arch and covers every app installed from the Apps panel too.
-        const r = await runShell('pkexec /usr/local/bin/outlaw-update-pkgs', { timeout: 1000 * 60 * 30 });
+        const r = await privUpdate(1000 * 60 * 30);
         const tail = (r.stdout || r.stderr || `exit ${r.code}`).slice(-4000);
         if (r.code !== 0) {
             const hint = /could not|failed to synchronize|connect|network/i.test(tail)

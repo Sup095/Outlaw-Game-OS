@@ -133,6 +133,12 @@
                         type="button"
                         title="Flip between Cold (canned dialogue, zero AI traffic) and Live (LM Studio answers + tool calls).">Go Live</button>
             </div>
+            <details class="page-help">
+                <summary>What is the System Core?</summary>
+                <p>The System Core is your machine's status centre and assistant. The rings show live <b>CPU, RAM and VRAM</b> use. The badge shows the current <b>VRAM-saver tier</b> (change it in Settings → AI / VRAM).</p>
+                <p><b>Cold mode</b> (default) uses built-in dialogue and sends <i>zero</i> AI traffic — fully offline and free. <b>Go Live</b> connects to your local LM Studio so the Core can answer questions and run safe actions for you (open an app, run a diagnostic, search files). Live mode only works when LM Studio is running with a model loaded.</p>
+                <p>Use the controls here to run a <b>system diagnostic</b>, watch temperatures, toggle <b>performance mode</b>, and talk to the Core. Nothing leaves your machine.</p>
+            </details>
             <div class="core-stage" aria-hidden="true">
                 <svg class="core-ring outer" viewBox="0 0 200 200">
                     <circle cx="100" cy="100" r="92" fill="none" stroke="var(--term-dim)" stroke-width="1.5"
@@ -352,6 +358,10 @@
             <div class="row"><h2>Secure Terminal</h2><span class="spacer"></span>
                 <span class="badge on">guarded</span>
             </div>
+            <details class="page-help">
+                <summary>How does the terminal work?</summary>
+                <p>A normal shell — type a command and press Enter; output appears above. It runs in your home folder as you. <b>Destructive commands</b> (like <code>rm -rf</code>, <code>dd</code>, <code>mkfs</code>) are intercepted and need you to type <b>CONFIRM</b> first, so you can't wipe the machine by accident. Use <code>sudo</code> for admin tasks; <code>pacman</code> for packages (or just use the Apps page).</p>
+            </details>
             <textarea id="term-out" readonly></textarea>
             <div class="term-hint" id="term-hint"></div>
             <input id="term-in" placeholder="> command…  (destructive commands require confirmation)" autocomplete="off" spellcheck="false">
@@ -461,6 +471,11 @@
         <!-- Settings -->
         <section class="screen" id="screen-settings">
             <h2>Settings</h2>
+            <details class="page-help">
+                <summary>What's in Settings?</summary>
+                <p><b>Network &amp; Wi-Fi</b> — connect to Wi-Fi and see your connection. <b>Security &amp; sign-in</b> — set a 4-digit PIN and require sign-in on startup. <b>Appearance</b> — switch theme (Green Phosphor / Gold Gunmetal) and the optional CRT effect.</p>
+                <p><b>AI &amp; VRAM</b> — turn the local AI on/off and pick how aggressively it saves video memory. <b>System Package Updates</b> — check for and apply updates to every installed app + the system. <b>Outlaw Shell Updates</b> — update Outlaw OS itself and choose the stable or beta channel. <b>Help Test This Version</b> — tell the maintainer whether this build works. <b>Support Development</b> — an optional donate link.</p>
+            </details>
 
             <div class="card">
                 <h3>Session</h3>

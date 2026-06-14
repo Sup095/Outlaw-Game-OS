@@ -64,6 +64,21 @@ body.live-mode .topbar { box-shadow: inset 0 -2px 0 rgba(255, 210, 59, 0.22); }
 body.live-mode button:disabled,
 body.live-mode input:disabled { opacity: .35; }
 
+/* ---- Page help (collapsible "what is this?" explainers) ---- */
+.page-help {
+    border: 1px solid var(--line); border-radius: var(--radius);
+    background: var(--panel); margin: 0 0 16px; padding: 0 12px;
+}
+.page-help > summary {
+    cursor: pointer; padding: 9px 4px; color: var(--term-dim);
+    font-size: 13px; letter-spacing: 0.03em; list-style: none;
+}
+.page-help > summary::before { content: 'ⓘ '; color: var(--term); }
+.page-help > summary:hover { color: var(--term); }
+.page-help[open] > summary { border-bottom: 1px solid var(--line); margin-bottom: 8px; }
+.page-help p { margin: 0 0 8px; font-size: 13px; opacity: 0.85; }
+.page-help code { color: var(--term); }
+
 /* ---- Sign-in / lock screen (Phase 3c) ---- */
 #signin {
     position: fixed; inset: 0; z-index: 10000; display: none;

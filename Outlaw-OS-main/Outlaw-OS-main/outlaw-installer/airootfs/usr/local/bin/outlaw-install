@@ -565,12 +565,21 @@ pacstrap_and_configure() {
         BOOT_TARGET="/dev/$(lsblk -nro PKNAME "$rootdev" | head -n1)"
     fi
 
+    # Detect the timezone over the network (the live env is online here) so the
+    # installed clock shows LOCAL time, not UTC. Falls back to UTC if offline or
+    # the result isn't a real zone. systemd-timesyncd (enabled below) then keeps
+    # the clock accurate over NTP.
+    local TZ
+    TZ="$(curl -fsS --max-time 6 'http://ip-api.com/line?fields=timezone' 2>/dev/null | tr -d '[:space:]')"
+    [[ -n "$TZ" && -f "/usr/share/zoneinfo/$TZ" ]] || TZ="UTC"
+    grn "Timezone: $TZ (clock will sync over the internet via NTP)"
+
     stage bootloader "Setting up accounts + boot menu…"
     cat > "$TARGET/root/outlaw-chroot.sh" <<CHROOT
 #!/usr/bin/env bash
 set -e
 AUTO=$AUTO_MODE
-ln -sf /usr/share/zoneinfo/UTC /etc/localtime
+ln -sf /usr/share/zoneinfo/$TZ /etc/localtime
 hwclock --systohc || true
 sed -i 's/^#\(en_US.UTF-8 UTF-8\)/\1/' /etc/locale.gen
 locale-gen
@@ -597,6 +606,8 @@ ExecStart=-/usr/bin/agetty --autologin $USERNAME --noclear %I 38400 linux
 GETTY
 
 systemctl enable NetworkManager apparmor
+# Keep the clock correct automatically over the internet (NTP).
+systemctl enable systemd-timesyncd
 
 # Enable the multilib repo so Steam and the 32-bit gaming libraries can install
 # (the first-boot wizard's Steam bundle + the Apps panel both need it). Arch

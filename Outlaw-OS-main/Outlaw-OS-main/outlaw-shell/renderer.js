@@ -726,7 +726,12 @@ async function loadFiles(dir) {
     const list = $('#fs-list');
     list.innerHTML = '';
     if (!res.entries || !res.entries.length) {
-        list.innerHTML = '<div class="muted" style="padding:10px;">(empty or unreadable)</div>';
+        // Distinguish a genuinely empty folder from one we couldn't read, and
+        // note that hidden (dot) files aren't shown — a fresh home holds mostly
+        // those, which is why it can look empty.
+        list.innerHTML = res.error
+            ? `<div class="muted" style="padding:10px;">Couldn't open this folder: ${_escapeHtml(res.error)}</div>`
+            : '<div class="muted" style="padding:10px;">This folder is empty. (Hidden system files aren\'t shown.)</div>';
         return;
     }
     for (const e of res.entries) {
