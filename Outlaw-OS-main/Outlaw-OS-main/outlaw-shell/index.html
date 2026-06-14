@@ -592,6 +592,13 @@
                     <span id="shell-update-status" class="muted mono"></span>
                 </div>
                 <div class="row" style="margin-top:8px;align-items:center;">
+                    <button data-action="repair-shell" id="repair-shell-btn"
+                            title="Re-download the latest release and reinstall ALL Outlaw code (shell, helper tools, installer, CodeMaker). Your files, apps and settings are kept. Fixes a half-applied or out-of-sync update.">
+                        ⟳ Reinstall / repair all components
+                    </button>
+                    <span id="repair-status" class="muted mono"></span>
+                </div>
+                <div class="row" style="margin-top:8px;align-items:center;">
                     <button data-action="rollback-shell" id="rollback-shell-btn" disabled
                             title="Swap /usr/share/outlaw-os with the .prev directory kept by the updater. Useful if a release broke something.">
                         ↶ Rollback to previous version

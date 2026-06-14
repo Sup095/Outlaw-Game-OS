@@ -663,6 +663,28 @@ async function installShellUpdate() {
     refreshRollbackAvailability();
 }
 
+// Repair / reinstall: re-download the latest release and reinstall ALL Outlaw
+// code (shell + helpers + greeter + first-boot + installer + CodeMaker code),
+// keeping the user's files, apps and settings. Fixes a half-applied update or a
+// system whose helpers got out of sync with the shell.
+async function repairShell() {
+    const status = $('#repair-status');
+    if (!window.confirm(
+        'Reinstall the Outlaw OS system code from the latest release?\n\n' +
+        'This refreshes the shell, the helper tools, the installer and CodeMaker\'s code. ' +
+        'Your files, installed apps, accounts and settings are KEPT. The desktop restarts afterwards.')) return;
+    status.textContent = 'fetching latest release…';
+    let r;
+    try { r = await api.updates.checkShell(); } catch (e) { status.textContent = e.message; return; }
+    if (!r || (!r.assetUrl)) { status.textContent = (r && r.error) || 'No release payload found to reinstall from.'; return; }
+    status.textContent = 'downloading + reinstalling all components…';
+    const res = await api.updates.installShell({ assetUrl: r.assetUrl, shaUrl: r.shaUrl });
+    if (!res || !res.ok) { status.textContent = (res && res.error) || 'Repair failed.'; toast('Repair failed: ' + ((res && res.error) || '').slice(0, 120)); return; }
+    status.textContent = '✓ reinstalled — restart the shell to finish.';
+    toast('Outlaw OS reinstalled. Restart the desktop to finish.');
+    refreshRollbackAvailability();
+}
+
 // Probe whether /usr/share/outlaw-os.prev exists so the Rollback button is
 // only enabled when there's actually something to roll back to.
 async function refreshRollbackAvailability() {
@@ -1387,6 +1409,7 @@ function wire() {
             }
             case 'check-shell': checkShellUpdate(); break;
             case 'install-shell': installShellUpdate(); break;
+            case 'repair-shell': repairShell(); break;
             case 'rollback-shell': rollbackShell(); break;
             case 'installer': { const r = await api.installer.launch(); toast(r.ok ? 'Opening installer…' : r.error); break; }
             case 'hotswap': hotswap(); break;

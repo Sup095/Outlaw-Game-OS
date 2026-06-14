@@ -609,6 +609,14 @@ systemctl enable NetworkManager apparmor
 # Keep the clock correct automatically over the internet (NTP).
 systemctl enable systemd-timesyncd
 
+# Cap the systemd stop timeout so a slow-to-exit graphical session can't hang
+# shutdown/reboot for ~90s ("a stop job is running…" / watchdog messages).
+mkdir -p /etc/systemd/system.conf.d
+cat > /etc/systemd/system.conf.d/10-outlaw-timeout.conf <<TIMEOUT
+[Manager]
+DefaultTimeoutStopSec=15s
+TIMEOUT
+
 # Enable the multilib repo so Steam and the 32-bit gaming libraries can install
 # (the first-boot wizard's Steam bundle + the Apps panel both need it). Arch
 # ships /etc/pacman.conf with [multilib] commented out — uncomment the header

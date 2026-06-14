@@ -52,6 +52,41 @@ NAME="$(sed -n 's/.*"name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$NEW/pac
 
 VERSION="$(sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$NEW/package.json" | head -n1)"
 
+# --- Install bundled components (comprehensive update) ----------------------
+# A modern payload carries everything under components/, so a shell update now
+# also refreshes the /usr/local/bin helpers, the greeter, the first-boot wizard,
+# the GUI installer, the polkit rule and Outlaw CodeMaker's code — fixing the
+# old problem where the shell updated but the helper scripts didn't. Done BEFORE
+# the shell swap; the folder is removed afterwards so the shell dir stays clean.
+COMP="$NEW/components"
+if [[ -d "$COMP" ]]; then
+    echo "Installing components (helpers, greeter, first-boot, installer, CodeMaker)…"
+    if [[ -d "$COMP/bin" ]]; then
+        for f in "$COMP/bin"/outlaw-*; do
+            [[ -f "$f" ]] && install -Dm755 "$f" "/usr/local/bin/$(basename "$f")"
+        done
+    fi
+    for pair in "greeter:/usr/share/outlaw-greeter" \
+                "firstboot:/usr/share/outlaw-firstboot" \
+                "installer-gui:/usr/share/outlaw-installer-gui"; do
+        src="$COMP/${pair%%:*}"; dst="${pair##*:}"
+        if [[ -d "$src" ]]; then
+            mkdir -p "$dst"; cp -rT "$src" "$dst"; chown -R root:root "$dst"
+        fi
+    done
+    [[ -f "$COMP/polkit/49-outlaw.rules" ]] \
+        && install -Dm644 "$COMP/polkit/49-outlaw.rules" /etc/polkit-1/rules.d/49-outlaw.rules
+    # CodeMaker: update the CODE only. cp -rT merges over the install, so the
+    # existing .venv, db/ and user data (not carried in the payload) are kept —
+    # the Dev session keeps working with its already-built environment.
+    if [[ -d "$COMP/codemaker" ]]; then
+        mkdir -p /opt/outlaw-codemaker
+        cp -rT "$COMP/codemaker" /opt/outlaw-codemaker
+        chown -R root:root /opt/outlaw-codemaker 2>/dev/null || true
+    fi
+    rm -rf "$COMP"
+fi
+
 # Atomic swap: keep the previous shell as $BACKUP so a bad release can be
 # rolled back with `mv /usr/share/outlaw-os.prev /usr/share/outlaw-os`.
 rm -rf "$BACKUP"

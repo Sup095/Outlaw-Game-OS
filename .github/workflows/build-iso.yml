@@ -310,12 +310,29 @@ jobs:
             VER="$(sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$SHELL_DIR/package.json" | head -n1)"
           fi
           OUT="$GITHUB_WORKSPACE/outlaw-shell-v${VER}.tar.gz"
-          # Flat archive: package.json at the archive root (outlaw-update-apply
-          # accepts flat or one-level-nested, but flat is cleanest).
-          tar -czf "$OUT" \
-            --exclude='node_modules' \
-            --exclude='package-lock.json' \
-            -C "$SHELL_DIR" .
+          BASE="$GITHUB_WORKSPACE/Outlaw-OS-main/Outlaw-OS-main"
+          # COMPREHENSIVE payload: shell files flat at the root (so an older
+          # outlaw-update-apply still finds package.json and swaps the shell),
+          # plus every other Outlaw component under components/ so a modern
+          # update refreshes the helpers, greeter, first-boot wizard, GUI
+          # installer, polkit rule and CodeMaker's code — not just the shell.
+          STAGE="$GITHUB_WORKSPACE/_payload"
+          rm -rf "$STAGE"; mkdir -p "$STAGE/components/bin" "$STAGE/components/polkit"
+          rsync -a --exclude=node_modules --exclude=package-lock.json "$SHELL_DIR/" "$STAGE/"
+          cp "$BASE"/outlaw-installer/airootfs/usr/local/bin/outlaw-* "$STAGE/components/bin/" 2>/dev/null || true
+          [ -d "$BASE/outlaw-installer/airootfs/usr/share/outlaw-greeter" ] && \
+            rsync -a --exclude=node_modules "$BASE/outlaw-installer/airootfs/usr/share/outlaw-greeter/" "$STAGE/components/greeter/"
+          [ -d "$BASE/outlaw-firstboot" ] && \
+            rsync -a --exclude=node_modules "$BASE/outlaw-firstboot/" "$STAGE/components/firstboot/"
+          [ -d "$BASE/outlaw-installer-gui" ] && \
+            rsync -a --exclude=node_modules "$BASE/outlaw-installer-gui/" "$STAGE/components/installer-gui/"
+          cp "$BASE/outlaw-installer/airootfs/etc/polkit-1/rules.d/49-outlaw.rules" "$STAGE/components/polkit/" 2>/dev/null || true
+          CM="$GITHUB_WORKSPACE/Outlaw CodeMaker"
+          if [ -d "$CM" ]; then
+            rsync -a --exclude=.venv --exclude=db --exclude=backups --exclude=workspace \
+              --exclude=__pycache__ --exclude='.git' --exclude='*.pyc' "$CM/" "$STAGE/components/codemaker/"
+          fi
+          tar -czf "$OUT" -C "$STAGE" .
           sha256sum "$OUT" | awk '{print $1}' > "$OUT.sha256"
           echo "shell_tar_rel=${OUT#$GITHUB_WORKSPACE/}"        >> "$GITHUB_OUTPUT"
           echo "shell_sha_rel=${OUT#$GITHUB_WORKSPACE/}.sha256" >> "$GITHUB_OUTPUT"
