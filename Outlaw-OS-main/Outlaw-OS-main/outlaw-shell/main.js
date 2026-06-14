@@ -1242,6 +1242,20 @@ function registerIpc() {
     ipcMain.handle('files:home', () => os.homedir());
     ipcMain.handle('files:list', (_e, dir) => listFiles(dir || os.homedir()));
     ipcMain.handle('files:open', (_e, target) => openPath(target));
+    // Open a real file manager (Thunar) at a path so the user can actually
+    // open / copy / rename / right-click files. The built-in list is a quick
+    // viewer; opening a file with shell.openPath needs a registered handler,
+    // which a fresh system lacks — Thunar gives full interaction either way.
+    ipcMain.handle('files:open-manager', async (_e, dir) => {
+        if (!IS_LINUX) return { ok: false, error: 'Runs on Outlaw OS.' };
+        const target = (dir && typeof dir === 'string') ? dir : os.homedir();
+        const bin = await resolveBinary(APP_REGISTRY.files);
+        if (bin) {
+            launchDetached(bin, [target], { focus: String(bin).split('/').pop() });
+            return { ok: true };
+        }
+        return openPath(target); // last resort: xdg-open the folder
+    });
 
     ipcMain.handle('apps:list', () =>
         Object.entries(APP_REGISTRY).map(([id, v]) => ({ id, label: v.label })));

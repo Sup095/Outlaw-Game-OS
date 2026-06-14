@@ -1372,8 +1372,12 @@ function wire() {
         }
         const fileRow = e.target.closest('.fs-row');
         if (fileRow) {
-            if (fileRow.dataset.type === 'dir') loadFiles((currentDir.endsWith('/') ? currentDir : currentDir + '/') + fileRow.dataset.name);
-            else { const r = await api.files.open((currentDir.endsWith('/') ? currentDir : currentDir + '/') + fileRow.dataset.name); if (!r.ok) toast(r.error); }
+            const full = (currentDir.endsWith('/') ? currentDir : currentDir + '/') + fileRow.dataset.name;
+            if (fileRow.dataset.type === 'dir') { loadFiles(full); }
+            else {
+                const r = await api.files.open(full);
+                if (!r.ok) toast((r.error || 'Could not open that file') + ' — try “Open in file manager”.');
+            }
             return;
         }
         const calcBtn = e.target.closest('#calc-pad [data-k]');
@@ -1384,6 +1388,11 @@ function wire() {
         switch (act.dataset.action) {
             case 'files-up': if (parentDir) loadFiles(parentDir); break;
             case 'files-home': loadFiles(await api.files.home()); break;
+            case 'files-open-fm': {
+                const r = await api.files.openManager(currentDir || null);
+                toast(r && r.ok ? 'Opening file manager…' : ((r && r.error) || 'No file manager available.'));
+                break;
+            }
             case 'tasks-refresh': refreshTasks(); break;
             case 'ai-send': sendAI(); break;
             case 'updates-check': {

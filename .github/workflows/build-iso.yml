@@ -367,6 +367,11 @@ jobs:
             ${{ steps.components.outputs.shell_tar_rel }}
             ${{ steps.components.outputs.shell_sha_rel }}
           generate_release_notes: true
+          # Mark every -Beta tag as a PRE-RELEASE so GitHub's "latest" (which the
+          # updater's stable channel uses) never auto-serves a beta. Only a clean
+          # non-Beta tag (e.g. V2.1.0) becomes a stable "latest" release. Beta
+          # testers opt in via Settings → Update channel → Beta.
+          prerelease: ${{ contains(github.ref_name, 'Beta') || contains(github.ref_name, 'beta') }}
           body: |
             ## Outlaw Game OS ${{ github.ref_name }}
 

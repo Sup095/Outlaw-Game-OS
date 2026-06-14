@@ -36,6 +36,7 @@ contextBridge.exposeInMainWorld('outlaw', {
     files: {
         list: (dir) => ipcRenderer.invoke('files:list', dir),
         open: (target) => ipcRenderer.invoke('files:open', target),
+        openManager: (dir) => ipcRenderer.invoke('files:open-manager', dir),
         home: () => ipcRenderer.invoke('files:home'),
     },
 

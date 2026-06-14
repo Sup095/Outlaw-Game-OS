@@ -35,7 +35,7 @@ Outlaw Game OS is built in the open, one phase at a time. Each **completed** roa
 
 ```
 Foundations   ▰▰▰▰▰▰▰▰▰▰  done — 4 roadmaps, all shipped & tested
-This cycle    ▰▰▱▱▱▱▱▱▱▱  Completeness & Polish — 2 of 10 shipped, phase 3 underway
+This cycle    ▰▰▰▱▱▱▱▱▱▱▱▱▱  Completeness & Polish — phase 3 (stabilization) underway → v2.1.0
 ```
 
 > **Legend:** ✅ shipped & in your hands · 🚧 building now · 🔭 on the horizon
@@ -58,14 +58,17 @@ The foundations boot and run; this cycle makes the desktop feel *finished* and r
 |:--:|:--|:--|
 | ✅ | **1 · Identity** | Optional **Gold Gunmetal** theme — the sci-fi-fortress look that matches Outlaw CodeMaker — switchable anytime in *Settings → Appearance*, on **both** the desktop and the dev tool. New source-available **license**. |
 | ✅ | **2 · Your apps, found** | The Apps page has an **"On this PC"** view that auto-discovers everything you've installed — `.desktop` apps *and* AppImages you download — one click to launch, no manual refresh. |
-| 🚧 | **3 · Stabilization — make it fully functional** | The real-hardware shakedown: a **point-and-click installer** that shrinks Windows for you automatically, **Wi-Fi everywhere** (installer, first boot, Settings), the desktop **filling the whole screen**, working **diagnostics + stress test that auto-apply the best settings**, Steam / Firefox / Godot installable any time from **Apps**, and a steady stream of fixes so *everything works end-to-end* before new features land. |
-| 🔭 | **4 · Task Manager** | A Windows-style task manager (**End task** / **End process tree**) with live **CPU · RAM · GPU + VRAM** readouts, in the Outlaw look. |
-| 🔭 | **5 · Help + Quickstart** | A **skippable first-boot tour** showing where everything is, plus a searchable **Help database** that explains the whole OS and how to troubleshoot it. |
-| 🔭 | **6 · Reviewer that works** | One-click *"it worked / it broke"* reporting per version, so testing actually feeds back to the maintainer (and the stable channel). |
-| 🔭 | **7 · Boot sequence + pre-flight** | A cinematic boot every time: real system boot data scrolling on a green, CRT-scanline screen, with the holographic Outlaw sigil flickering to life (~3s) in the middle — skippable — then optionally scan your PC for the best settings before you even enter the OS. |
-| 🔭 | **8 · Session driver profiles** | Choose the driver/package stack per session — **dev-tuned** vs **gaming/desktop** — applied safely *after* boot, never touching the bootloader. |
-| 🔭 | **9 · Windowed desktop** | Real windows — title bars with **minimize / maximize / close**, drag & resize, and a **taskbar** to find minimized windows. |
-| 🔭 | **10 · "Broken" mode** | A third theme where the system looks like it's *barely holding together* — glitches, scanlines, the System Core throwing (fake) errors. It's also the live-demo vibe: a broken machine you repair by installing. *(Basic live-mode feature-locks already shipped.)* |
+| 🚧 | **3 · Stabilization — make it fully functional** | The real-hardware shakedown: a **point-and-click installer** that shrinks Windows for you automatically, **Wi-Fi everywhere** (installer, first boot, Settings), the desktop **filling the whole screen**, **window management** (minimize/maximize/close + taskbar), a **4-digit PIN + sign-in**, an **updater that refreshes every component**, working **diagnostics + auto-tune**, correct **local time**, and a steady stream of fixes so *everything works end-to-end* before new features land. |
+| 🔭 | **4 · AI you can actually run** | Add **LM Studio** as a one-click download, plus a guided setup. A tiny model that runs on **any PC — even a weak one** — boots first and, knowing your hardware, walks you through everything: if your machine can handle more, it recommends a better model and the exact settings to use. The System Core can see your specs and tailor the advice. |
+| 🔭 | **5 · Task Manager** | A Windows-style task manager (**End task** / **End process tree**) with live **CPU · RAM · GPU + VRAM** readouts, in the Outlaw look. |
+| 🔭 | **6 · Help + Quickstart** | A **skippable first-boot tour** showing where everything is, plus a searchable **Help database** that explains the whole OS and how to troubleshoot it. |
+| 🔭 | **7 · Reviewer that works** | One-click *"it worked / it broke"* reporting per version, so testing actually feeds back to the maintainer (and the stable channel). |
+| 🔭 | **8 · Boot sequence + pre-flight** | A cinematic boot every time: real system boot data scrolling on a green, CRT-scanline screen, with the holographic Outlaw sigil flickering to life (~3s) in the middle — skippable — then optionally scan your PC for the best settings before you even enter the OS. |
+| 🔭 | **9 · Session driver profiles** | Choose the driver/package stack per session — **dev-tuned** vs **gaming/desktop** — applied safely *after* boot, never touching the bootloader. |
+| 🔭 | **10 · Window management polish** | Build on the windows + taskbar already shipped: keep the desktop pinned behind apps, themed title bars, window snapping, and remembered positions. |
+| 🔭 | **11 · "Broken" mode** | A third theme where the system looks like it's *barely holding together* — glitches, scanlines, the System Core throwing (fake) errors. It's also the live-demo vibe: a broken machine you repair by installing. *(Basic live-mode feature-locks already shipped.)* |
+| 🔭 | **12 · Loading screens** | A proper, styled loading screen for installs and other long jobs — one side shows the **phase**, the other a **live log** of what's happening. Glitches and tears in "Broken" mode. Replaces the plain installer for a far more polished look. |
+| 🔭 | **13 · Release readiness → v2.1.0** | A final fixing + **comprehensive testing** pass to put the constant bugs to rest, leading to **v2.1.0 — the first fully-released version.** Updates continue after, but the rough-edges era ends here. |
 
 ### 🌌 Beyond
 
@@ -132,9 +135,18 @@ Everything below is for people who want to test in a VM, run the pieces from sou
 
 ---
 
-## 🧪 Test in VirtualBox (recommended VM settings)
+## 🧪 Test in VirtualBox (community notes — not officially supported)
 
-If you want to try Outlaw in a virtual machine first, **the VM settings matter** — wrong settings are the #1 cause of a black screen.
+> ⚠️ **VirtualBox is no longer officially supported.** Outlaw is built and tested
+> for **real hardware**. VirtualBox can work, but it's finicky — its emulated EFI
+> firmware is buggy, and if Windows Hyper-V holds VT-x it falls back to a slow
+> mode that hangs the boot. Even with the settings below it **may not run well or
+> at all**, and we won't be troubleshooting VM-only problems. If you want to try
+> it in a VM anyway, the notes below are the best starting point — but you're on
+> your own getting it working. **Bare metal (a spare PC / USB boot) is the
+> supported path.**
+
+The settings below were the most reliable when VirtualBox *did* work:
 
 > ### ⚠️ The single most important setting: **turn EFI OFF**
 > VirtualBox's built-in **EFI firmware is buggy** and frequently hangs *before* it even loads the boot menu — you get a pure black screen and the machine "never does anything." This is a VirtualBox problem, not an Outlaw one (our ISO hasn't started running yet at that point). **Leave "Enable EFI" unchecked** so the VM boots in BIOS mode via syslinux, which is rock-solid. The Outlaw ISO supports both, but **BIOS is the reliable path in VirtualBox.**
