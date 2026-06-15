@@ -75,9 +75,10 @@ async function timeoutFetch(url, opts, ms) {
 }
 
 
-async function status() {
+async function status(opts = {}) {
+    const base = opts.baseUrl || LM_STUDIO_BASE;
     try {
-        const res = await timeoutFetch(`${LM_STUDIO_BASE}/models`, {}, 1500);
+        const res = await timeoutFetch(`${base}/models`, {}, 1500);
         if (!res.ok) return { available: false, models: [] };
         const data = await res.json();
         const models = Array.isArray(data && data.data)
@@ -161,7 +162,7 @@ function sessionInfo(sessionId) {
 // Ask
 // ---------------------------------------------------------------------------
 
-async function ask({ sessionId, text, appIds, model, machine }) {
+async function ask({ sessionId, text, appIds, model, machine, baseUrl }) {
     const userText = String(text == null ? '' : text).slice(0, 4000).trim();
     if (!userText) {
         return { ok: false, error: 'empty prompt' };
@@ -187,7 +188,7 @@ async function ask({ sessionId, text, appIds, model, machine }) {
 
     let res;
     try {
-        res = await timeoutFetch(`${LM_STUDIO_BASE}/chat/completions`, {
+        res = await timeoutFetch(`${baseUrl || LM_STUDIO_BASE}/chat/completions`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(body),

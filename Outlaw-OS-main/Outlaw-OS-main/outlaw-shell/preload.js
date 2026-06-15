@@ -92,6 +92,8 @@ contextBridge.exposeInMainWorld('outlaw', {
         // Phase 4: hardware-aware plain-prose setup chat (walks the user through
         // getting a local model running). payload = { prompt, history? }.
         setupChat: (payload) => ipcRenderer.invoke('ai:setup-chat', payload),
+        // Phase 13.2: pull the built-in base model if it's missing (first run).
+        ensureBaseModel: () => ipcRenderer.invoke('ai:ensure-base-model'),
     },
 
     // --- Gaming -------------------------------------------------------------

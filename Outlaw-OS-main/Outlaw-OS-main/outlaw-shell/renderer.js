@@ -215,6 +215,15 @@ function enterOS() {
     refreshAiStatus();
     checkSafeMode();
     maybeShowQuickstart();
+    // Phase 13.2 — first desktop run: make sure the built-in AI model is present
+    // (pulls it once, shown on the loading screen). No-op if already there or if
+    // the built-in AI / AI itself is turned off. Desktop-only by construction.
+    (async () => {
+        try {
+            const s = await api.ai.status();
+            if (s.enabled && s.baseAiEnabled !== false && api.ai.ensureBaseModel) api.ai.ensureBaseModel();
+        } catch {}
+    })();
 }
 
 // Show a persistent toast banner if outlaw-session-watchdog flipped us into
@@ -1097,19 +1106,27 @@ async function refreshAiStatus() {
     }
     const toggle = $('#ai-toggle');
     if (toggle) toggle.checked = !!s.enabled;
+    const baseToggle = $('#base-ai-toggle');
+    if (baseToggle) baseToggle.checked = (s.baseAiEnabled !== false);
+    const builtIn = s.backend === 'base';
+    const where = builtIn ? 'the built-in AI' : 'LM Studio';
     const sub = $('#ai-sub');
     if (sub) sub.textContent = s.enabled
         ? (s.available
-            ? 'Active · routing prompts to LM Studio'
-            : 'Waiting for LM Studio — open it, load a model, click Start Server (port 1234).')
-        : 'Off · routes prompts to LM Studio on this machine';
+            ? 'Active · using ' + where
+            : (builtIn
+                ? 'Starting — the built-in model may still be downloading.'
+                : 'Waiting for LM Studio — open it, load a model, click Start Server (port 1234).'))
+        : 'Off · the System Core + AI Assistant run locally on this machine';
     const modelSub = $('#ai-model-sub');
     if (modelSub) {
-        if (s.enabled && s.available) {
+        if (builtIn) {
+            modelSub.textContent = 'Built-in model: ' + (s.model || 'bundled') + ' — runs on this machine, no setup.';
+        } else if (s.enabled && s.available) {
             const loaded = (s.models && s.models[0]) || s.model || '(no model loaded)';
             modelSub.textContent = 'Loaded in LM Studio: ' + loaded + ' — swap models there.';
         } else {
-            modelSub.textContent = 'Loaded in LM Studio — change the model there to swap it everywhere.';
+            modelSub.textContent = 'Turn off the built-in AI to use LM Studio — change the model there.';
         }
     }
 }
@@ -1860,11 +1877,22 @@ function wire() {
     $('#ai-toggle').addEventListener('change', async (e) => {
         if (e.target.checked) {
             const r = await api.ai.enable();
-            toast(r.available ? 'AI enabled.' : 'AI enabled — start LM Studio and click "Start Server".');
+            toast(r.backend === 'base'
+                ? (r.available ? 'AI enabled — using the built-in model.' : 'AI enabled — preparing the built-in model…')
+                : (r.available ? 'AI enabled.' : 'AI enabled — start LM Studio and click "Start Server".'));
         } else {
             await api.ai.disable();
             toast('AI disabled.');
         }
+        refreshAiStatus();
+    });
+    // Phase 13.2 — built-in AI vs LM Studio backend toggle.
+    const baseAiToggle = $('#base-ai-toggle');
+    if (baseAiToggle) baseAiToggle.addEventListener('change', async (e) => {
+        const on = !!e.target.checked;
+        await setSetting({ baseAiEnabled: on });
+        toast(on ? 'Using the built-in AI.' : 'Built-in AI off — will use LM Studio when it\'s running.');
+        if (on) { try { api.ai.ensureBaseModel(); } catch {} }   // pull the bundled model if missing
         refreshAiStatus();
     });
     // Convenience: launch LM Studio from the AI settings card.

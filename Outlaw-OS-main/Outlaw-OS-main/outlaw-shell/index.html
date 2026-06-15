@@ -559,11 +559,15 @@
             <div class="card">
                 <h3>Local AI Assistant</h3>
                 <div class="setting">
-                    <div class="label">Enable on-device AI<small id="ai-sub">Off · routes prompts to LM Studio on this machine</small></div>
+                    <div class="label">Enable on-device AI<small id="ai-sub">Off · the System Core + AI Assistant run locally on this machine</small></div>
                     <label class="switch"><input type="checkbox" id="ai-toggle"><span class="track"></span></label>
                 </div>
                 <div class="setting">
-                    <div class="label">Current model<small id="ai-model-sub">Loaded in LM Studio — change the model there to swap it everywhere.</small></div>
+                    <div class="label">Use the built-in AI<small id="base-ai-sub">On · a small bundled model that runs on anything — no setup. Turn off to use LM Studio instead.</small></div>
+                    <label class="switch"><input type="checkbox" id="base-ai-toggle" checked><span class="track"></span></label>
+                </div>
+                <div class="setting">
+                    <div class="label">Current model<small id="ai-model-sub">Built-in model, or whatever you load in LM Studio when the built-in AI is off.</small></div>
                     <button id="ai-open-lmstudio" type="button">Open LM Studio</button>
                 </div>
                 <div class="setting">

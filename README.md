@@ -35,7 +35,7 @@ Outlaw Game OS is built in the open, one phase at a time. Each **completed** roa
 
 ```
 Foundations   ▰▰▰▰▰▰▰▰▰▰  done — 4 roadmaps, all shipped & tested
-This cycle    ▰▰▰▰▰▰▰▰▰▰▰▰▰▱▱  Completeness & Polish — phase 13 (AI that runs your system) underway → v2.1.0
+This cycle    ▰▰▰▰▰▰▰▰▰▰▰▰▰▱▱▱  Completeness & Polish — phase 14 (Dev session rebuild) underway → v2.1.0
 ```
 
 > **Legend:** ✅ shipped & in your hands · 🚧 building now · 🔭 on the horizon
@@ -68,9 +68,10 @@ The foundations boot and run; this cycle makes the desktop feel *finished* and r
 | ✅ | **10 · Window management polish** | An openbox config + Outlaw-themed title bars that keep the **desktop pinned behind apps**, give app windows **edge/window snapping**, and **smart-place** new windows so they don't pile in the corner. |
 | ✅ | **11 · "Broken" mode** | A third selectable theme (*Settings → Appearance*) where the system looks like it's *barely holding together* — a sickly washed-out palette with flicker, a rolling scanline tear and glitching, chromatic-split headings. Pure CSS, so it costs nothing when off. The live-demo "repair it by installing" vibe (live-mode feature-locks already shipped). |
 | ✅ | **12 · Loading screens** | A proper, styled loading screen for long jobs — phase steps on one side, a **live streamed log** on the other, with an animated progress strip (and the Broken-mode glitches when that theme's on). Wired into the graphics-stack install; a reusable overlay other long jobs can adopt. |
-| 🚧 | **13 · AI that runs your system (experimental)** | Test how far the on-device AI can go: tell it *"install Krita"* or *"update everything"* and it does it — whether the app is already installed, sitting on the Apps page, or it has to find and download it from the web. Outside the dev session VRAM is less precious, so it may even ship with a small built-in model so it works out of the box. Experimental — we're proving what's reliable before committing. |
-| 🔭 | **14 · Self-update service (feasibility)** | An experiment in letting Outlaw keep itself — and its dependencies — current automatically, and quietly roll in fixes. We're testing whether it can be made reliable and safe; it may or may not stay. |
-| 🔭 | **15 · Release readiness → v2.1.0** | A final fixing + **comprehensive testing** pass — including outstanding bugs like the installer's **automatic partition resizing** — to put the constant bugs to rest, leading to **v2.1.0 — the first fully-released version.** Updates continue after, but the rough-edges era ends here. |
+| ✅ | **13 · AI that runs your system (experimental)** | Tell the on-device AI *"install Krita"* and it does it — resolving to a **known source** (the Apps catalog or official repos), proposing the action, and installing on your **one-click confirm**, shown live on the loading screen. Ships with a **small built-in model** so the System Core + AI Assistant work **out of the box, no setup** — toggle it off to use LM Studio instead. Desktop-only. |
+| 🚧 | **14 · Dev session rebuild** | A ground-up rework of the Dev session (Outlaw CodeMaker), which has several major issues. A comprehensive, question-driven build-out to make the AI game-dev workflow correct, robust, and genuinely great. |
+| 🔭 | **15 · Self-update service (feasibility)** | An experiment in letting Outlaw keep itself — and its dependencies — current automatically, and quietly roll in fixes. We're testing whether it can be made reliable and safe; it may or may not stay. |
+| 🔭 | **16 · Release readiness → v2.1.0** | A final fixing + **comprehensive testing** pass — including outstanding bugs like the installer's **automatic partition resizing** — to put the constant bugs to rest, leading to **v2.1.0 — the first fully-released version.** Updates continue after, but the rough-edges era ends here. |
 
 ### 🌌 Beyond
 

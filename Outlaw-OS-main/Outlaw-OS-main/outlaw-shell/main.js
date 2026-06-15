@@ -30,6 +30,13 @@ const { VramTierMonitor } = require('./vram-tier');
 const coreai = require('./coreai');
 
 const IS_LINUX = process.platform === 'linux';
+// Phase 13.2 — local AI backends (both OpenAI-compatible). The BUILT-IN base AI
+// is a bundled Ollama model that runs on almost anything; the fallback is the
+// user's own LM Studio. The Dev session never touches either — it has its own
+// backend — so this stays desktop-only per the Dev⟂Desktop rule.
+const LM_STUDIO_V1 = 'http://127.0.0.1:1234/v1';
+const OLLAMA_V1 = 'http://127.0.0.1:11434/v1';
+const BASE_AI_MODEL = 'qwen2.5:1.5b';   // small enough for anything, capable enough to be useful
 let mainWindow = null;
 let autoCheckTimer = null;
 
@@ -75,10 +82,19 @@ vramTier.on('tier-changed', (status) => {
 // ---------------------------------------------------------------------------
 const SETTINGS_PATH = path.join(app.getPath('userData'), 'settings.json');
 const DEFAULT_SETTINGS = {
-    aiEnabled: false,        // AI is OFF by default (low-VRAM friendly first boot)
+    // Phase 13.2 — AI is ON by default now that there's a bundled built-in model
+    // (no setup needed). The System Core + AI Assistant use it automatically; the
+    // tiny model loads on demand and unloads when idle, and the Dev session never
+    // touches it. "Start without AI" at boot, or this toggle, turns it off.
+    aiEnabled: true,
     // 'local-model' is LM Studio's sentinel — it routes to whatever model the
     // user has loaded in LM Studio's UI. Matches Outlaw CodeMaker's default.
     aiModel: 'local-model',
+    // Phase 13.2 — the BUILT-IN base AI. true (default) = the System Core + AI
+    // Assistant use the bundled Ollama model (no setup, runs on anything). false
+    // = fall back to LM Studio if it's installed + running. "Start without AI"
+    // at boot flips the master aiEnabled off so nothing loads at all.
+    baseAiEnabled: true,
     crtFx: false,            // CRT scanline/flicker effect OFF by default (crisp + readable)
     glow: false,             // text glow OFF by default (no discoloration)
     // P1 — visual theme. 'green' = classic green-phosphor terminal (default,
@@ -666,6 +682,31 @@ function machineSummary(s) {
         + `Starter model that runs on anything: ${s.starter.model}.`;
 }
 
+// Phase 13.2 — which local AI backend the desktop uses right now. Default = the
+// built-in bundled Ollama model; when the user turns the built-in AI off, fall
+// back to LM Studio (status() will report it unavailable if it isn't running).
+function aiBackend() {
+    if (settings.baseAiEnabled !== false) {
+        return { baseUrl: OLLAMA_V1, model: BASE_AI_MODEL, kind: 'base' };
+    }
+    return { baseUrl: LM_STUDIO_V1, model: settings.aiModel || 'local-model', kind: 'lmstudio' };
+}
+
+// Pull the bundled base model if it isn't present yet (first desktop run). Runs
+// only when the built-in AI is on; streams to the loading screen. Ollama must be
+// installed + its service running (the installer enables it).
+async function ensureBaseModel() {
+    if (!IS_LINUX) return { ok: false, reason: 'not-linux' };
+    if (settings.baseAiEnabled === false) return { ok: false, reason: 'base-ai-off' };
+    const have = await runShell(`ollama list 2>/dev/null | grep -F "${BASE_AI_MODEL}"`, { timeout: 8000 });
+    if (have.code === 0 && have.stdout.trim()) return { ok: true, present: true };
+    // Not present — pull it (streamed to the loading screen).
+    const labels = ['Preparing', 'Downloading model', 'Verifying', 'Finishing'];
+    const matchers = [null, /pulling|downloading|manifest/i, /verifying|writing/i, /success/i];
+    const r = await runStreamingJob('ollama', ['pull', BASE_AI_MODEL], labels, matchers);
+    return { ok: r.ok, pulled: r.ok };
+}
+
 async function systemInfo() {
     const mem = memInfo();
     let kernel = os.release();
@@ -1249,7 +1290,7 @@ function registerIpc() {
     // but this is the defence-in-depth backstop.
 
     ipcMain.handle('coreai:status', async () => {
-        const lm = await coreai.status();
+        const lm = await coreai.status(aiBackend());
         const vram = await vramTier.getStatus();
         return {
             lmStudio: lm,
@@ -1277,7 +1318,7 @@ function registerIpc() {
         const appIds = Object.keys(APP_REGISTRY);
         const r = await coreai.ask({
             sessionId, text, appIds,
-            model: settings.aiModel || 'local-model',
+            ...aiBackend(),                                  // base Ollama model or LM Studio
             machine: machineSummary(await gatherSpecs()),
         });
         if (!r.ok) return r;
@@ -1644,8 +1685,10 @@ function registerIpc() {
 
     // --- AI ---
     ipcMain.handle('ai:status', async () => {
-        const s = await aiAgent.status();
-        return { ...s, enabled: settings.aiEnabled, model: settings.aiModel };
+        const be = aiBackend();
+        const s = await aiAgent.status(be);
+        return { ...s, enabled: settings.aiEnabled, model: be.model, backend: be.kind,
+                 baseAiEnabled: settings.baseAiEnabled !== false };
     });
 
     ipcMain.handle('ai:enable', async () => {
@@ -1655,13 +1698,18 @@ function registerIpc() {
         // try launching the LM Studio helper as a convenience, but don't gate
         // success on it — the user may already have LM Studio running.
         settings = saveSettings({ ...settings, aiEnabled: true });
+        const be = aiBackend();
         if (IS_LINUX) {
             // Fire-and-forget — never block the IPC reply on it.
-            runShell('outlaw-lm-studio 2>/dev/null &', { timeout: 2000 }).catch(() => {});
+            if (be.kind === 'base') ensureBaseModel().catch(() => {});       // built-in: pull model if missing
+            else runShell('outlaw-lm-studio 2>/dev/null &', { timeout: 2000 }).catch(() => {});  // fallback: launch LM Studio
         }
-        const s = await aiAgent.status();
-        return { ok: true, enabled: true, available: s.available, model: settings.aiModel };
+        const s = await aiAgent.status(be);
+        return { ok: true, enabled: true, available: s.available, model: be.model, backend: be.kind };
     });
+
+    // Phase 13.2: pull the built-in base model on demand (first desktop run).
+    ipcMain.handle('ai:ensure-base-model', async () => ensureBaseModel());
 
     ipcMain.handle('ai:disable', async () => {
         // Just flips the routing bit — we don't kill LM Studio, the user owns it.
@@ -1700,29 +1748,34 @@ function registerIpc() {
             : [];
         const messages = [{ role: 'system', content: sys }, ...prior, { role: 'user', content: userMsg }];
         try {
-            const text = await aiAgent.chat(messages, { model: settings.aiModel, maxTokens: 420 });
+            const text = await aiAgent.chat(messages, { ...aiBackend(), maxTokens: 420 });
             return { ok: true, text: text || 'No reply.' };
         } catch (e) {
             return {
                 ok: false,
-                error: 'LM Studio isn\'t answering yet. Install it, load the starter model ('
-                    + s.starter.model + '), click "Start Server", then ask again.',
+                error: settings.baseAiEnabled !== false
+                    ? 'The built-in AI isn\'t ready yet — it may still be downloading its model. Try again shortly.'
+                    : 'LM Studio isn\'t answering yet. Install it, load the starter model ('
+                        + s.starter.model + '), click "Start Server", then ask again.',
             };
         }
     });
 
     ipcMain.handle('ai:ask', async (_e, prompt) => {
         if (!settings.aiEnabled) return { error: 'AI is disabled. Enable it in Settings.' };
-        const s = await aiAgent.status();
+        const be = aiBackend();
+        const s = await aiAgent.status(be);
         if (!s.available) {
             return {
-                error: 'LM Studio isn\'t reachable. Open LM Studio, load a model, then click "Start Server" (port 1234).',
+                error: be.kind === 'base'
+                    ? 'The built-in AI isn\'t ready yet — it may still be downloading its model. Try again shortly (or check that Ollama is running).'
+                    : 'LM Studio isn\'t reachable. Open LM Studio, load a model, then click "Start Server" (port 1234).',
             };
         }
         try {
             const appIds = Object.keys(APP_REGISTRY);
             const machine = machineSummary(await gatherSpecs());
-            const intent = await aiAgent.ask(prompt, { model: settings.aiModel, appIds, machine });
+            const intent = await aiAgent.ask(prompt, { ...be, appIds, machine });
             return await executeIntent(intent);
         } catch (e) {
             return { error: e.message };

@@ -617,6 +617,10 @@ GETTY
 systemctl enable NetworkManager apparmor
 # Keep the clock correct automatically over the internet (NTP).
 systemctl enable systemd-timesyncd
+# Local AI runtime for the desktop's built-in AI (Phase 13.2). Light daemon — it
+# loads NO model until the desktop shell asks, so the Dev session (its own
+# backend) is unaffected. Guarded so a missing unit can't abort the install.
+systemctl enable ollama 2>/dev/null || true
 
 # Cap the systemd stop timeout so a slow-to-exit graphical session can't hang
 # shutdown/reboot for ~90s ("a stop job is running…" / watchdog messages).

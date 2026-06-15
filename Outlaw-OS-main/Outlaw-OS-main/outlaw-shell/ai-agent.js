@@ -58,9 +58,10 @@ async function timeoutFetch(url, opts, ms) {
 
 // Is LM Studio reachable, and which models are loaded?
 // LM Studio exposes /v1/models à la OpenAI; it returns the currently-loaded model(s).
-async function status() {
+async function status(opts = {}) {
+    const base = opts.baseUrl || LM_STUDIO_BASE;
     try {
-        const res = await timeoutFetch(`${LM_STUDIO_BASE}/models`, {}, 1500);
+        const res = await timeoutFetch(`${base}/models`, {}, 1500);
         if (!res.ok) return { available: false, models: [] };
         const data = await res.json();
         // OpenAI shape: { data: [{ id, object, ... }, ...] }
@@ -112,7 +113,7 @@ function parseIntent(raw) {
 
 // Ask the model. Returns a parsed intent { tool, arg, text }.
 // Uses the OpenAI-compatible /v1/chat/completions endpoint.
-async function ask(prompt, { model, appIds, machine }) {
+async function ask(prompt, { model, appIds, machine, baseUrl } = {}) {
     const body = {
         model: model || DEFAULT_MODEL,
         stream: false,
@@ -125,7 +126,7 @@ async function ask(prompt, { model, appIds, machine }) {
             { role: 'user', content: String(prompt || '').slice(0, 4000) },
         ],
     };
-    const res = await timeoutFetch(`${LM_STUDIO_BASE}/chat/completions`, {
+    const res = await timeoutFetch(`${baseUrl || LM_STUDIO_BASE}/chat/completions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
@@ -147,7 +148,7 @@ async function ask(prompt, { model, appIds, machine }) {
 // hardware-aware AI setup guide so even a tiny local model can answer in normal
 // prose (the {tool,arg,text} schema is too tight for a step-by-step walkthrough).
 // `messages` is a full OpenAI-style array (system + turns). Returns raw text.
-async function chat(messages, { model, maxTokens = 400 } = {}) {
+async function chat(messages, { model, maxTokens = 400, baseUrl } = {}) {
     const body = {
         model: model || DEFAULT_MODEL,
         stream: false,
@@ -155,7 +156,7 @@ async function chat(messages, { model, maxTokens = 400 } = {}) {
         max_tokens: maxTokens,
         messages: Array.isArray(messages) ? messages : [],
     };
-    const res = await timeoutFetch(`${LM_STUDIO_BASE}/chat/completions`, {
+    const res = await timeoutFetch(`${baseUrl || LM_STUDIO_BASE}/chat/completions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
