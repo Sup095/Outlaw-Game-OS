@@ -811,6 +811,25 @@
     </div>
 </div>
 
+<!-- Loading screen (Phase 12) — styled overlay for installs / long jobs: phases
+     on the left, a live streamed log on the right. Inherits the active theme and
+     glitches in Broken mode. Driven by 'job-progress' events from main. -->
+<div id="loadscreen" class="ls-overlay">
+    <div class="ls-card">
+        <div class="ls-title" id="ls-title">Working…</div>
+        <div class="ls-body">
+            <ol class="ls-steps" id="ls-steps"></ol>
+            <pre class="ls-log" id="ls-log"></pre>
+        </div>
+        <div class="ls-bar" id="ls-bar"><span></span></div>
+        <div class="ls-foot">
+            <span class="ls-status" id="ls-status">working…</span>
+            <span class="spacer"></span>
+            <button id="ls-close" type="button" disabled>Close</button>
+        </div>
+    </div>
+</div>
+
 <script src="dialogue.js"></script>
 <script src="syscore.js"></script>
 <script src="help-data.js"></script>

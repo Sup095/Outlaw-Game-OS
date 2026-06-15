@@ -816,6 +816,38 @@ function killPids(pids, signal) {
     return { ok: errors.length === 0, killed, errors };
 }
 
+// ---- Phase 12: streamed long-job runner (drives the loading screen) --------
+// Spawns a command and streams its output to the renderer's loading screen via
+// 'job-progress' events: { phases:[labels] } once at the start, { phase:i } as
+// recognised markers go by, { log:line } per output line, { done, ok } at exit.
+// Resolves { ok, code } so the caller still gets a final verdict.
+function runStreamingJob(cmd, args, phaseLabels, phaseMatchers) {
+    return new Promise((resolve) => {
+        const send = (p) => {
+            try { if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('job-progress', p); }
+            catch { /* window gone */ }
+        };
+        send({ phases: phaseLabels, phase: 0 });
+        let phase = 0, child;
+        try { child = spawn(cmd, args); }
+        catch (e) { send({ log: 'error: ' + e.message, done: true, ok: false }); return resolve({ ok: false, error: e.message }); }
+        const onData = (buf) => {
+            for (const raw of String(buf).split('\n')) {
+                const line = raw.replace(/\s+$/, '');
+                if (!line) continue;
+                for (let i = phase + 1; i < phaseMatchers.length; i++) {
+                    if (phaseMatchers[i] && phaseMatchers[i].test(line)) { phase = i; send({ phase }); break; }
+                }
+                send({ log: line.slice(0, 200) });
+            }
+        };
+        child.stdout && child.stdout.on('data', onData);
+        child.stderr && child.stderr.on('data', onData);
+        child.on('error', (e) => { send({ log: 'error: ' + e.message, done: true, ok: false }); resolve({ ok: false, error: e.message }); });
+        child.on('close', (code) => { send({ phase: phaseLabels.length - 1, done: true, ok: code === 0 }); resolve({ ok: code === 0, code }); });
+    });
+}
+
 // ---------------------------------------------------------------------------
 // IPC handlers
 // ---------------------------------------------------------------------------
@@ -1884,10 +1916,16 @@ function registerIpc() {
     });
     ipcMain.handle('drivers:apply', async () => {
         if (!IS_LINUX) return { ok: false, error: 'Graphics profiles run on Outlaw OS.' };
-        const r = await runShell(`pkexec ${DRIVER_PROFILE} apply gaming`, { timeout: 1000 * 60 * 20 });
-        return r.code === 0
-            ? { ok: true, output: (r.stdout || '').slice(-1200) }
-            : { ok: false, error: (r.stderr || r.stdout || 'Install failed.').slice(-800) };
+        // Phase 12: stream to the loading screen (live phases + log) instead of a
+        // single blocking call with output dumped at the end.
+        const labels = ['Preparing', 'Refreshing databases', 'Installing graphics packages', 'Finishing'];
+        const matchers = [
+            null,
+            /Synchronizing|Refreshing|multilib|keyring/i,
+            /Installing|downloading|reinstalling|^:: |\(\d+\/\d+\)/i,
+            /^>> Done|installation finished|complete/i,
+        ];
+        return runStreamingJob('pkexec', [DRIVER_PROFILE, 'apply', 'gaming'], labels, matchers);
     });
     ipcMain.handle('drivers:revert', async () => {
         if (!IS_LINUX) return { ok: false, error: 'Graphics profiles run on Outlaw OS.' };

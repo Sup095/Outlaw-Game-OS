@@ -12,6 +12,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 const EVENT_CHANNELS = ['ai-stream', 'system-tick', 'toast',
     'diagnostics-progress',
     'vram-tier-changed',  // SC7 — fires on tier transitions only
+    'job-progress',       // Phase 12 — live phase/log for the loading screen
 ];
 
 contextBridge.exposeInMainWorld('outlaw', {

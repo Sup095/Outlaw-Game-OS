@@ -1230,6 +1230,50 @@ function shareStabilityFeedback() {
     });
 }
 
+// --- Phase 12: loading screen (driven by streamed 'job-progress' events) ----
+const loadingScreen = (() => {
+    function open(title) {
+        const t = $('#ls-title'); if (t) t.textContent = title || 'Working…';
+        const log = $('#ls-log'); if (log) log.textContent = '';
+        const steps = $('#ls-steps'); if (steps) steps.innerHTML = '';
+        const bar = $('#ls-bar'); if (bar) bar.classList.remove('done');
+        const st = $('#ls-status'); if (st) st.textContent = 'working…';
+        const close = $('#ls-close'); if (close) close.disabled = true;
+        const ov = $('#loadscreen'); if (ov) ov.classList.add('show');
+    }
+    function setSteps(labels) {
+        const steps = $('#ls-steps');
+        if (steps) steps.innerHTML = (labels || []).map((s, i) => `<li data-i="${i}">${escapeHtml(s)}</li>`).join('');
+        setStep(0);
+    }
+    function setStep(i) {
+        $$('#ls-steps li').forEach((li) => {
+            const n = Number(li.dataset.i);
+            li.classList.toggle('active', n === i);
+            li.classList.toggle('done', n < i);
+        });
+    }
+    function log(line) {
+        const el = $('#ls-log'); if (!el) return;
+        el.textContent += line + '\n'; el.scrollTop = el.scrollHeight;
+    }
+    function done(ok) {
+        $$('#ls-steps li').forEach((li) => { li.classList.add('done'); li.classList.remove('active'); });
+        const bar = $('#ls-bar'); if (bar) bar.classList.add('done');
+        const st = $('#ls-status'); if (st) st.textContent = ok ? '✓ done' : '✗ failed — see the log';
+        const close = $('#ls-close'); if (close) close.disabled = false;
+    }
+    function hide() { const ov = $('#loadscreen'); if (ov) ov.classList.remove('show'); }
+    return { open, setSteps, setStep, log, done, hide };
+})();
+if (api && api.on) api.on('job-progress', (p) => {
+    if (!p) return;
+    if (Array.isArray(p.phases)) loadingScreen.setSteps(p.phases);
+    if (typeof p.phase === 'number') loadingScreen.setStep(p.phase);
+    if (typeof p.log === 'string') loadingScreen.log(p.log);
+    if (p.done) loadingScreen.done(!!p.ok);
+});
+
 // --- Phase 9: session graphics/driver profiles ------------------------------
 async function refreshDriversUi() {
     const gpuEl = $('#drv-gpu'), stEl = $('#drv-state');
@@ -1245,23 +1289,29 @@ async function refreshDriversUi() {
     } catch {}
 }
 async function _runDriverAction(kind) {
-    const out = $('#drv-out');
-    const btn = $(kind === 'apply' ? '#drv-apply' : '#drv-revert');
     // Gate behind the same re-auth as other important installs (no-op if no PIN).
     if (typeof requireImportantAuth === 'function' && !(await requireImportantAuth())) return;
-    if (out) out.textContent = kind === 'apply'
-        ? 'Installing the gaming graphics stack… this can take a few minutes.'
-        : 'Switching to the lean profile…';
+    if (kind === 'apply') {
+        // Long job → the streamed loading screen shows live phases + log.
+        const btn = $('#drv-apply'); if (btn) btn.disabled = true;
+        loadingScreen.open('Installing gaming graphics stack');
+        try {
+            const r = await api.drivers.apply();         // streams to the loading screen
+            loadingScreen.done(!!(r && r.ok));           // belt-and-suspenders if the event was missed
+            toast(r && r.ok ? 'Gaming graphics stack installed.' : 'Install failed — see the log.');
+        } catch (e) { loadingScreen.done(false); toast('Error: ' + e.message); }
+        if (btn) btn.disabled = false;
+        refreshDriversUi();
+        return;
+    }
+    // revert — quick, inline output
+    const out = $('#drv-out'), btn = $('#drv-revert');
+    if (out) out.textContent = 'Switching to the lean profile…';
     if (btn) btn.disabled = true;
     try {
-        const r = kind === 'apply' ? await api.drivers.apply() : await api.drivers.revert();
-        if (out) {
-            out.textContent = r.ok
-                ? (kind === 'apply' ? 'Done — gaming graphics stack installed.\n' : 'Done — switched to lean.\n') + (r.output || '')
-                : ('Failed: ' + (r.error || 'unknown'));
-        }
-        toast(r.ok ? (kind === 'apply' ? 'Gaming graphics stack installed.' : 'Switched to lean profile.')
-                   : 'Action failed — see Settings.');
+        const r = await api.drivers.revert();
+        if (out) out.textContent = r.ok ? ('Done — switched to lean.\n' + (r.output || '')) : ('Failed: ' + (r.error || 'unknown'));
+        toast(r.ok ? 'Switched to lean profile.' : 'Revert failed.');
     } catch (e) { if (out) out.textContent = 'Error: ' + e.message; }
     if (btn) btn.disabled = false;
     refreshDriversUi();
@@ -1944,6 +1994,10 @@ function wire() {
     if (drvApplyBtn) drvApplyBtn.addEventListener('click', () => _runDriverAction('apply'));
     const drvRevertBtn = $('#drv-revert');
     if (drvRevertBtn) drvRevertBtn.addEventListener('click', () => _runDriverAction('revert'));
+
+    // Phase 12: loading screen close button (enabled once a job finishes).
+    const lsClose = $('#ls-close');
+    if (lsClose) lsClose.addEventListener('click', () => loadingScreen.hide());
 
     // Session preference reset — flips ~/.outlaw-session-pref back to "ask"
     // so the greeter shows again on next boot.

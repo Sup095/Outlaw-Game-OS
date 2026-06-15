@@ -81,6 +81,36 @@ body.theme-broken h2, body.theme-broken h3 {
 }
 
 /* ===========================================================================
+ * Phase 12 — loading screen overlay (installs / long jobs). Two panes: phase
+ * steps on the left, a live streamed log on the right. Themed via the palette
+ * vars, so it recolors with green/gold and glitches under Broken mode.
+ * ======================================================================== */
+.ls-overlay { position: fixed; inset: 0; z-index: 9000; display: none;
+    align-items: center; justify-content: center; background: rgba(0, 0, 0, 0.82); }
+.ls-overlay.show { display: flex; }
+.ls-card { width: 760px; max-width: 94vw; height: 460px; max-height: 90vh;
+    display: flex; flex-direction: column; background: var(--panel);
+    border: 1px solid var(--term-dim); border-radius: var(--radius);
+    box-shadow: 0 0 40px rgba(var(--term-rgb), 0.18); padding: 18px 20px; }
+.ls-title { font-size: 15px; font-weight: 700; color: var(--term); letter-spacing: .5px; margin-bottom: 12px; }
+.ls-body { flex: 1; display: grid; grid-template-columns: 220px 1fr; gap: 14px; min-height: 0; }
+.ls-steps { list-style: none; margin: 0; padding: 0; font-size: 12.5px; line-height: 1.5; }
+.ls-steps li { padding: 6px 8px; border-left: 2px solid var(--line); color: var(--term-dim); }
+.ls-steps li.active { border-left-color: var(--term); color: var(--term); }
+.ls-steps li.active::before { content: '▸ '; }
+.ls-steps li.done::before { content: '✓ '; }
+.ls-log { margin: 0; overflow: auto; background: #000; border: 1px solid var(--line);
+    border-radius: var(--radius); padding: 8px 10px; font-size: 11px; line-height: 1.5;
+    color: var(--text); white-space: pre-wrap; word-break: break-word; }
+.ls-bar { height: 4px; background: var(--line); border-radius: 3px; margin: 12px 0 10px; overflow: hidden; }
+.ls-bar > span { display: block; height: 100%; width: 35%; background: var(--term); border-radius: 3px;
+    animation: ls-slide 1.3s ease-in-out infinite; }
+.ls-bar.done > span { width: 100%; animation: none; }
+@keyframes ls-slide { 0% { margin-left: -35%; } 100% { margin-left: 100%; } }
+.ls-foot { display: flex; align-items: center; gap: 8px; }
+.ls-status { color: var(--term-dim); font-size: 11px; }
+
+/* ===========================================================================
  * P1 — "Gold Gunmetal" theme (optional). Default is the green-phosphor :root
  * above; this only applies when body has .theme-gold (Settings → Appearance →
  * Theme). It re-points the whole palette to retro gold-on-gunmetal — the same
