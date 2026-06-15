@@ -35,7 +35,7 @@ Outlaw Game OS is built in the open, one phase at a time. Each **completed** roa
 
 ```
 Foundations   ▰▰▰▰▰▰▰▰▰▰  done — 4 roadmaps, all shipped & tested
-This cycle    ▰▰▰▰▰▰▰▰▰▰▱▱▱▱▱  Completeness & Polish — phase 10 (Window management polish) underway → v2.1.0
+This cycle    ▰▰▰▰▰▰▰▰▰▰▰▱▱▱▱  Completeness & Polish — phase 11 ("Broken" mode) underway → v2.1.0
 ```
 
 > **Legend:** ✅ shipped & in your hands · 🚧 building now · 🔭 on the horizon
@@ -65,8 +65,8 @@ The foundations boot and run; this cycle makes the desktop feel *finished* and r
 | ✅ | **7 · Reviewer that works** | One-click *"it worked / it broke"* reporting per version — opens a pre-filled GitHub issue with your system info (and an anonymous machine hash to merge duplicates), plus a live 👍/👎 community tally, so testing actually feeds back to the maintainer (and the stable channel). |
 | ✅ | **8 · Boot sequence + pre-flight** | A cinematic boot every time: real system boot data scrolling on a green, CRT-scanline screen, with the holographic Outlaw sigil flickering to life (~3s) — skippable — at both the session greeter and the desktop's own boot screen, plus an optional **"check this PC"** pre-flight (CPU/RAM/GPU/disk + warnings) before you enter a session. |
 | ✅ | **9 · Session driver profiles** | A **gaming/desktop graphics** profile in *Settings → Session* that one-click installs the userspace Vulkan/Mesa + 32-bit stack (plus GameMode/MangoHUD) for your GPU, and a **lean** profile that reverts it — applied *after* boot via the package manager, **userspace only** (never the kernel driver, KMS or bootloader), fully revertible. |
-| 🚧 | **10 · Window management polish** | Build on the windows + taskbar already shipped: keep the desktop pinned behind apps, themed title bars, window snapping, and remembered positions. |
-| 🔭 | **11 · "Broken" mode** | A third theme where the system looks like it's *barely holding together* — glitches, scanlines, the System Core throwing (fake) errors. It's also the live-demo vibe: a broken machine you repair by installing. *(Basic live-mode feature-locks already shipped.)* |
+| ✅ | **10 · Window management polish** | An openbox config + Outlaw-themed title bars that keep the **desktop pinned behind apps**, give app windows **edge/window snapping**, and **smart-place** new windows so they don't pile in the corner. |
+| 🚧 | **11 · "Broken" mode** | A third theme where the system looks like it's *barely holding together* — glitches, scanlines, the System Core throwing (fake) errors. It's also the live-demo vibe: a broken machine you repair by installing. *(Basic live-mode feature-locks already shipped.)* |
 | 🔭 | **12 · Loading screens** | A proper, styled loading screen for installs and other long jobs — one side shows the **phase**, the other a **live log** of what's happening. Glitches and tears in "Broken" mode. Replaces the plain installer for a far more polished look. |
 | 🔭 | **13 · AI that runs your system (experimental)** | Test how far the on-device AI can go: tell it *"install Krita"* or *"update everything"* and it does it — whether the app is already installed, sitting on the Apps page, or it has to find and download it from the web. Outside the dev session VRAM is less precious, so it may even ship with a small built-in model so it works out of the box. Experimental — we're proving what's reliable before committing. |
 | 🔭 | **14 · Self-update service (feasibility)** | An experiment in letting Outlaw keep itself — and its dependencies — current automatically, and quietly roll in fixes. We're testing whether it can be made reliable and safe; it may or may not stay. |

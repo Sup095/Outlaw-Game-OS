@@ -12,6 +12,11 @@
 
 const { app, BrowserWindow, ipcMain, shell, screen } = require('electron');
 const { spawn, execFile } = require('child_process');
+
+// Phase 10: give the shell a stable WM_CLASS so the window manager (openbox)
+// can pin it to the "below" layer — the desktop stays behind launched apps.
+// Must be set before the app is ready. Harmless off-Linux.
+try { app.commandLine.appendSwitch('class', 'outlaw-shell'); } catch { /* older electron */ }
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
