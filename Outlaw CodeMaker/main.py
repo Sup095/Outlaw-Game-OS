@@ -13,6 +13,8 @@ from __future__ import annotations
 
 import json
 import logging
+import os
+import re
 import sys
 import traceback
 from dataclasses import dataclass
@@ -39,9 +41,64 @@ ROOT = Path(__file__).resolve().parent
 CONFIG_PATH = ROOT / "config.json"
 
 
+# A Windows drive-letter absolute path (e.g. "F:/Godot Games", "C:\\x"). These
+# get baked into config.json on the Windows dev box and are meaningless on the
+# installed Linux OS — opening one raises PermissionError [Errno 13] 'F:' and
+# crashes startup. We rewrite them to home-based defaults at load time.
+_WIN_DRIVE_RE = re.compile(r"^[A-Za-z]:[\\/]")
+
+
+def _is_nonportable(value: object) -> bool:
+    """True if `value` is a Windows drive path but we're NOT on Windows."""
+    return os.name != "nt" and isinstance(value, str) and bool(_WIN_DRIVE_RE.match(value))
+
+
+def _sanitize_config(config: dict) -> dict:
+    """Heal non-portable paths so CodeMaker starts on a fresh Linux install
+    instead of crashing on the dev box's 'F:/...' paths. Only paths invalid for
+    THIS OS are touched — on Windows nothing changes, so the dev box is unaffected."""
+    home = Path.home()
+    db_dir = home / ".outlaw-codemaker" / "db"
+
+    db = config.setdefault("database", {})
+    if _is_nonportable(db.get("path")) or not db.get("path"):
+        db["path"] = str(db_dir / "outlaw.db")
+    if _is_nonportable(db.get("vault_path")) or not db.get("vault_path"):
+        db["vault_path"] = str(db_dir / "vault.db")
+
+    paths = config.setdefault("paths", {})
+    if _is_nonportable(paths.get("default_games_dir")) or not paths.get("default_games_dir"):
+        paths["default_games_dir"] = str(home / "Godot Games")
+
+    # workspace_root / godot.log_path point at a specific project; a stale dev-box
+    # path here just means "no project open" — clear it so the Project Picker
+    # takes over instead of the orchestrator erroring on a missing path.
+    agent = config.setdefault("agent", {})
+    if _is_nonportable(agent.get("workspace_root")):
+        agent["workspace_root"] = ""
+    godot = config.setdefault("godot", {})
+    if _is_nonportable(godot.get("log_path")):
+        godot["log_path"] = ""
+
+    # A Windows tesseract.exe path can't work on Linux; empty = use the system
+    # `tesseract` on PATH (what pytesseract defaults to).
+    vision = config.setdefault("vision", {})
+    tcmd = vision.get("tesseract_cmd")
+    if isinstance(tcmd, str) and (tcmd.endswith(".exe") or _is_nonportable(tcmd)):
+        vision["tesseract_cmd"] = ""
+
+    # Ensure the DB directory exists so the first open() can't fail either.
+    for key in ("path", "vault_path"):
+        try:
+            Path(db[key]).parent.mkdir(parents=True, exist_ok=True)
+        except Exception:  # noqa: BLE001
+            pass
+    return config
+
+
 def load_config() -> dict:
     with CONFIG_PATH.open("r", encoding="utf-8") as fh:
-        return json.load(fh)
+        return _sanitize_config(json.load(fh))
 
 
 def configure_logging() -> None:
