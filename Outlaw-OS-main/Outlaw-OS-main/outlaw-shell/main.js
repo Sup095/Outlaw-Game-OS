@@ -697,6 +697,24 @@ function sendToast(msg) {
 // ---------------------------------------------------------------------------
 // AI orchestration: parse intent -> map to a safe action or a confirm request
 // ---------------------------------------------------------------------------
+// Phase 13: resolve an app name the AI was asked to install to a KNOWN source
+// only — the curated Apps catalog first, then exact official-repo package names.
+// Returns null for anything not in a known source (no arbitrary web downloads).
+async function resolveInstallable(name) {
+    const q = String(name || '').toLowerCase().trim().replace(/^install\s+/, '');
+    if (!q) return null;
+    const hit = APP_CATALOG.find((a) =>
+        a.id === q || a.pkg === q || (a.label || '').toLowerCase() === q
+        || a.id.includes(q) || (a.label || '').toLowerCase().includes(q));
+    if (hit) return { pkg: hit.pkg, extra: hit.extra || [], label: hit.label, source: 'the Apps catalog' };
+    // Official repos — EXACT package name only (validated, no shell metacharacters).
+    if (IS_LINUX && /^[a-z0-9][a-z0-9._+-]*$/.test(q)) {
+        const r = await runShell(`pacman -Si ${q}`, { timeout: 8000 });
+        if (r.code === 0) return { pkg: q, extra: [], label: q, source: 'the official repositories' };
+    }
+    return null;
+}
+
 async function executeIntent(intent) {
     switch (intent.tool) {
         case 'system_info': {
@@ -730,6 +748,19 @@ async function executeIntent(intent) {
         case 'open_file': {
             const r = await openPath(intent.arg || '');
             return { text: r.ok ? `Opened ${intent.arg}.` : r.error, did: r.ok ? 'open_file' : 'none' };
+        }
+        case 'install_app': {
+            // Phase 13: only ever install from a KNOWN source, and only after the
+            // user confirms. Hand a proposal back to the UI (same rail as run_command).
+            const resolved = await resolveInstallable(intent.arg || '');
+            if (!resolved) {
+                return { text: `I can only install from known sources (the Apps catalog or the official repositories), and I couldn't find "${intent.arg}" there. You can browse the Apps page instead.`, did: 'none' };
+            }
+            return {
+                needsConfirm: true,
+                action: { tool: 'install_app', pkg: resolved.pkg, extra: resolved.extra || [], label: resolved.label, source: resolved.source },
+                text: intent.text || `I can install ${resolved.label} from ${resolved.source}. Confirm to proceed.`,
+            };
         }
         case 'run_command':
             // Never auto-run. Hand back to UI for explicit confirmation.
@@ -1702,6 +1733,19 @@ function registerIpc() {
         if (action && action.tool === 'run_command') {
             const r = await runShell(action.arg, { timeout: 120000 });
             return { text: (r.stdout || r.stderr || `(exit ${r.code})`).slice(0, 4000), did: 'run_command' };
+        }
+        // Phase 13: install a known-source app the user just approved. Streams to
+        // the loading screen via runStreamingJob; uses the robust pkg helper.
+        if (action && action.tool === 'install_app') {
+            if (!IS_LINUX) return { ok: false, text: 'Installs run on Outlaw OS.', did: 'install_app' };
+            const pkgs = [action.pkg, ...(Array.isArray(action.extra) ? action.extra : [])]
+                .filter((p) => typeof p === 'string' && /^[a-z0-9][a-z0-9._+-]*$/.test(p));
+            if (!pkgs.length) return { ok: false, text: 'Nothing valid to install.', did: 'install_app' };
+            const labels = ['Preparing', 'Refreshing databases', `Installing ${action.label || action.pkg}`, 'Finishing'];
+            const matchers = [null, /Synchronizing|Refreshing|multilib|keyring/i, /Installing|downloading|reinstalling|^:: |\(\d+\/\d+\)/i, /^>> Installing|installation finished|complete/i];
+            const r = await runStreamingJob('pkexec', ['/usr/local/bin/outlaw-pkg-install', ...pkgs], labels, matchers);
+            return { ok: r.ok, did: 'install_app',
+                     text: r.ok ? `Installed ${action.label || action.pkg}.` : 'Install failed — see the log.' };
         }
         return { text: 'Nothing to do.' };
     });

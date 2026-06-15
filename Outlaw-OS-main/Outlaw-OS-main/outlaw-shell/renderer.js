@@ -1054,6 +1054,23 @@ async function sendAI() {
     if (res.error) { addMsg('sys', res.error); return; }
     if (res.needsConfirm) {
         addMsg('ai', res.text);
+        const act = res.action || {};
+        // Phase 13: AI-proposed app install — confirm, then run it on the loading screen.
+        if (act.tool === 'install_app') {
+            const ok = await askConfirm({
+                title: 'Install ' + (act.label || act.pkg) + '?',
+                reason: 'From ' + (act.source || 'a known source') + ' — only the Apps catalog and official repositories are used.',
+                cmd: [act.pkg].concat(act.extra || []).join(' '),
+            });
+            if (!ok) { addMsg('sys', 'Cancelled.'); return; }
+            loadingScreen.open('Installing ' + (act.label || act.pkg));
+            try {
+                const r = await api.ai.confirmAction(act);
+                loadingScreen.done(!!(r && r.ok));
+                addMsg('ai', (r && r.text) || '(done)');
+            } catch (e) { loadingScreen.done(false); addMsg('sys', 'Error: ' + e.message); }
+            return;
+        }
         const danger = res.classify && res.classify.danger;
         const ok = await askConfirm({
             title: danger ? 'AI wants to run a dangerous command' : 'Run this command?',
