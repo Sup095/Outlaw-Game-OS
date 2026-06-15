@@ -603,6 +603,48 @@ function recommendModel(ramGb, vramGb) {
     };
 }
 
+// Read this PC's specs (RAM / discrete-GPU VRAM / CPU) once and cache them —
+// hardware doesn't change during a session, and the nvidia-smi probe is the
+// only slow bit. Shared by the AI setup card, the spec-aware prompts, and the
+// setup chat so they all agree.
+let _specsCache = null;
+async function gatherSpecs() {
+    if (_specsCache) return _specsCache;
+    const mem = memInfo();
+    const ramGb = Math.round((mem.totalKb / 1024 / 1024) * 10) / 10;
+    let vramGb = 0, gpuName = '';
+    if (IS_LINUX) {
+        const nv = await runShell(
+            'nvidia-smi --query-gpu=name,memory.total --format=csv,noheader,nounits 2>/dev/null | head -n 1',
+            { timeout: 3000 });
+        if (nv.code === 0 && nv.stdout) {
+            const p = nv.stdout.split(',').map((s) => s.trim());
+            gpuName = p[0] || 'NVIDIA GPU';
+            vramGb = Math.round((Number(p[1]) || 0) / 1024 * 10) / 10;
+        } else {
+            const lspci = await runShell(
+                "lspci 2>/dev/null | grep -Ei 'vga|3d|display' | sed 's/^.*: //' | head -n 1",
+                { timeout: 2000 });
+            gpuName = (lspci.stdout || '').trim();
+        }
+    }
+    const cores = os.cpus().length;
+    const cpu = (os.cpus()[0] || {}).model || 'CPU';
+    _specsCache = { ramGb, vramGb, gpuName, cores, cpu, ...recommendModel(ramGb, vramGb) };
+    return _specsCache;
+}
+
+// Compact one-liner used to make the local AI hardware-aware in its prompt.
+function machineSummary(s) {
+    const gpu = s.vramGb > 0
+        ? `${s.gpuName || 'GPU'} with ${s.vramGb}GB VRAM`
+        : (s.gpuName ? `${s.gpuName} (no dedicated VRAM)` : 'no discrete GPU');
+    return `${s.cpu}, ${s.cores} cores, ${s.ramGb}GB RAM, ${gpu}. `
+        + `Best local model for it: ${s.recommended.model} (${s.recommended.size}), `
+        + `context ${s.recommended.ctx}, GPU offload ${s.gpuOffload ? 'on' : 'off'}. `
+        + `Starter model that runs on anything: ${s.starter.model}.`;
+}
+
 async function systemInfo() {
     const mem = memInfo();
     let kernel = os.release();
@@ -1085,6 +1127,7 @@ function registerIpc() {
         const r = await coreai.ask({
             sessionId, text, appIds,
             model: settings.aiModel || 'local-model',
+            machine: machineSummary(await gatherSpecs()),
         });
         if (!r.ok) return r;
 
@@ -1477,29 +1520,44 @@ function registerIpc() {
 
     // Phase 4: read this PC's specs and recommend a local model + settings.
     ipcMain.handle('ai:recommend', async () => {
-        const mem = memInfo();
-        const ramGb = Math.round((mem.totalKb / 1024 / 1024) * 10) / 10;
-        let vramGb = 0, gpuName = '';
-        if (IS_LINUX) {
-            // nvidia-smi is the only reliable VRAM source from a shell; ~50ms
-            // when present, fast exit when absent. Fall back to lspci for a name.
-            const nv = await runShell(
-                'nvidia-smi --query-gpu=name,memory.total --format=csv,noheader,nounits 2>/dev/null | head -n 1',
-                { timeout: 3000 });
-            if (nv.code === 0 && nv.stdout) {
-                const p = nv.stdout.split(',').map((s) => s.trim());
-                gpuName = p[0] || 'NVIDIA GPU';
-                vramGb = Math.round((Number(p[1]) || 0) / 1024 * 10) / 10;
-            } else {
-                const lspci = await runShell(
-                    "lspci 2>/dev/null | grep -Ei 'vga|3d|display' | sed 's/^.*: //' | head -n 1",
-                    { timeout: 2000 });
-                gpuName = (lspci.stdout || '').trim();
-            }
+        return { ok: true, ...(await gatherSpecs()) };
+    });
+
+    // Phase 4: hardware-aware setup guide. A plain-prose chat (NOT the JSON-intent
+    // agent) whose system prompt already knows this PC's specs + the recommended
+    // model, so even a tiny local model can walk the user through getting AI
+    // running. Degrades to a clear "load the starter model first" hint when
+    // LM Studio isn't serving yet.
+    ipcMain.handle('ai:setup-chat', async (_e, payload) => {
+        const userMsg = String((payload && payload.prompt) || '').slice(0, 2000).trim();
+        if (!userMsg) return { ok: false, error: 'Ask a question first.' };
+        const s = await gatherSpecs();
+        const sys = [
+            "You are OUTLAW's on-device AI setup guide. You help the operator get a "
+                + 'private local AI running in LM Studio on THIS computer — everything '
+                + 'stays local, no account or internet needed.',
+            'This computer: ' + machineSummary(s),
+            'Recommend the model above. If the machine is weak, steer them to the '
+                + 'starter model first. Be friendly and practical: short answers, a '
+                + 'short numbered list when giving steps. Plain text only — no JSON, no '
+                + 'code fences unless quoting an exact setting value.',
+        ].join('\n');
+        const prior = Array.isArray(payload && payload.history)
+            ? payload.history
+                .filter((t) => t && (t.role === 'user' || t.role === 'assistant') && typeof t.content === 'string')
+                .slice(-6)
+            : [];
+        const messages = [{ role: 'system', content: sys }, ...prior, { role: 'user', content: userMsg }];
+        try {
+            const text = await aiAgent.chat(messages, { model: settings.aiModel, maxTokens: 420 });
+            return { ok: true, text: text || 'No reply.' };
+        } catch (e) {
+            return {
+                ok: false,
+                error: 'LM Studio isn\'t answering yet. Install it, load the starter model ('
+                    + s.starter.model + '), click "Start Server", then ask again.',
+            };
         }
-        const cores = os.cpus().length;
-        const cpu = (os.cpus()[0] || {}).model || 'CPU';
-        return { ok: true, ramGb, vramGb, gpuName, cores, cpu, ...recommendModel(ramGb, vramGb) };
     });
 
     ipcMain.handle('ai:ask', async (_e, prompt) => {
@@ -1512,7 +1570,8 @@ function registerIpc() {
         }
         try {
             const appIds = Object.keys(APP_REGISTRY);
-            const intent = await aiAgent.ask(prompt, { model: settings.aiModel, appIds });
+            const machine = machineSummary(await gatherSpecs());
+            const intent = await aiAgent.ask(prompt, { model: settings.aiModel, appIds, machine });
             return await executeIntent(intent);
         } catch (e) {
             return { error: e.message };

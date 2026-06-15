@@ -83,6 +83,9 @@ contextBridge.exposeInMainWorld('outlaw', {
         confirmAction: (action) => ipcRenderer.invoke('ai:confirm-action', action),
         // Phase 4: spec-aware local-model recommendation for the setup guide.
         recommend: () => ipcRenderer.invoke('ai:recommend'),
+        // Phase 4: hardware-aware plain-prose setup chat (walks the user through
+        // getting a local model running). payload = { prompt, history? }.
+        setupChat: (payload) => ipcRenderer.invoke('ai:setup-chat', payload),
     },
 
     // --- Gaming -------------------------------------------------------------

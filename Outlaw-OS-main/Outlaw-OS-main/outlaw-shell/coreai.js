@@ -34,12 +34,13 @@ const MAX_HISTORY = 12;
 const TOOLS = ['answer', 'run_diagnostic', 'launch_app', 'notify'];
 
 
-function systemPrompt(appIds) {
+function systemPrompt(appIds, machine) {
     return [
         'You are the OUTLAW CORE — the sci-fi AI heart of Outlaw OS.',
         'You speak in short, sardonic, faintly dystopian one-liners. Picture a',
         'centuries-old fortress AI that has seen everything and is mildly amused',
         'by the operator. Two or three sentences MAX per reply. No filler.',
+        ...(machine ? ['', 'The hardware you inhabit: ' + machine] : []),
         '',
         'Output EXACTLY ONE line of minified JSON, nothing else:',
         '{"tool":"<tool>","arg":"<string>","text":"<your spoken reply>"}',
@@ -160,7 +161,7 @@ function sessionInfo(sessionId) {
 // Ask
 // ---------------------------------------------------------------------------
 
-async function ask({ sessionId, text, appIds, model }) {
+async function ask({ sessionId, text, appIds, model, machine }) {
     const userText = String(text == null ? '' : text).slice(0, 4000).trim();
     if (!userText) {
         return { ok: false, error: 'empty prompt' };
@@ -179,7 +180,7 @@ async function ask({ sessionId, text, appIds, model }) {
         temperature: 0.3,
         max_tokens: 256,
         messages: [
-            { role: 'system', content: systemPrompt(appIds) },
+            { role: 'system', content: systemPrompt(appIds, machine) },
             ...history,
         ],
     };

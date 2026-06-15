@@ -1613,6 +1613,52 @@ function wire() {
         });
     }
 
+    // Phase 4: hardware-aware setup chat. Plain-prose Q&A that already knows the
+    // machine's specs; once a model is loaded in LM Studio it walks the user
+    // through the rest. Short in-renderer history gives multi-turn context.
+    const setupLog = $('#ai-setup-chat-log');
+    const setupIn = $('#ai-setup-chat-in');
+    const setupSend = $('#ai-setup-chat-send');
+    const setupChatHistory = [];
+    const appendSetupMsg = (role, text, muted) => {
+        if (!setupLog) return null;
+        const div = document.createElement('div');
+        div.style.margin = '4px 0';
+        if (muted) div.className = 'muted';
+        div.innerHTML = '<b>' + (role === 'user' ? 'You' : 'AI') + ':</b> '
+            + escapeHtml(text).replace(/\n/g, '<br>');
+        setupLog.appendChild(div);
+        setupLog.scrollTop = setupLog.scrollHeight;
+        return div;
+    };
+    const sendSetupChat = async () => {
+        if (!setupIn) return;
+        const q = setupIn.value.trim();
+        if (!q) return;
+        setupIn.value = '';
+        appendSetupMsg('user', q);
+        const priorHistory = setupChatHistory.slice();   // turns BEFORE this one
+        setupChatHistory.push({ role: 'user', content: q });
+        const thinking = appendSetupMsg('ai', '…', true);
+        try {
+            const r = await api.ai.setupChat({ prompt: q, history: priorHistory });
+            if (thinking && thinking.parentNode) thinking.parentNode.removeChild(thinking);
+            if (r && r.ok) {
+                appendSetupMsg('ai', r.text);
+                setupChatHistory.push({ role: 'assistant', content: r.text });
+            } else {
+                appendSetupMsg('ai', (r && r.error) || 'No reply.', true);
+            }
+        } catch (err) {
+            if (thinking && thinking.parentNode) thinking.parentNode.removeChild(thinking);
+            appendSetupMsg('ai', 'Error: ' + err.message, true);
+        }
+    };
+    if (setupSend) setupSend.addEventListener('click', sendSetupChat);
+    if (setupIn) setupIn.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); sendSetupChat(); }
+    });
+
     // Session preference reset — flips ~/.outlaw-session-pref back to "ask"
     // so the greeter shows again on next boot.
     const sessResetBtn = $('#session-reset-pref');

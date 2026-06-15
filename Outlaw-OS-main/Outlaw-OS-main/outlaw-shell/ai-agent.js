@@ -22,10 +22,11 @@ const DEFAULT_MODEL = 'local-model';
 // process always routes it through user confirmation.
 const TOOLS = ['answer', 'open_app', 'search_web', 'list_files', 'open_file', 'system_info', 'run_command'];
 
-function systemPrompt(appIds) {
+function systemPrompt(appIds, machine) {
     return [
         'You are OUTLAW, the on-device assistant for Outlaw OS, a Linux for AI-driven Godot game development.',
         'You are concise, practical, and privacy-respecting. Everything runs locally via LM Studio.',
+        ...(machine ? ['', 'This computer: ' + machine] : []),
         '',
         'Reply with EXACTLY ONE line of minified JSON and nothing else. Schema:',
         '{"tool":"<tool>","arg":"<string>","text":"<short message to the user>"}',
@@ -110,7 +111,7 @@ function parseIntent(raw) {
 
 // Ask the model. Returns a parsed intent { tool, arg, text }.
 // Uses the OpenAI-compatible /v1/chat/completions endpoint.
-async function ask(prompt, { model, appIds }) {
+async function ask(prompt, { model, appIds, machine }) {
     const body = {
         model: model || DEFAULT_MODEL,
         stream: false,
@@ -119,7 +120,7 @@ async function ask(prompt, { model, appIds }) {
         // VRAM cost on small machines.
         max_tokens: 256,
         messages: [
-            { role: 'system', content: systemPrompt(appIds || []) },
+            { role: 'system', content: systemPrompt(appIds || [], machine) },
             { role: 'user', content: String(prompt || '').slice(0, 4000) },
         ],
     };
@@ -141,4 +142,33 @@ async function ask(prompt, { model, appIds }) {
     return parseIntent(content);
 }
 
-module.exports = { status, ensureModel, ask, TOOLS };
+// Plain conversational completion — NO JSON-intent contract. Used by the
+// hardware-aware AI setup guide so even a tiny local model can answer in normal
+// prose (the {tool,arg,text} schema is too tight for a step-by-step walkthrough).
+// `messages` is a full OpenAI-style array (system + turns). Returns raw text.
+async function chat(messages, { model, maxTokens = 400 } = {}) {
+    const body = {
+        model: model || DEFAULT_MODEL,
+        stream: false,
+        temperature: 0.4,
+        max_tokens: maxTokens,
+        messages: Array.isArray(messages) ? messages : [],
+    };
+    const res = await timeoutFetch(`${LM_STUDIO_BASE}/chat/completions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+    }, 1000 * 120);
+    if (!res.ok) {
+        const detail = await res.text().catch(() => '');
+        throw new Error(`AI request failed (HTTP ${res.status}). ${detail.slice(0, 200)}`);
+    }
+    const data = await res.json();
+    const content =
+        data && data.choices && data.choices[0] && data.choices[0].message
+            ? data.choices[0].message.content
+            : '';
+    return String(content || '').trim();
+}
+
+module.exports = { status, ensureModel, ask, chat, TOOLS };

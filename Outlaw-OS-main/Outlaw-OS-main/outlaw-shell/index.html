@@ -463,6 +463,14 @@
                     <button id="ai-get-lmstudio" type="button">Get / Open LM Studio</button>
                 </div>
                 <div id="ai-setup-result" style="margin-top:12px;"></div>
+                <div style="margin-top:12px;border-top:1px solid var(--line,#2a2f29);padding-top:10px;">
+                    <div class="label" style="margin-bottom:6px;">Stuck? Ask the AI to set itself up<small>Once a model is loaded in LM Studio it answers right here — already knowing your exact hardware.</small></div>
+                    <div id="ai-setup-chat-log" style="margin-bottom:8px;"></div>
+                    <div class="row" style="gap:8px;">
+                        <input id="ai-setup-chat-in" placeholder="e.g. which model should I pick? how do I start the server?" autocomplete="off">
+                        <button id="ai-setup-chat-send" type="button">Ask</button>
+                    </div>
+                </div>
             </div>
 
             <div class="card">
