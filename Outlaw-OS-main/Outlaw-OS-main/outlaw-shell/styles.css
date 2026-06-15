@@ -268,6 +268,18 @@ h3 { font-size: 13px; text-transform: uppercase; color: var(--term-dim); }
 .proc tbody tr:hover { background: rgba(var(--term-rgb), 0.06); }
 .proc tbody tr.sel { background: rgba(var(--term-rgb), 0.14); color: var(--term); }
 
+/* Phase 6 — Help database */
+.help-cat { margin: 18px 0 8px; color: var(--term); font-size: 14px; letter-spacing: .04em; text-transform: uppercase; }
+.help-cat:first-child { margin-top: 2px; }
+.help-topic { border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel-2); margin-bottom: 8px; padding: 10px 12px; }
+.help-topic > summary { cursor: pointer; font-weight: 600; list-style: none; }
+.help-topic > summary::-webkit-details-marker { display: none; }
+.help-topic > summary::before { content: '▸ '; color: var(--term-dim); }
+.help-topic[open] > summary::before { content: '▾ '; }
+.help-topic[open] > summary { color: var(--term); border-bottom: 1px solid var(--line); padding-bottom: 8px; margin-bottom: 8px; }
+.help-body { line-height: 1.55; }
+.help-body p, .help-body ul, .help-body ol { margin: 6px 0; }
+
 .tile {
     display: flex; flex-direction: column; gap: 6px; align-items: flex-start;
     padding: 16px; text-transform: none; letter-spacing: 0; text-align: left;

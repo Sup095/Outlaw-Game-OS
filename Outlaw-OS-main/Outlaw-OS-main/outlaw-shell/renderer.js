@@ -236,6 +236,7 @@ function showScreen(name) {
     if (name === 'tasks') { refreshTasks(); startTasksPoll(); } else { stopTasksPoll(); }
     if (name === 'gaming') refreshGaming();
     if (name === 'apps') loadAppsCatalog();
+    if (name === 'help') renderHelp(($('#help-search') || {}).value || '');
     if (name === 'settings') { refreshNetStatus(); if (window._refreshSecurityUi) window._refreshSecurityUi(); }
     if (name === 'ai') $('#ai-in').focus();
     if (name === 'terminal') $('#term-in').focus();
@@ -875,6 +876,39 @@ function startTasksPoll() {
     }, 2000);
 }
 function stopTasksPoll() { if (tasksTimer) { clearInterval(tasksTimer); tasksTimer = null; } }
+
+// ---- Phase 6: Help database ------------------------------------------------
+function _helpSearchText(t) {
+    return (t.title + ' ' + (t.keywords || '') + ' ' + String(t.body).replace(/<[^>]+>/g, ' ')).toLowerCase();
+}
+function renderHelp(query) {
+    const host = $('#help-results');
+    if (!host) return;
+    const topics = window.OUTLAW_HELP || [];
+    const q = (query || '').trim().toLowerCase();
+    const matches = q ? topics.filter((t) => _helpSearchText(t).includes(q)) : topics;
+    if (matches.length === 0) {
+        host.innerHTML = '<div class="muted">No help topics match “' + escapeHtml(query) + '”.</div>';
+        return;
+    }
+    // Group by category in the declared order, appending any unknown categories.
+    const order = (window.OUTLAW_HELP_CATS || []).slice();
+    const seen = new Set(order);
+    for (const t of matches) if (!seen.has(t.cat)) { order.push(t.cat); seen.add(t.cat); }
+    let html = '';
+    for (const cat of order) {
+        const inCat = matches.filter((t) => t.cat === cat);
+        if (!inCat.length) continue;
+        html += '<h3 class="help-cat">' + escapeHtml(cat) + '</h3>';
+        for (const t of inCat) {
+            // While searching, open matches so the answer shows immediately.
+            html += '<details class="help-topic"' + (q ? ' open' : '') + '>'
+                + '<summary>' + escapeHtml(t.title) + '</summary>'
+                + '<div class="help-body">' + t.body + '</div></details>';
+        }
+    }
+    host.innerHTML = html;
+}
 
 // ---------------------------------------------------------------------------
 // Live top-bar stats
@@ -1778,6 +1812,10 @@ function wire() {
         _procFilter = procFilterEl.value.trim().toLowerCase();
         _renderProcs();
     });
+
+    // Phase 6: Help — live search.
+    const helpSearchEl = $('#help-search');
+    if (helpSearchEl) helpSearchEl.addEventListener('input', () => renderHelp(helpSearchEl.value));
 
     // Session preference reset — flips ~/.outlaw-session-pref back to "ask"
     // so the greeter shows again on next boot.

@@ -86,6 +86,7 @@
         <button class="nav-item" data-screen="ai"><span class="ico">✦</span> AI Assistant</button>
         <button class="nav-item" data-screen="calc"><span class="ico">🔢</span> Calculator</button>
         <button class="nav-item" data-screen="settings"><span class="ico">⚙</span> Settings</button>
+        <button class="nav-item" data-screen="help"><span class="ico">❔</span> Help</button>
     </nav>
 
     <!-- Content -->
@@ -727,6 +728,15 @@
             </div>
         </section>
 
+        <!-- Help -->
+        <section class="screen" id="screen-help">
+            <div class="row"><h2>Help</h2><span class="spacer"></span>
+                <input id="help-search" placeholder="Search help…" autocomplete="off" style="width:auto;flex:0 1 280px;min-width:180px;">
+            </div>
+            <p class="muted" style="margin:0 0 12px;">Everything about Outlaw OS — how each part works and how to fix common problems. Click a topic to expand it.</p>
+            <div id="help-results"></div>
+        </section>
+
     </main>
 </div>
 
@@ -764,6 +774,7 @@
      fires. syscore.js exposes window.outlawCore for renderer.js. -->
 <script src="dialogue.js"></script>
 <script src="syscore.js"></script>
+<script src="help-data.js"></script>
 <script src="renderer.js"></script>
 </body>
 </html>
