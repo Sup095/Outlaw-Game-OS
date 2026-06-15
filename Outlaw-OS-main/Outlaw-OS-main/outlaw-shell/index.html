@@ -671,8 +671,10 @@
             <div class="card">
                 <h3>Help Test This Version</h3>
                 <div class="muted" style="margin-bottom:8px;">
-                    Tell us whether <span id="stability-version" class="mono">this build</span> works for you.
-                    Reports are advisory — they help the maintainer decide which version to mark <em>stable</em>.
+                    Tested <span id="stability-version" class="mono">this build</span>? One click opens a
+                    <b>pre-filled report on GitHub</b> — just review and hit Submit. Reports are advisory and
+                    help the maintainer decide which version to mark <em>stable</em>. (No account info is sent; a
+                    short anonymous machine hash is included so duplicates can be merged.)
                 </div>
                 <div class="row" style="align-items:center;">
                     <button data-action="stability-works" id="stability-works-btn">✓ Works for me</button>
@@ -682,7 +684,7 @@
                 <div class="row" style="margin-top:8px;align-items:center;">
                     <button data-action="stability-refresh">↻ Community tally</button>
                     <span id="stability-tally" class="muted mono">—</span>
-                    <button data-action="stability-share" class="primary">Share feedback on GitHub</button>
+                    <button data-action="stability-share" class="primary">React 👍/👎 on the release</button>
                 </div>
             </div>
 

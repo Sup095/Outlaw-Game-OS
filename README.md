@@ -35,7 +35,7 @@ Outlaw Game OS is built in the open, one phase at a time. Each **completed** roa
 
 ```
 Foundations   ▰▰▰▰▰▰▰▰▰▰  done — 4 roadmaps, all shipped & tested
-This cycle    ▰▰▰▰▰▰▰▱▱▱▱▱▱▱▱  Completeness & Polish — phase 7 (Reviewer that works) underway → v2.1.0
+This cycle    ▰▰▰▰▰▰▰▰▱▱▱▱▱▱▱  Completeness & Polish — phase 8 (Boot sequence + pre-flight) underway → v2.1.0
 ```
 
 > **Legend:** ✅ shipped & in your hands · 🚧 building now · 🔭 on the horizon
@@ -62,8 +62,8 @@ The foundations boot and run; this cycle makes the desktop feel *finished* and r
 | ✅ | **4 · AI you can actually run** | Add **LM Studio** as a one-click download, plus a guided setup. A tiny model that runs on **any PC — even a weak one** — boots first and, knowing your hardware, walks you through everything: if your machine can handle more, it recommends a better model and the exact settings to use. The System Core can see your specs and tailor the advice. |
 | ✅ | **5 · Task Manager** | A Windows-style task manager — **End task** / **End process tree**, a searchable/sortable process list (CPU%, memory) and live **CPU · RAM · GPU + VRAM** readouts, in the Outlaw look. |
 | ✅ | **6 · Help + Quickstart** | A **skippable first-boot tour** showing where everything is, plus a searchable **Help database** that explains the whole OS and how to troubleshoot it. |
-| 🚧 | **7 · Reviewer that works** | One-click *"it worked / it broke"* reporting per version, so testing actually feeds back to the maintainer (and the stable channel). |
-| 🔭 | **8 · Boot sequence + pre-flight** | A cinematic boot every time: real system boot data scrolling on a green, CRT-scanline screen, with the holographic Outlaw sigil flickering to life (~3s) in the middle — skippable — then optionally scan your PC for the best settings before you even enter the OS. |
+| ✅ | **7 · Reviewer that works** | One-click *"it worked / it broke"* reporting per version — opens a pre-filled GitHub issue with your system info (and an anonymous machine hash to merge duplicates), plus a live 👍/👎 community tally, so testing actually feeds back to the maintainer (and the stable channel). |
+| 🚧 | **8 · Boot sequence + pre-flight** | A cinematic boot every time: real system boot data scrolling on a green, CRT-scanline screen, with the holographic Outlaw sigil flickering to life (~3s) in the middle — skippable — then optionally scan your PC for the best settings before you even enter the OS. |
 | 🔭 | **9 · Session driver profiles** | Choose the driver/package stack per session — **dev-tuned** vs **gaming/desktop** — applied safely *after* boot, never touching the bootloader. |
 | 🔭 | **10 · Window management polish** | Build on the windows + taskbar already shipped: keep the desktop pinned behind apps, themed title bars, window snapping, and remembered positions. |
 | 🔭 | **11 · "Broken" mode** | A third theme where the system looks like it's *barely holding together* — glitches, scanlines, the System Core throwing (fake) errors. It's also the live-demo vibe: a broken machine you repair by installing. *(Basic live-mode feature-locks already shipped.)* |

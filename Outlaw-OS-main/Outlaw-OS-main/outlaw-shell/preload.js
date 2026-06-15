@@ -121,6 +121,8 @@ contextBridge.exposeInMainWorld('outlaw', {
     // GitHub reaction tally). The user's own vote is stored in settings.
     stability: {
         tally: () => ipcRenderer.invoke('stability:tally'),
+        // Phase 7: a pre-filled GitHub issue URL for a works/broken report.
+        reportUrl: (verdict) => ipcRenderer.invoke('stability:report-url', verdict),
     },
     // Phase 5: per-machine hardware tuning. probe/recommend/stress/status are
     // read-only; apply/reset are privileged (pkexec) via the outlaw-tune helper.

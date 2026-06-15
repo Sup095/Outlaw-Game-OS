@@ -1171,7 +1171,21 @@ async function setStabilityVote(vote) {
     _stabilityReports = { ..._stabilityReports, [_stabilityVersion]: vote };
     try { await api.settings.set({ stabilityReports: _stabilityReports }); } catch {}
     refreshStabilityUi();
-    toast(vote === 'works' ? 'Thanks! Marked as working.' : 'Noted — thanks for the report.');
+    // Open a pre-filled GitHub issue so the report actually reaches the
+    // maintainer (with system context + an anonymous machine hash for de-dup).
+    try {
+        const r = await api.stability.reportUrl(vote);
+        if (r && r.ok && r.url) {
+            window.open(r.url, '_blank');
+            toast(vote === 'works'
+                ? 'Thanks! A quick report opened on GitHub — just hit Submit.'
+                : 'Opening a problem report on GitHub — add what happened, then Submit.');
+        } else {
+            toast((r && r.error) || (vote === 'works' ? 'Thanks! Marked as working.' : 'Noted — thanks for the report.'));
+        }
+    } catch {
+        toast(vote === 'works' ? 'Thanks! Marked as working.' : 'Noted — thanks for the report.');
+    }
     refreshStabilityTally();
 }
 

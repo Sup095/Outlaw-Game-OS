@@ -178,6 +178,17 @@ window.OUTLAW_HELP = [
             + 'the sign-in screen.</p>',
     },
 
+    {
+        id: 'reviewer', cat: 'Settings & updates', title: 'Help test this version (reporting)',
+        keywords: 'report works broken test feedback stable channel review version github issue tally',
+        body: '<p><b>Settings → Help Test This Version</b> lets you tell the maintainer whether a '
+            + 'build works. Click <b>✓ Works for me</b> or <b>✗ Having problems</b> and Outlaw opens a '
+            + '<b>pre-filled GitHub issue</b> — just review and Submit. It includes the version and a '
+            + 'short system summary (no account info; an anonymous machine hash lets duplicate reports '
+            + 'be merged). The <b>Community tally</b> shows 👍/👎 reactions on the release. Enough '
+            + 'positive reports is how a build eventually gets promoted to the <b>stable</b> channel.</p>',
+    },
+
     // ---- Troubleshooting ---------------------------------------------------
     {
         id: 'trouble-boot', cat: 'Troubleshooting', title: 'It won’t boot / black screen',
