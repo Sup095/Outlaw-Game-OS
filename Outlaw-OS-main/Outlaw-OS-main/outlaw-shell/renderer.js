@@ -1433,7 +1433,7 @@ function renderAiRecommendation(r) {
             <p class="muted" style="margin:0;">Runs on: ${escapeHtml(r.runsOn)} · context length ${rec.ctx}</p>
             ${starterLine}
             <ol style="margin:10px 0 0;padding-left:20px;line-height:1.6;">
-                <li>Click <b>Get / Open LM Studio</b> above — it opens <b>lmstudio.ai</b>. Download the <b>Linux</b> build: a file named like <code>LM-Studio-&lt;version&gt;.AppImage</code> (a few hundred MB, no installer — the AppImage <i>is</i> the app). Save it to your <b>Applications</b> or <b>Downloads</b> folder; Outlaw auto-detects AppImages there, so it appears on the <b>Apps</b> page — or just double-click it. (First launch may offer to mark it executable — that's normal.)</li>
+                <li>Click <b>Get / Open LM Studio</b> above — it opens <b>lmstudio.ai</b>. Download the <b>Linux</b> build: a file named like <code>LM-Studio-&lt;version&gt;.AppImage</code> (a few hundred MB, no installer — the AppImage <i>is</i> the app). Save it to your <b>Downloads</b> or <b>Applications</b> folder, then click <b>Get / Open LM Studio</b> again — Outlaw makes it runnable and launches it for you (no need to fiddle with the file).</li>
                 <li>In LM Studio's search, find <b>${escapeHtml(rec.model)}</b> and download it.</li>
                 <li>Load the model. ${r.gpuOffload ? 'Turn <b>GPU offload ON</b> (you have a capable GPU).' : 'Leave GPU offload off — it runs on your CPU.'} Set context length to <b>${rec.ctx}</b>.</li>
                 <li>Click <b>Start Server</b> in LM Studio (top bar, port 1234).</li>

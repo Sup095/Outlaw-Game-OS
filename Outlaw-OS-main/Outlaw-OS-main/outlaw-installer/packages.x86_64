@@ -92,6 +92,9 @@ rofi
 thunar
 xfce4-terminal
 electron
+# fuse2: lets AppImages (e.g. the LM Studio download) mount and run. Without it
+# AppImages won't launch at all.
+fuse2
 # openbox: a tiny window manager so launched app windows get real title bars
 # (minimize / maximize / close) + drag/resize. tint2: a taskbar showing every
 # window, click to restore minimized ones. The Outlaw shell stays the frameless
