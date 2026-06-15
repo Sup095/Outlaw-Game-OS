@@ -126,6 +126,14 @@ contextBridge.exposeInMainWorld('outlaw', {
         // Phase 7: a pre-filled GitHub issue URL for a works/broken report.
         reportUrl: (verdict) => ipcRenderer.invoke('stability:report-url', verdict),
     },
+    // Phase 9: session graphics/driver profiles (userspace packages only —
+    // never kernel/KMS/bootloader). detect/preview read-only; apply/revert privileged.
+    drivers: {
+        detect: () => ipcRenderer.invoke('drivers:detect'),
+        preview: () => ipcRenderer.invoke('drivers:preview'),
+        apply: () => ipcRenderer.invoke('drivers:apply'),
+        revert: () => ipcRenderer.invoke('drivers:revert'),
+    },
     // Phase 5: per-machine hardware tuning. probe/recommend/stress/status are
     // read-only; apply/reset are privileged (pkexec) via the outlaw-tune helper.
     tune: {

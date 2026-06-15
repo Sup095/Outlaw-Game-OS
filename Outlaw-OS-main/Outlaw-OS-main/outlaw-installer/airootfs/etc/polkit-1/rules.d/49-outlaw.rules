@@ -18,7 +18,8 @@ polkit.addRule(function (action, subject) {
         "/usr/local/bin/outlaw-tune",
         "/usr/local/bin/outlaw-perf",
         "/usr/local/bin/outlaw-update-apply",
-        "/usr/local/bin/outlaw-update-rollback"
+        "/usr/local/bin/outlaw-update-rollback",
+        "/usr/local/bin/outlaw-driver-profile"
     ];
     if (allowed.indexOf(prog) !== -1) {
         return polkit.Result.YES;

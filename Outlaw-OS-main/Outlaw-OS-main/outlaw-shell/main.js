@@ -1860,6 +1860,38 @@ function registerIpc() {
         return { ok: true, url };
     });
 
+    // --- Phase 9: session graphics/driver profiles --------------------------
+    // outlaw-driver-profile installs USERSPACE graphics packages only (Vulkan /
+    // Mesa / 32-bit libs / GameMode) — never kernel modules, KMS or the
+    // bootloader, so it can't affect booting. detect/packages are read-only;
+    // apply/revert self-elevate via pkexec (passwordless polkit allowlist).
+    const DRIVER_PROFILE = '/usr/local/bin/outlaw-driver-profile';
+    ipcMain.handle('drivers:detect', async () => {
+        if (!IS_LINUX) return { ok: false, error: 'Graphics profiles run on Outlaw OS.' };
+        const r = await runShell(`${DRIVER_PROFILE} detect`, { timeout: 8000 });
+        try { return { ok: true, ...JSON.parse(r.stdout || '{}') }; }
+        catch { return { ok: false, error: 'Could not detect the graphics hardware.' }; }
+    });
+    ipcMain.handle('drivers:preview', async () => {
+        if (!IS_LINUX) return { ok: false, error: 'Graphics profiles run on Outlaw OS.' };
+        const r = await runShell(`${DRIVER_PROFILE} packages`, { timeout: 8000 });
+        return { ok: true, packages: (r.stdout || '').trim().split(/\s+/).filter(Boolean) };
+    });
+    ipcMain.handle('drivers:apply', async () => {
+        if (!IS_LINUX) return { ok: false, error: 'Graphics profiles run on Outlaw OS.' };
+        const r = await runShell(`pkexec ${DRIVER_PROFILE} apply gaming`, { timeout: 1000 * 60 * 20 });
+        return r.code === 0
+            ? { ok: true, output: (r.stdout || '').slice(-1200) }
+            : { ok: false, error: (r.stderr || r.stdout || 'Install failed.').slice(-800) };
+    });
+    ipcMain.handle('drivers:revert', async () => {
+        if (!IS_LINUX) return { ok: false, error: 'Graphics profiles run on Outlaw OS.' };
+        const r = await runShell(`pkexec ${DRIVER_PROFILE} revert`, { timeout: 1000 * 60 * 5 });
+        return r.code === 0
+            ? { ok: true, output: (r.stdout || '').slice(-800) }
+            : { ok: false, error: (r.stderr || r.stdout || 'Revert failed.').slice(-800) };
+    });
+
     // --- Phase 5: per-machine tuning (outlaw-tune) --------------------------
     // probe / recommend / stress / status are read-only (no pkexec). apply +
     // reset are privileged and go through the audited outlaw-tune helper, which

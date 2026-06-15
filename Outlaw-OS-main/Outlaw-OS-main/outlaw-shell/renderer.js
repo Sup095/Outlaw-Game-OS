@@ -252,7 +252,7 @@ function showScreen(name) {
     if (name === 'gaming') refreshGaming();
     if (name === 'apps') loadAppsCatalog();
     if (name === 'help') renderHelp(($('#help-search') || {}).value || '');
-    if (name === 'settings') { refreshNetStatus(); if (window._refreshSecurityUi) window._refreshSecurityUi(); }
+    if (name === 'settings') { refreshNetStatus(); refreshDriversUi(); if (window._refreshSecurityUi) window._refreshSecurityUi(); }
     if (name === 'ai') $('#ai-in').focus();
     if (name === 'terminal') $('#term-in').focus();
     // System Core lifecycle — init when navigating to it, teardown otherwise.
@@ -1230,6 +1230,43 @@ function shareStabilityFeedback() {
     });
 }
 
+// --- Phase 9: session graphics/driver profiles ------------------------------
+async function refreshDriversUi() {
+    const gpuEl = $('#drv-gpu'), stEl = $('#drv-state');
+    try {
+        const d = await api.drivers.detect();
+        if (gpuEl) gpuEl.textContent = (d && d.ok && d.vendor) ? d.vendor : 'unknown';
+        if (stEl) stEl.textContent = (d && d.gaming_installed) ? 'gaming stack installed' : 'lean';
+    } catch { if (gpuEl) gpuEl.textContent = '—'; }
+    try {
+        const p = await api.drivers.preview();
+        const pv = $('#drv-preview');
+        if (pv && p && p.ok && p.packages && p.packages.length) pv.textContent = p.packages.join(' ');
+    } catch {}
+}
+async function _runDriverAction(kind) {
+    const out = $('#drv-out');
+    const btn = $(kind === 'apply' ? '#drv-apply' : '#drv-revert');
+    // Gate behind the same re-auth as other important installs (no-op if no PIN).
+    if (typeof requireImportantAuth === 'function' && !(await requireImportantAuth())) return;
+    if (out) out.textContent = kind === 'apply'
+        ? 'Installing the gaming graphics stack… this can take a few minutes.'
+        : 'Switching to the lean profile…';
+    if (btn) btn.disabled = true;
+    try {
+        const r = kind === 'apply' ? await api.drivers.apply() : await api.drivers.revert();
+        if (out) {
+            out.textContent = r.ok
+                ? (kind === 'apply' ? 'Done — gaming graphics stack installed.\n' : 'Done — switched to lean.\n') + (r.output || '')
+                : ('Failed: ' + (r.error || 'unknown'));
+        }
+        toast(r.ok ? (kind === 'apply' ? 'Gaming graphics stack installed.' : 'Switched to lean profile.')
+                   : 'Action failed — see Settings.');
+    } catch (e) { if (out) out.textContent = 'Error: ' + e.message; }
+    if (btn) btn.disabled = false;
+    refreshDriversUi();
+}
+
 // --- P5: per-machine hardware tuning ----------------------------------------
 let _tuneRec = null;
 // Once BOTH the hardware scan and the stress test have run, apply the best
@@ -1898,6 +1935,12 @@ function wire() {
     if (qsSkip) qsSkip.addEventListener('click', endQuickstart);
     const qsReplay = $('#help-replay-tour');
     if (qsReplay) qsReplay.addEventListener('click', showQuickstart);
+
+    // Phase 9: session graphics/driver profile buttons.
+    const drvApplyBtn = $('#drv-apply');
+    if (drvApplyBtn) drvApplyBtn.addEventListener('click', () => _runDriverAction('apply'));
+    const drvRevertBtn = $('#drv-revert');
+    if (drvRevertBtn) drvRevertBtn.addEventListener('click', () => _runDriverAction('revert'));
 
     // Session preference reset — flips ~/.outlaw-session-pref back to "ask"
     // so the greeter shows again on next boot.

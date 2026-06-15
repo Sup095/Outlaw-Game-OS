@@ -539,6 +539,24 @@
             </div>
 
             <div class="card">
+                <h3>Session graphics profile</h3>
+                <details class="page-help">
+                    <summary>What is this?</summary>
+                    <p>Installs the <b>gaming/desktop graphics stack</b> for your GPU — Vulkan, Mesa and the 32-bit libraries Steam &amp; Proton need, plus GameMode and MangoHUD. It's <b>userspace only</b>: it never changes kernel drivers, the boot loader or your display mode, so it can't stop the machine booting. Use <b>lean</b> for dev/planning. Applied after boot via the package manager, and fully revertible. <i>(NVIDIA: this installs the userspace libraries only — the NVIDIA kernel driver touches the boot path and isn't installed automatically.)</i></p>
+                </details>
+                <div class="muted" style="margin-bottom:8px;">GPU: <span id="drv-gpu" class="mono">…</span> · Currently: <span id="drv-state" class="mono">…</span></div>
+                <div class="setting">
+                    <div class="label">Gaming / Desktop graphics<small id="drv-preview">Vulkan + Mesa + 32-bit libs + GameMode/MangoHUD</small></div>
+                    <button id="drv-apply" type="button">Install gaming stack</button>
+                </div>
+                <div class="setting">
+                    <div class="label">Lean (dev / planning)<small>Removes the gaming extras; keeps Vulkan/Mesa so nothing breaks.</small></div>
+                    <button id="drv-revert" type="button">Switch to lean</button>
+                </div>
+                <div id="drv-out" class="muted mono" style="margin-top:6px;white-space:pre-wrap;font-size:11px;"></div>
+            </div>
+
+            <div class="card">
                 <h3>Local AI Assistant</h3>
                 <div class="setting">
                     <div class="label">Enable on-device AI<small id="ai-sub">Off · routes prompts to LM Studio on this machine</small></div>

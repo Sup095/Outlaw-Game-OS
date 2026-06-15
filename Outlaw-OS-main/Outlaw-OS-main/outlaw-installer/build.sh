@@ -174,7 +174,8 @@ for f in outlaw-install outlaw-install-aur outlaw-electron-flags \
          outlaw-tune outlaw-update-apply outlaw-update-rollback outlaw-greeter \
          outlaw-codemaker outlaw-lm-studio outlaw-session-watchdog \
          outlaw-diagnose outlaw-focus outlaw-term outlaw-setup-dev \
-         outlaw-install-gui outlaw-pkg-install outlaw-update-pkgs; do
+         outlaw-install-gui outlaw-pkg-install outlaw-update-pkgs \
+         outlaw-driver-profile; do
     if ! grep -q "/usr/local/bin/$f" "$PD"; then
         sed -i "/^file_permissions=(/a\\  [\"/usr/local/bin/$f\"]=\"0:0:755\"" "$PD"
     fi
