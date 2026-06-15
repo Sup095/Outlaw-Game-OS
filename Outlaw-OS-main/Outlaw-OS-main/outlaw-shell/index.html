@@ -345,15 +345,30 @@
 
         <!-- Tasks -->
         <section class="screen" id="screen-tasks">
-            <div class="row"><h2>Task Monitor</h2><span class="spacer"></span>
+            <div class="row"><h2>Task Manager</h2><span class="spacer"></span>
                 <button data-action="tasks-refresh">↻ Refresh</button>
             </div>
-            <div class="grid cols-2">
+            <details class="page-help">
+                <summary>What is this?</summary>
+                <p>A live view of everything running. The bars show <b>CPU</b>, <b>memory</b> and <b>GPU / VRAM</b> use. Click a row to select a process, then <b>End task</b> (asks it to close nicely) or <b>End process tree</b> (force-closes it <i>and</i> everything it started). Click a column heading to sort. The list refreshes every couple of seconds while you're on this screen. Some processes belong to the administrator and show <i>needs admin</i> when you try to end them — that's expected.</p>
+            </details>
+            <div class="grid cols-3">
                 <div class="card"><div class="muted">CPU</div><div class="bar"><span id="cpu-bar"></span></div><div id="cpu-val" class="mono">--%</div></div>
                 <div class="card"><div class="muted">Memory</div><div class="bar"><span id="ram-bar"></span></div><div id="ram-val" class="mono">--</div></div>
+                <div class="card"><div class="muted">GPU / VRAM</div><div class="bar"><span id="gpu-bar"></span></div><div id="gpu-val" class="mono">--</div></div>
+            </div>
+            <div class="row" style="gap:8px;margin:10px 0 6px;align-items:center;flex-wrap:wrap;">
+                <button id="task-end" type="button" disabled>End task</button>
+                <button id="task-end-tree" class="danger" type="button" disabled>End process tree</button>
+                <span id="task-sel" class="muted mono"></span>
             </div>
             <div class="card">
-                <table class="proc"><thead><tr><th>PID</th><th>Process</th><th class="right">CPU%</th><th class="right">MEM%</th></tr></thead>
+                <table class="proc"><thead><tr>
+                    <th data-sort="pid">PID</th>
+                    <th data-sort="comm">Process</th>
+                    <th class="right" data-sort="cpu">CPU%</th>
+                    <th class="right" data-sort="memMb">Memory</th>
+                </tr></thead>
                 <tbody id="proc-body"></tbody></table>
             </div>
         </section>

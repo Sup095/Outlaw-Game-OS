@@ -20,6 +20,9 @@ contextBridge.exposeInMainWorld('outlaw', {
         info: () => ipcRenderer.invoke('system:info'),
         stats: () => ipcRenderer.invoke('system:stats'),
         processes: () => ipcRenderer.invoke('system:processes'),
+        // Phase 5: End task / End process tree.
+        kill: (pid) => ipcRenderer.invoke('proc:kill', pid),
+        killTree: (pid) => ipcRenderer.invoke('proc:kill-tree', pid),
         gpu: () => ipcRenderer.invoke('system:gpu'),
         // SC2 System Core readouts. Renderer calls these on a 2s timer that
         // only ticks while the System Core screen is visible.

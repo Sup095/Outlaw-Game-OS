@@ -233,7 +233,7 @@ function showScreen(name) {
     if (el) el.classList.add('active');
     $$('.nav-item[data-screen]').forEach((n) => n.classList.toggle('active', n.dataset.screen === name));
     if (name === 'files') loadFiles(currentDir || null);
-    if (name === 'tasks') refreshTasks();
+    if (name === 'tasks') { refreshTasks(); startTasksPoll(); } else { stopTasksPoll(); }
     if (name === 'gaming') refreshGaming();
     if (name === 'apps') loadAppsCatalog();
     if (name === 'settings') { refreshNetStatus(); if (window._refreshSecurityUi) window._refreshSecurityUi(); }
@@ -777,24 +777,99 @@ function humanSize(b) {
 // ---------------------------------------------------------------------------
 // Tasks
 // ---------------------------------------------------------------------------
-async function refreshTasks() {
-    const procs = await api.system.processes();
+// ---- Phase 5: Task Manager -------------------------------------------------
+let tasksTimer = null;
+let _procSort = { key: 'cpu', asc: false };   // default: CPU, biggest first
+let _selectedPid = null;
+let _lastProcs = [];
+
+function _sortProcs(list) {
+    const { key, asc } = _procSort;
+    const numeric = (key === 'pid' || key === 'cpu' || key === 'memMb');
+    const out = list.slice().sort((a, b) => numeric
+        ? (Number(a[key]) || 0) - (Number(b[key]) || 0)
+        : String(a[key]).localeCompare(String(b[key])));
+    if (!asc) out.reverse();
+    return out;
+}
+
+function _fmtMem(p) {
+    if (p.memMb == null) return p.mem + '%';
+    return p.memMb >= 1024 ? (p.memMb / 1024).toFixed(1) + ' GB' : p.memMb + ' MB';
+}
+
+function _renderProcs() {
     const body = $('#proc-body');
+    if (!body) return;
     body.innerHTML = '';
-    for (const p of procs) {
+    for (const p of _sortProcs(_lastProcs)) {
         const tr = document.createElement('tr');
-        tr.innerHTML = `<td>${p.pid}</td><td>${escapeHtml(p.comm)}</td><td class="right">${p.cpu}</td><td class="right">${p.mem}</td>`;
+        tr.dataset.pid = p.pid;
+        if (String(p.pid) === String(_selectedPid)) tr.classList.add('sel');
+        tr.innerHTML = `<td class="mono">${p.pid}</td><td>${escapeHtml(p.comm)}</td>`
+            + `<td class="right mono">${p.cpu}</td><td class="right mono">${_fmtMem(p)}</td>`;
+        tr.addEventListener('click', () => _selectProc(p.pid));
         body.appendChild(tr);
     }
+    $$('#screen-tasks .proc th[data-sort]').forEach((th) => {
+        const on = th.dataset.sort === _procSort.key;
+        th.classList.toggle('sorted', on);
+        th.classList.toggle('asc', on && _procSort.asc);
+    });
+}
+
+function _selectProc(pid) {
+    _selectedPid = pid;
+    const sel = _lastProcs.find((p) => String(p.pid) === String(pid));
+    const lbl = $('#task-sel');
+    if (lbl) lbl.textContent = sel ? `selected: ${sel.comm} (PID ${sel.pid})` : '';
+    const end = $('#task-end'), endTree = $('#task-end-tree');
+    if (end) end.disabled = !sel;
+    if (endTree) endTree.disabled = !sel;
+    $$('#proc-body tr').forEach((tr) => tr.classList.toggle('sel', tr.dataset.pid === String(pid)));
+}
+
+async function refreshTasks() {
+    try { _lastProcs = await api.system.processes(); } catch { _lastProcs = []; }
+    // Drop a stale selection (process exited) so the buttons disable themselves.
+    if (_selectedPid && !_lastProcs.some((p) => String(p.pid) === String(_selectedPid))) {
+        _selectProc(null);
+    }
+    _renderProcs();
     updateBars();
 }
+
 async function updateBars() {
-    const s = await api.system.stats();
-    $('#cpu-bar').style.width = Math.min(100, s.cpu).toFixed(0) + '%';
-    $('#ram-bar').style.width = Math.min(100, s.ramPct).toFixed(0) + '%';
-    $('#cpu-val').textContent = s.cpu.toFixed(0) + '%';
-    $('#ram-val').textContent = `${s.ramUsed} / ${s.ramTotal} (${s.ramPct.toFixed(0)}%)`;
+    try {
+        const s = await api.system.stats();
+        $('#cpu-bar').style.width = Math.min(100, s.cpu).toFixed(0) + '%';
+        $('#ram-bar').style.width = Math.min(100, s.ramPct).toFixed(0) + '%';
+        $('#cpu-val').textContent = s.cpu.toFixed(0) + '%';
+        $('#ram-val').textContent = `${s.ramUsed} / ${s.ramTotal} (${s.ramPct.toFixed(0)}%)`;
+    } catch {}
+    try {
+        const g = await api.system.gpuDetailed();
+        const bar = $('#gpu-bar'), val = $('#gpu-val');
+        if (g && g.available && g.vramTotalMb > 0) {
+            if (bar) bar.style.width = Math.min(100, g.vramPct).toFixed(0) + '%';
+            if (val) val.textContent =
+                `${(g.vramUsedMb / 1024).toFixed(1)} / ${(g.vramTotalMb / 1024).toFixed(1)} GB (${g.vramPct}%)`;
+        } else {
+            if (bar) bar.style.width = '0%';
+            if (val) val.textContent = (g && g.name) ? g.name : 'n/a';
+        }
+    } catch {}
 }
+
+function startTasksPoll() {
+    stopTasksPoll();
+    tasksTimer = setInterval(() => {
+        const scr = $('#screen-tasks');
+        if (scr && scr.classList.contains('active')) refreshTasks();
+        else stopTasksPoll();          // safety net if we somehow left without teardown
+    }, 2000);
+}
+function stopTasksPoll() { if (tasksTimer) { clearInterval(tasksTimer); tasksTimer = null; } }
 
 // ---------------------------------------------------------------------------
 // Live top-bar stats
@@ -1353,7 +1428,7 @@ function renderAiRecommendation(r) {
             <p class="muted" style="margin:0;">Runs on: ${escapeHtml(r.runsOn)} · context length ${rec.ctx}</p>
             ${starterLine}
             <ol style="margin:10px 0 0;padding-left:20px;line-height:1.6;">
-                <li>Click <b>Get / Open LM Studio</b> above. Install the AppImage (save it to your <b>Applications</b> or <b>Downloads</b> folder), then open it.</li>
+                <li>Click <b>Get / Open LM Studio</b> above — it opens <b>lmstudio.ai</b>. Download the <b>Linux</b> build: a file named like <code>LM-Studio-&lt;version&gt;.AppImage</code> (a few hundred MB, no installer — the AppImage <i>is</i> the app). Save it to your <b>Applications</b> or <b>Downloads</b> folder; Outlaw auto-detects AppImages there, so it appears on the <b>Apps</b> page — or just double-click it. (First launch may offer to mark it executable — that's normal.)</li>
                 <li>In LM Studio's search, find <b>${escapeHtml(rec.model)}</b> and download it.</li>
                 <li>Load the model. ${r.gpuOffload ? 'Turn <b>GPU offload ON</b> (you have a capable GPU).' : 'Leave GPU offload off — it runs on your CPU.'} Set context length to <b>${rec.ctx}</b>.</li>
                 <li>Click <b>Start Server</b> in LM Studio (top bar, port 1234).</li>
@@ -1657,6 +1732,35 @@ function wire() {
     if (setupSend) setupSend.addEventListener('click', sendSetupChat);
     if (setupIn) setupIn.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') { e.preventDefault(); sendSetupChat(); }
+    });
+
+    // Phase 5: Task Manager — column sort + End task / End process tree.
+    $$('#screen-tasks .proc th[data-sort]').forEach((th) => {
+        th.addEventListener('click', () => {
+            const key = th.dataset.sort;
+            if (_procSort.key === key) _procSort.asc = !_procSort.asc;
+            else _procSort = { key, asc: key === 'comm' };   // names A→Z, numbers high→low
+            _renderProcs();
+        });
+    });
+    const endTaskBtn = $('#task-end');
+    if (endTaskBtn) endTaskBtn.addEventListener('click', async () => {
+        if (!_selectedPid) return;
+        try {
+            const r = await api.system.kill(_selectedPid);
+            toast(r.ok ? 'Ended task.' : ('Could not end — ' + ((r.errors || []).join(', ') || 'failed')));
+        } catch (e) { toast('End task failed: ' + e.message); }
+        refreshTasks();
+    });
+    const endTreeBtn = $('#task-end-tree');
+    if (endTreeBtn) endTreeBtn.addEventListener('click', async () => {
+        if (!_selectedPid) return;
+        try {
+            const r = await api.system.killTree(_selectedPid);
+            toast(r.ok ? `Ended process tree (${r.killed} process${r.killed === 1 ? '' : 'es'}).`
+                       : `Ended ${r.killed}; some need admin: ${(r.errors || []).join(', ')}`);
+        } catch (e) { toast('End tree failed: ' + e.message); }
+        refreshTasks();
     });
 
     // Session preference reset — flips ~/.outlaw-session-pref back to "ask"

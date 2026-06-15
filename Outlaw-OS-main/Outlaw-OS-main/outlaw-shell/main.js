@@ -583,20 +583,33 @@ function fmtGb(kb) { return (kb / 1024 / 1024).toFixed(1) + 'G'; }
 // it can guide the user through the rest of the setup itself.
 function recommendModel(ramGb, vramGb) {
     const gpu = vramGb >= 4;                       // a usable discrete GPU?
-    // Budget = VRAM for GPU inference, else CPU+RAM leaving ~4G for the OS.
-    const budget = gpu ? vramGb : Math.max(1, ramGb - 4);
     const starter = { model: 'Qwen2.5 0.5B Instruct (Q4_K_M)', size: '~0.4 GB',
                       note: 'Runs on almost anything, even old laptops.' };
-    let rec;
-    if (budget < 3)       rec = { model: 'Qwen2.5 0.5B Instruct (Q4_K_M)', size: '~0.4 GB', ctx: 2048, tier: 'tiny' };
-    else if (budget < 6)  rec = { model: 'Llama 3.2 3B Instruct (Q4_K_M)', size: '~2.2 GB', ctx: 4096, tier: 'small' };
-    else if (budget < 11) rec = { model: 'Qwen2.5 7B Instruct (Q4_K_M)',   size: '~4.7 GB', ctx: 8192, tier: 'medium' };
-    else if (budget < 20) rec = { model: 'Qwen2.5 14B Instruct (Q4_K_M)',  size: '~9 GB',   ctx: 8192, tier: 'large' };
-    else                  rec = { model: 'Qwen2.5 32B Instruct (Q4_K_M)',  size: '~19 GB',  ctx: 8192, tier: 'xl' };
+    // Model catalogue (Q4_K_M quant), smallest → largest.
+    const M = {
+        s05: { model: 'Qwen2.5 0.5B Instruct (Q4_K_M)', size: '~0.4 GB', ctx: 2048, tier: 'tiny' },
+        s3:  { model: 'Llama 3.2 3B Instruct (Q4_K_M)',  size: '~2.2 GB', ctx: 4096, tier: 'small' },
+        s7:  { model: 'Qwen2.5 7B Instruct (Q4_K_M)',    size: '~4.7 GB', ctx: 8192, tier: 'medium' },
+        s14: { model: 'Qwen2.5 14B Instruct (Q4_K_M)',   size: '~9 GB',   ctx: 8192, tier: 'large' },
+        s32: { model: 'Qwen2.5 32B Instruct (Q4_K_M)',   size: '~19 GB',  ctx: 8192, tier: 'xl' },
+    };
+    let rec, budget;
+    if (gpu) {
+        // GPU inference — size by VRAM; the card keeps even big models fast.
+        budget = vramGb;
+        rec = vramGb < 6 ? M.s3 : vramGb < 11 ? M.s7 : vramGb < 20 ? M.s14 : M.s32;
+    } else {
+        // CPU + RAM inference — every token is computed on the CPU, which is far
+        // slower than a GPU. Stay conservative: pick what stays *usable*, not just
+        // what technically fits (a 14B "fits" in 16 GB but crawls). Cap at 14B —
+        // 32B on CPU is unusably slow. Leave headroom for the OS.
+        budget = Math.max(1, ramGb - 4);
+        rec = ramGb < 6 ? M.s05 : ramGb < 12 ? M.s3 : ramGb < 24 ? M.s7 : M.s14;
+    }
     return {
         gpu, budgetGb: Math.round(budget * 10) / 10,
         runsOn: gpu ? `GPU offload (${vramGb} GB VRAM — fast)`
-                    : 'CPU + RAM (works everywhere, a bit slower)',
+                    : 'CPU + RAM (works everywhere, but slower — drop to a smaller model if it lags)',
         gpuOffload: gpu,
         starter, recommended: rec,
         sameAsStarter: rec.model === starter.model,
@@ -755,6 +768,46 @@ async function openPath(target) {
     }
 }
 
+// ---- Phase 5: process control (End task / End process tree) ----------------
+function toPid(x) { const n = parseInt(x, 10); return Number.isInteger(n) && n > 1 ? n : 0; }
+
+// All descendants of `root` (inclusive), leaves-first, so children die before
+// their parents. Single `ps` call; pure parse — no shell expansion of the pid.
+async function descendantPids(root) {
+    if (!IS_LINUX) return [root];
+    const r = await runShell('ps -eo pid=,ppid=');
+    const kids = new Map();
+    for (const line of (r.stdout || '').split('\n')) {
+        const m = line.trim().match(/^(\d+)\s+(\d+)$/);
+        if (!m) continue;
+        const pid = parseInt(m[1], 10), ppid = parseInt(m[2], 10);
+        if (!kids.has(ppid)) kids.set(ppid, []);
+        kids.get(ppid).push(pid);
+    }
+    const order = [];
+    const seen = new Set();
+    (function walk(p) {
+        if (seen.has(p)) return;          // guard against any ppid cycle
+        seen.add(p);
+        for (const c of (kids.get(p) || [])) walk(c);
+        order.push(p);                    // post-order = leaves first
+    })(root);
+    return order;
+}
+
+function killPids(pids, signal) {
+    let killed = 0; const errors = [];
+    for (const pid of pids) {
+        if (!pid || pid <= 1) continue;   // never SIGKILL init
+        try { process.kill(pid, signal); killed++; }
+        catch (e) {
+            if (e.code === 'ESRCH') continue;                 // already gone
+            errors.push(e.code === 'EPERM' ? `${pid}: needs admin` : `${pid}: ${e.code || e.message}`);
+        }
+    }
+    return { ok: errors.length === 0, killed, errors };
+}
+
 // ---------------------------------------------------------------------------
 // IPC handlers
 // ---------------------------------------------------------------------------
@@ -768,12 +821,26 @@ function registerIpc() {
     });
 
     ipcMain.handle('system:processes', async () => {
-        if (!IS_LINUX) return [{ pid: process.pid, comm: 'electron', cpu: '0.0', mem: '0.0' }];
-        const r = await runShell('ps -eo pid,comm,pcpu,pmem --sort=-pcpu | head -n 30');
+        if (!IS_LINUX) return [{ pid: process.pid, comm: 'electron', cpu: '0.0', mem: '0.0', memMb: 0 }];
+        // rss (KB) gives a Windows-style MB column; top 40 by CPU is plenty for
+        // a desktop task manager and keeps the render cheap.
+        const r = await runShell('ps -eo pid,comm,pcpu,pmem,rss --sort=-pcpu | head -n 41');
         return r.stdout.split('\n').slice(1).map((l) => {
-            const m = l.trim().match(/^(\d+)\s+(.+?)\s+([\d.]+)\s+([\d.]+)$/);
-            return m ? { pid: m[1], comm: m[2], cpu: m[3], mem: m[4] } : null;
+            const m = l.trim().match(/^(\d+)\s+(.+?)\s+([\d.]+)\s+([\d.]+)\s+(\d+)$/);
+            return m ? { pid: m[1], comm: m[2], cpu: m[3], mem: m[4], memMb: Math.round(Number(m[5]) / 1024) } : null;
         }).filter(Boolean);
+    });
+
+    // Phase 5: End task / End process tree. We kill via Node's process.kill so
+    // there's no shell + no injection surface. Only the user's own processes can
+    // be ended without privilege (root-owned ones return EPERM, surfaced clearly
+    // — same as Windows' "Access denied"). PID 1 is never touched.
+    ipcMain.handle('proc:kill', async (_e, pid) => killPids([toPid(pid)], 'SIGTERM'));
+    ipcMain.handle('proc:kill-tree', async (_e, pid) => {
+        const root = toPid(pid);
+        if (!root) return { ok: false, killed: 0, errors: ['invalid pid'] };
+        // Forceful, leaves-first — mirrors Windows "End process tree".
+        return killPids(await descendantPids(root), 'SIGKILL');
     });
 
     ipcMain.handle('system:gpu', async () => {

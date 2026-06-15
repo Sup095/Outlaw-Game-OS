@@ -253,6 +253,19 @@ h3 { font-size: 13px; text-transform: uppercase; color: var(--term-dim); }
 .grid.cols-3 { grid-template-columns: repeat(3, 1fr); }
 .grid.apps { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
 
+/* Phase 5 — Task Manager process table */
+.proc { width: 100%; border-collapse: collapse; font-size: 13px; }
+.proc th, .proc td { padding: 5px 8px; border-bottom: 1px solid var(--line); }
+.proc th { text-align: left; color: var(--term-dim); font-weight: 600; }
+.proc th.right, .proc td.right { text-align: right; }
+.proc th[data-sort] { cursor: pointer; user-select: none; }
+.proc th[data-sort]:hover { color: var(--term); }
+.proc th[data-sort].sorted::after { content: ' ▾'; opacity: 0.85; }
+.proc th[data-sort].sorted.asc::after { content: ' ▴'; }
+.proc tbody tr { cursor: pointer; }
+.proc tbody tr:hover { background: rgba(var(--term-rgb), 0.06); }
+.proc tbody tr.sel { background: rgba(var(--term-rgb), 0.14); color: var(--term); }
+
 .tile {
     display: flex; flex-direction: column; gap: 6px; align-items: flex-start;
     padding: 16px; text-transform: none; letter-spacing: 0; text-align: left;
