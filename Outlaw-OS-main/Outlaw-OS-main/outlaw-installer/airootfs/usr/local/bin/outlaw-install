@@ -89,6 +89,11 @@ ESSENTIAL_PKGS=(
   # pytesseract). The Python packages themselves live in a venv created in
   # /opt/outlaw-codemaker/.venv during this install (see post-pacstrap step).
   xdotool scrot tesseract tesseract-data-eng
+
+  # ollama: local LLM runtime for the on-device AI + the "AI runs your system"
+  # feature (Phase 13). Serves an OpenAI-compatible API on 127.0.0.1:11434; a
+  # tiny model gets pulled after first boot so AI works without manual setup.
+  ollama
 )
 
 # OPTIONAL_BUNDLES — installed by /usr/share/outlaw-firstboot AFTER the user

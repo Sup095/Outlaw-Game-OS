@@ -20,7 +20,7 @@ const DEFAULT_MODEL = 'local-model';
 // Tools the model is allowed to propose. Keep the surface tiny so small models
 // stay reliable. `run_command` is intentionally marked dangerous so the main
 // process always routes it through user confirmation.
-const TOOLS = ['answer', 'open_app', 'search_web', 'list_files', 'open_file', 'system_info', 'run_command'];
+const TOOLS = ['answer', 'open_app', 'search_web', 'list_files', 'open_file', 'system_info', 'install_app', 'run_command'];
 
 function systemPrompt(appIds, machine) {
     return [
@@ -38,6 +38,7 @@ function systemPrompt(appIds, machine) {
         '- list_files: show a directory. arg = absolute path (default home if empty).',
         '- open_file: open a file/folder with its default app. arg = path.',
         '- system_info: report CPU/RAM/host info (arg empty).',
+        '- install_app: install an app the user asks for. arg = the app name (e.g. "krita", "blender"). Only known sources (the Apps catalog / official repos) are allowed, and the user must confirm before anything installs.',
         '- run_command: ONLY when the user explicitly asks to run a shell command. arg = the command. This always asks the user to confirm first.',
         '',
         'Rules: pick the single best tool. Prefer "answer" for anything conversational.',
