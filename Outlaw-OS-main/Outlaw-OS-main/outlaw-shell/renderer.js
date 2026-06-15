@@ -172,25 +172,39 @@ function wireAuth() {
 
 async function runBoot() {
     const log = $('#boot-log');
-    const lines = ['INITIALIZING OUTLAW OS…'];
-    log.textContent = lines.join('\n') + '\n';
+    const sigil = $('#boot-sigil');
+    const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+    const push = (s) => { log.textContent += s + '\n'; log.scrollTop = log.scrollHeight; };
+    log.textContent = '';
+    push('INITIALIZING OUTLAW OS…');
+
+    // Real boot data (best-effort; empty in preview or if the journal is locked).
+    let bootLines = [];
+    try { bootLines = await api.system.bootLog(); } catch {}
     try {
         const i = await api.system.info();
-        lines.push(`HOST     ${i.hostname}`);
-        lines.push(`KERNEL   ${i.kernel}`);
-        lines.push(`CPU      ${i.cpu} (${i.cores} cores)`);
-        lines.push(`MEMORY   ${i.ramUsed} / ${i.ramTotal}`);
+        push(`HOST     ${i.hostname}`);
+        push(`KERNEL   ${i.kernel}`);
+        push(`CPU      ${i.cpu} (${i.cores} cores)`);
+        push(`MEMORY   ${i.ramUsed} / ${i.ramTotal}`);
     } catch {
-        lines.push('SYSTEM PROBE UNAVAILABLE (preview mode)');
+        push('SYSTEM PROBE UNAVAILABLE (preview mode)');
     }
-    lines.push('MOUNTING PAYLOAD VAULT… OK');
-    lines.push('SECURITY GUARD ACTIVE… OK');
-    lines.push('SYSTEM READY.');
-    // Type the new lines out.
-    for (let n = 5; n < lines.length; n++) {
-        log.textContent = lines.slice(0, n + 1).join('\n') + '\n';
-        await new Promise((r) => setTimeout(r, 120));
-    }
+
+    // First half of the real boot log scrolls up…
+    const half = Math.ceil(bootLines.length / 2);
+    for (const l of bootLines.slice(0, half)) { push(l); await sleep(60); }
+
+    // …the Outlaw sigil flickers to life like a CRT warming up (~3s)…
+    if (sigil) sigil.classList.add('warm');
+    push('· · · POWER-ON SELF TEST · · ·');
+    await sleep(1100);
+
+    // …then the rest of the boot log, then ready.
+    for (const l of bootLines.slice(half)) { push(l); await sleep(60); }
+    push('MOUNTING PAYLOAD VAULT… OK');
+    push('SECURITY GUARD ACTIVE… OK');
+    push('SYSTEM READY.');
     $('#boot-skip').focus();
 }
 

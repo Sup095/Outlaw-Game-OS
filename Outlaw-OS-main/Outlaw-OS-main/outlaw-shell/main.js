@@ -817,6 +817,18 @@ function killPids(pids, signal) {
 function registerIpc() {
     ipcMain.handle('system:info', () => systemInfo());
 
+    // Phase 8: real boot messages for the cinematic boot screen. journalctl
+    // -o cat = message text only (no timestamps); falls back to dmesg. Read-only
+    // and unprivileged — returns [] if neither is readable, and the boot screen
+    // just shows its synthetic lines instead.
+    ipcMain.handle('system:boot-log', async () => {
+        if (!IS_LINUX) return [];
+        let r = await runShell('journalctl -b --no-pager -o cat -n 14 2>/dev/null');
+        let out = (r.stdout || '').trim();
+        if (!out) { r = await runShell('dmesg 2>/dev/null | tail -n 14'); out = (r.stdout || '').trim(); }
+        return out ? out.split('\n').map((l) => l.replace(/\s+$/, '').slice(0, 92)).filter(Boolean) : [];
+    });
+
     ipcMain.handle('system:stats', () => {
         const mem = memInfo();
         return { cpu: cpuPercent(), ramPct: mem.totalKb ? (mem.usedKb / mem.totalKb) * 100 : 0,

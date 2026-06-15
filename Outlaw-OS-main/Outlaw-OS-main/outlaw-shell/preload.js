@@ -20,6 +20,8 @@ contextBridge.exposeInMainWorld('outlaw', {
         info: () => ipcRenderer.invoke('system:info'),
         stats: () => ipcRenderer.invoke('system:stats'),
         processes: () => ipcRenderer.invoke('system:processes'),
+        // Phase 8: real boot messages for the cinematic boot screen.
+        bootLog: () => ipcRenderer.invoke('system:boot-log'),
         // Phase 5: End task / End process tree.
         kill: (pid) => ipcRenderer.invoke('proc:kill', pid),
         killTree: (pid) => ipcRenderer.invoke('proc:kill-tree', pid),
