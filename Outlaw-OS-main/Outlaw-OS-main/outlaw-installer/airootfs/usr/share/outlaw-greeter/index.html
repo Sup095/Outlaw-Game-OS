@@ -154,9 +154,48 @@
             height: 13px;
             cursor: pointer;
         }
+        /* Phase 8 — cinematic boot intro (always green + CRT, a fixed identity
+           moment) shown before the chooser. Skippable; auto-reveals the chooser. */
+        #boot-intro {
+            position: fixed; inset: 0; z-index: 50; background: #050705; color: #33ff00;
+            display: flex; flex-direction: column; padding: 18px 22px; overflow: hidden;
+        }
+        #boot-intro.hide { display: none; }
+        #boot-intro::after {
+            content: ''; position: absolute; inset: 0; pointer-events: none; z-index: 3;
+            background: repeating-linear-gradient(0deg,
+                rgba(0,0,0,0) 0, rgba(0,0,0,0) 2px, rgba(0,30,0,0.30) 3px, rgba(0,0,0,0) 4px);
+        }
+        #bi-sigil {
+            position: absolute; top: 24%; left: 0; right: 0; text-align: center; font-size: 92px;
+            line-height: 1; color: #33ff00; opacity: 0; z-index: 2;
+            text-shadow: 0 0 16px rgba(51,255,0,0.6), 0 0 38px rgba(51,255,0,0.3);
+        }
+        #bi-sigil.warm { animation: bi-warm 2.6s ease-out forwards; }
+        @keyframes bi-warm {
+            0%{opacity:0} 9%{opacity:.5} 13%{opacity:.08} 19%{opacity:.8} 24%{opacity:.16}
+            32%{opacity:1} 38%{opacity:.5} 48%{opacity:1} 100%{opacity:.9}
+        }
+        #bi-log { white-space: pre-wrap; line-height: 1.55; font-size: 10.5pt; flex: 1;
+            position: relative; z-index: 1; overflow: hidden; }
+        #bi-skip { position: absolute; bottom: 12px; right: 20px; color: #2c7a2c; font-size: 9pt; z-index: 4; }
+        .preflight {
+            margin-top: 10px; background: var(--panel); border: 1px solid var(--border);
+            border-radius: 8px; padding: 9px 12px; font-size: 9.5pt; color: var(--muted);
+            line-height: 1.6; display: none;
+        }
+        .preflight.show { display: block; }
+        .preflight b { color: var(--accent2); }
+        .preflight .warn { color: var(--accent); }
     </style>
 </head>
 <body>
+    <div id="boot-intro">
+        <div id="bi-sigil" aria-hidden="true">⌬</div>
+        <div id="bi-log"></div>
+        <div id="bi-skip">press any key to skip</div>
+    </div>
+
     <header>
         <div class="brand"><span class="star">⟁</span>OUTLAW_OS</div>
         <div class="tag">// SESSION SELECT</div>
@@ -191,12 +230,15 @@
         </button>
     </div>
 
+    <div class="preflight" id="preflight-out"></div>
+
     <footer>
         <label class="remember">
             <input type="checkbox" id="remember-choice">
             <span>Always start in this session (skip this screen on future boots)</span>
         </label>
-        <span class="hint">↹ TAB to move · ENTER to choose</span>
+        <span class="hint">↹ TAB · ENTER to choose</span>
+        <a class="muted-link" data-action="preflight">🔍 check this PC</a>
         <a class="muted-link" data-choice="tty">drop to a terminal</a>
     </footer>
 

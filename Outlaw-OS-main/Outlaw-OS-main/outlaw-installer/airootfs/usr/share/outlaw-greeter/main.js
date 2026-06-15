@@ -16,6 +16,16 @@ const { app, BrowserWindow, ipcMain, screen } = require('electron');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const { exec } = require('child_process');
+
+// Tiny read-only shell helper (fixed commands, no user input → no injection).
+// Always resolves (never rejects) so a missing tool can't break the greeter.
+function sh(cmd, ms = 4000) {
+    return new Promise((resolve) => {
+        try { exec(cmd, { timeout: ms, windowsHide: true }, (_e, out) => resolve((out || '').trim())); }
+        catch { resolve(''); }
+    });
+}
 
 const SESSION_PATH = path.join(os.homedir(), '.outlaw-session');
 // One-shot bypass — created by the desktop shell's "Switch to Dev session"
@@ -103,6 +113,32 @@ ipcMain.handle('greeter:choose', (_e, choice, remember) => {
         app.quit();
     }, 120);
     return { ok: true };
+});
+
+// Phase 8: real boot messages for the cinematic boot intro (read-only).
+ipcMain.handle('greeter:boot-log', async () => {
+    let out = await sh('journalctl -b --no-pager -o cat -n 12 2>/dev/null');
+    if (!out) out = await sh('dmesg 2>/dev/null | tail -n 12');
+    return out ? out.split('\n').map((l) => l.slice(0, 84)).filter(Boolean) : [];
+});
+
+// Phase 8: optional pre-flight check shown at the greeter before entering a
+// session. All read-only; never blocks the chooser.
+ipcMain.handle('greeter:preflight', async () => {
+    const cpu = (os.cpus()[0] || {}).model || 'CPU';
+    const cores = os.cpus().length;
+    const ramGb = Math.round((os.totalmem() / (1024 ** 3)) * 10) / 10;
+    let gpu = await sh("lspci 2>/dev/null | grep -Ei 'vga|3d|display' | sed 's/^.*: //' | head -n1");
+    if (!gpu) gpu = 'unknown';
+    const nv = await sh('nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits 2>/dev/null | head -n1');
+    const vramGb = nv && Number(nv) ? Math.round((Number(nv) / 1024) * 10) / 10 : 0;
+    const diskFree = await sh("df -h --output=avail / 2>/dev/null | tail -n1");
+    let safeGfx = false;
+    try { safeGfx = fs.existsSync(path.join(os.homedir(), '.outlaw-safe-gfx')); } catch {}
+    const warnings = [];
+    if (ramGb && ramGb < 4) warnings.push('Low RAM (under 4 GB) — pick a tiny AI model and the Desktop session.');
+    if (safeGfx) warnings.push('Safe graphics is active (software rendering). Delete ~/.outlaw-safe-gfx to retry your GPU.');
+    return { ok: true, cpu, cores, ramGb, gpu, vramGb, diskFree: (diskFree || '').trim(), safeGfx, warnings };
 });
 
 app.whenReady().then(() => {

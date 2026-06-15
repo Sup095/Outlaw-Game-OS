@@ -11,4 +11,7 @@ contextBridge.exposeInMainWorld('greeter', {
     // remember=true tells main to mirror the choice into the persistent pref
     // file (`~/.outlaw-session-pref`) so future boots skip the greeter entirely.
     choose: (choice, remember) => ipcRenderer.invoke('greeter:choose', choice, !!remember),
+    // Phase 8: cinematic boot intro + optional pre-flight check (both read-only).
+    bootLog: () => ipcRenderer.invoke('greeter:boot-log'),
+    preflight: () => ipcRenderer.invoke('greeter:preflight'),
 });
