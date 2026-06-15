@@ -1445,6 +1445,9 @@ document.addEventListener('click', () => {
 // of CSS custom properties; nothing re-renders beyond a repaint.
 function applyTheme(theme) {
     document.body.classList.toggle('theme-gold', theme === 'gold');
+    // Phase 11 — "Broken" mode: a third theme (palette + CSS glitch FX). Mutually
+    // exclusive with gold; both classes are driven off the single theme value.
+    document.body.classList.toggle('theme-broken', theme === 'broken');
 }
 
 async function loadSettings() {
