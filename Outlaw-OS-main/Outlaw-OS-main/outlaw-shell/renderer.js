@@ -782,6 +782,7 @@ let tasksTimer = null;
 let _procSort = { key: 'cpu', asc: false };   // default: CPU, biggest first
 let _selectedPid = null;
 let _lastProcs = [];
+let _procFilter = '';
 
 function _sortProcs(list) {
     const { key, asc } = _procSort;
@@ -801,16 +802,20 @@ function _fmtMem(p) {
 function _renderProcs() {
     const body = $('#proc-body');
     if (!body) return;
+    const wrap = $('#proc-wrap');
+    const keepScroll = wrap ? wrap.scrollTop : 0;   // survive the 2s rebuild
+    let rows = _sortProcs(_lastProcs);
+    if (_procFilter) rows = rows.filter((p) => String(p.comm).toLowerCase().includes(_procFilter));
     body.innerHTML = '';
-    for (const p of _sortProcs(_lastProcs)) {
+    for (const p of rows) {
         const tr = document.createElement('tr');
         tr.dataset.pid = p.pid;
         if (String(p.pid) === String(_selectedPid)) tr.classList.add('sel');
         tr.innerHTML = `<td class="mono">${p.pid}</td><td>${escapeHtml(p.comm)}</td>`
             + `<td class="right mono">${p.cpu}</td><td class="right mono">${_fmtMem(p)}</td>`;
-        tr.addEventListener('click', () => _selectProc(p.pid));
         body.appendChild(tr);
     }
+    if (wrap) wrap.scrollTop = keepScroll;
     $$('#screen-tasks .proc th[data-sort]').forEach((th) => {
         const on = th.dataset.sort === _procSort.key;
         th.classList.toggle('sorted', on);
@@ -1761,6 +1766,17 @@ function wire() {
                        : `Ended ${r.killed}; some need admin: ${(r.errors || []).join(', ')}`);
         } catch (e) { toast('End tree failed: ' + e.message); }
         refreshTasks();
+    });
+    // One delegated click handler for all process rows (scales to the full list).
+    const procBodyEl = $('#proc-body');
+    if (procBodyEl) procBodyEl.addEventListener('click', (e) => {
+        const tr = e.target.closest('tr[data-pid]');
+        if (tr) _selectProc(tr.dataset.pid);
+    });
+    const procFilterEl = $('#proc-filter');
+    if (procFilterEl) procFilterEl.addEventListener('input', () => {
+        _procFilter = procFilterEl.value.trim().toLowerCase();
+        _renderProcs();
     });
 
     // Session preference reset — flips ~/.outlaw-session-pref back to "ask"

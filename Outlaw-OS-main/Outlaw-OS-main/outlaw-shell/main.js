@@ -822,13 +822,14 @@ function registerIpc() {
 
     ipcMain.handle('system:processes', async () => {
         if (!IS_LINUX) return [{ pid: process.pid, comm: 'electron', cpu: '0.0', mem: '0.0', memMb: 0 }];
-        // rss (KB) gives a Windows-style MB column; top 40 by CPU is plenty for
-        // a desktop task manager and keeps the render cheap.
-        const r = await runShell('ps -eo pid,comm,pcpu,pmem,rss --sort=-pcpu | head -n 41');
+        // rss (KB) gives a Windows-style MB column. Return ALL processes (sorted
+        // by CPU) so the user can filter/scroll to find any app to end — capped
+        // at 250 so the render stays cheap on busy systems.
+        const r = await runShell('ps -eo pid,comm,pcpu,pmem,rss --sort=-pcpu');
         return r.stdout.split('\n').slice(1).map((l) => {
             const m = l.trim().match(/^(\d+)\s+(.+?)\s+([\d.]+)\s+([\d.]+)\s+(\d+)$/);
             return m ? { pid: m[1], comm: m[2], cpu: m[3], mem: m[4], memMb: Math.round(Number(m[5]) / 1024) } : null;
-        }).filter(Boolean);
+        }).filter(Boolean).slice(0, 250);
     });
 
     // Phase 5: End task / End process tree. We kill via Node's process.kill so

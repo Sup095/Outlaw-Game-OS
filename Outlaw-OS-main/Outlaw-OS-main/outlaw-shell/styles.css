@@ -254,9 +254,11 @@ h3 { font-size: 13px; text-transform: uppercase; color: var(--term-dim); }
 .grid.apps { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
 
 /* Phase 5 — Task Manager process table */
+.proc-wrap { max-height: 440px; overflow: auto; }
 .proc { width: 100%; border-collapse: collapse; font-size: 13px; }
 .proc th, .proc td { padding: 5px 8px; border-bottom: 1px solid var(--line); }
-.proc th { text-align: left; color: var(--term-dim); font-weight: 600; }
+.proc th { text-align: left; color: var(--term-dim); font-weight: 600;
+    position: sticky; top: 0; background: var(--panel-2); z-index: 1; }
 .proc th.right, .proc td.right { text-align: right; }
 .proc th[data-sort] { cursor: pointer; user-select: none; }
 .proc th[data-sort]:hover { color: var(--term); }
