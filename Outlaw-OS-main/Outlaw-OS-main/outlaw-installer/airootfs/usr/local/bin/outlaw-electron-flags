@@ -36,10 +36,30 @@ echo "--no-sandbox"
 
 # Detect virtualization. systemd-detect-virt prints "none" on bare metal and
 # a short keyword (oracle / qemu / kvm / vmware / xen / microsoft / etc.) when
-# inside a hypervisor. Treat any non-"none" answer as "disable GPU compositing".
+# inside a hypervisor.
+virt="none"
 if command -v systemd-detect-virt >/dev/null 2>&1; then
     virt="$(systemd-detect-virt 2>/dev/null || echo none)"
-    if [[ "$virt" != "none" && -n "$virt" ]]; then
+fi
+
+if [[ "$virt" != "none" && -n "$virt" ]]; then
+    # Inside a hypervisor — GPU init is unreliable, always disable compositing.
+    echo "--disable-gpu"
+    echo "--disable-gpu-compositing"
+elif [[ "${OUTLAW_FORCE_GPU:-0}" != "1" ]]; then
+    # Bare metal: disable the GPU only if hardware GL has PROVEN unreliable on
+    # this host — either we've already fallen back to safe graphics (sticky
+    # marker ~/.outlaw-safe-gfx) or the desktop session crashed (watchdog
+    # counter). Lets a flaky Intel/Mesa box ("failed to load module intel")
+    # drop to software GL automatically; good hardware is never penalised.
+    safe=0
+    [[ -f "$HOME/.outlaw-safe-gfx" ]] && safe=1
+    if [[ "$safe" != "1" && -f "$HOME/.outlaw-session-fails" ]]; then
+        fn="$(grep -oE '"fails"[[:space:]]*:[[:space:]]*[0-9]+' "$HOME/.outlaw-session-fails" | grep -oE '[0-9]+$' | tail -n1)"
+        fs="$(grep -oE '"session"[[:space:]]*:[[:space:]]*"[^"]*"' "$HOME/.outlaw-session-fails" | sed -E 's/.*"([^"]*)"$/\1/')"
+        [[ "${fn:-0}" -ge 1 && "$fs" == "desktop" ]] && safe=1
+    fi
+    if [[ "$safe" == "1" ]]; then
         echo "--disable-gpu"
         echo "--disable-gpu-compositing"
     fi

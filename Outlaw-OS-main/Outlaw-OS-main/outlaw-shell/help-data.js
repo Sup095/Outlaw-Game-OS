@@ -189,6 +189,17 @@ window.OUTLAW_HELP = [
             + 'rebooting once. If it persists, note your GPU and report it.</p>',
     },
     {
+        id: 'trouble-gfx', cat: 'Troubleshooting', title: 'Desktop crashes or black screen (safe graphics)',
+        keywords: 'crash black screen safe mode graphics gpu intel software gl mesa picom watchdog',
+        body: '<p>If the desktop crashes on startup, Outlaw automatically retries in <b>safe '
+            + 'graphics</b> — software rendering with GPU acceleration turned off — which runs on '
+            + 'practically any hardware (handy for flaky Intel/Mesa GPUs that report '
+            + '“failed to load module intel”). It then <b>stays</b> in safe graphics so it can’t '
+            + 'crash-loop; everything still works, it’s just not GPU-accelerated. To retry your '
+            + 'GPU later, open a <b>Terminal</b> and run <code>rm ~/.outlaw-safe-gfx</code>, then '
+            + 'reboot.</p>',
+    },
+    {
         id: 'trouble-wifi', cat: 'Troubleshooting', title: 'No internet / Wi-Fi',
         keywords: 'wifi internet network offline connect nmcli download fails',
         body: '<p>Go to <b>Settings → Network &amp; Wi-Fi</b>, scan, pick your network and enter '

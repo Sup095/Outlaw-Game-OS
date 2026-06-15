@@ -96,6 +96,34 @@ if [[ "$FAILS" -ge "$MAX_FAILS" && "$PRIOR_SESSION" == "$SESSION_NAME" ]]; then
     exit 87
 fi
 
+# ----- safe-graphics fallback (real-hardware GPU/GL crash recovery) ----------
+# If this session has crashed before (counter) or we've already fallen back
+# (sticky marker), the host's hardware GL is suspect — e.g. a flaky Intel/Mesa
+# stack where "failed to load module intel" makes Electron's GPU process and
+# picom's glx compositor die or paint the window black. Force software GL, stop
+# the compositor, and (for an Electron session) disable GPU compositing. Sticky
+# via a marker so we don't flip-flop boot-to-boot. OUTLAW_FORCE_GPU=1 opts out;
+# delete ~/.outlaw-safe-gfx to retry hardware GL on the next boot.
+SAFE_GFX_MARKER="$HOME/.outlaw-safe-gfx"
+if [[ "${OUTLAW_FORCE_GPU:-0}" != "1" ]]; then
+    NEED_SAFE=0
+    [[ -f "$SAFE_GFX_MARKER" ]] && NEED_SAFE=1
+    [[ "$FAILS" -ge 1 && "$PRIOR_SESSION" == "$SESSION_NAME" ]] && NEED_SAFE=1
+    if [[ "$NEED_SAFE" == "1" ]]; then
+        export LIBGL_ALWAYS_SOFTWARE=1
+        export GALLIUM_DRIVER=llvmpipe
+        : > "$SAFE_GFX_MARKER" 2>/dev/null || true
+        # Stop the cosmetic compositor — its glx backend blacks windows on a
+        # broken GL stack. Harmless (no-op) if it isn't running.
+        pkill -x picom 2>/dev/null || true
+        # For an Electron session, add GPU-disable flags right after the binary.
+        if [[ "${COMMAND[0]}" == electron || "${COMMAND[0]}" == */electron ]]; then
+            COMMAND=("${COMMAND[0]}" --disable-gpu --disable-gpu-compositing "${COMMAND[@]:1}")
+        fi
+        echo "outlaw-session-watchdog: safe graphics active (software GL, no picom)." >&2
+    fi
+fi
+
 # ----- run the session with a start timestamp -------------------------------
 # Track this attempt as pending — if the command runs long enough we'll clear
 # it back to 0 on success.
