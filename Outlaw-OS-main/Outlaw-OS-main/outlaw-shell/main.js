@@ -89,6 +89,9 @@ const DEFAULT_SETTINGS = {
     lastNotifiedVersion: '', // don't re-toast the same available version
     sponsorUrl: '',          // optional donate / sponsor URL (Ko-fi, BMC, GH Sponsors, etc.)
     firstRunDone: false,
+    // Phase 6 — first-boot Quickstart tour. Shown once on the first desktop
+    // entry; set true on Skip/Finish ("don't show again"). Replayable from Help.
+    quickstartSeen: false,
     // SC5 — System Core voice. OFF by default. When ON, cold-mode dialogue
     // lines are routed through piper / espeak-ng for spoken playback. CPU-only,
     // no VRAM use; the shell still speaks via text bubble even when this is OFF.

@@ -280,6 +280,21 @@ h3 { font-size: 13px; text-transform: uppercase; color: var(--term-dim); }
 .help-body { line-height: 1.55; }
 .help-body p, .help-body ul, .help-body ol { margin: 6px 0; }
 
+/* Phase 6 — first-boot Quickstart tour */
+.qs-overlay { position: fixed; inset: 0; z-index: 9999; display: flex; align-items: center;
+    justify-content: center; background: rgba(0, 0, 0, 0.78); }
+.qs-card { width: 460px; max-width: 92vw; background: var(--panel); border: 1px solid var(--term-dim);
+    border-radius: var(--radius); padding: 24px; box-shadow: 0 0 40px rgba(var(--term-rgb), 0.18);
+    text-align: center; }
+.qs-step-ico { font-size: 40px; color: var(--term); filter: drop-shadow(0 0 10px rgba(var(--term-rgb), 0.5)); margin-bottom: 6px; }
+.qs-card h2 { margin: 4px 0 10px; }
+.qs-body { text-align: left; line-height: 1.55; min-height: 90px; }
+.qs-body b { color: var(--term); }
+.qs-dots { display: flex; gap: 6px; justify-content: center; margin: 16px 0; }
+.qs-dots span { width: 8px; height: 8px; border-radius: 50%; background: var(--line); }
+.qs-dots span.on { background: var(--term); box-shadow: 0 0 6px rgba(var(--term-rgb), 0.7); }
+.qs-actions { display: flex; align-items: center; gap: 8px; }
+
 .tile {
     display: flex; flex-direction: column; gap: 6px; align-items: flex-start;
     padding: 16px; text-transform: none; letter-spacing: 0; text-align: left;

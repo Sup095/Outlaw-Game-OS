@@ -200,6 +200,7 @@ function enterOS() {
     startStats();
     refreshAiStatus();
     checkSafeMode();
+    maybeShowQuickstart();
 }
 
 // Show a persistent toast banner if outlaw-session-watchdog flipped us into
@@ -908,6 +909,46 @@ function renderHelp(query) {
         }
     }
     host.innerHTML = html;
+}
+
+// ---- Phase 6: first-boot Quickstart tour -----------------------------------
+const QUICKSTART_STEPS = [
+    { ico: '✦', title: 'Welcome to Outlaw OS', body: '<p>A lightweight Linux built for AI-driven game development. This quick tour shows where everything is — you can <b>Skip</b> at any time.</p>' },
+    { ico: '▣', title: 'Finding your way', body: '<p>The <b>sidebar</b> on the left switches screens — Dashboard, Files, Task Manager, Apps, AI Assistant and more. The top bar shows live CPU/RAM and the clock.</p>' },
+    { ico: '✦', title: 'Private, local AI', body: '<p>Open <b>AI Assistant → Check my PC</b> and Outlaw recommends a model your hardware can run, then walks you through installing <b>LM Studio</b>. It all runs on your machine — no account.</p>' },
+    { ico: '📦', title: 'Apps & games', body: '<p>The <b>Apps</b> page installs Steam, Firefox, Godot and more in one click. The <b>On this PC</b> view finds everything you’ve already installed, including AppImages.</p>' },
+    { ico: '🛠', title: 'Build games', body: '<p>The <b>Dev session</b> (Outlaw CodeMaker) is an AI agent for making Godot games. Switch to it from <b>Settings → Session</b> or the boot greeter.</p>' },
+    { ico: '❔', title: 'Stuck? Open Help', body: '<p>The <b>Help</b> screen explains every part of the OS and how to fix common problems, with a search box. You can replay this tour from there too. Enjoy Outlaw OS!</p>' },
+];
+let _qsIndex = 0;
+
+function renderQuickstartStep() {
+    const s = QUICKSTART_STEPS[_qsIndex];
+    if (!s) return;
+    $('#qs-ico').textContent = s.ico;
+    $('#qs-title').textContent = s.title;
+    $('#qs-body').innerHTML = s.body;
+    $('#qs-dots').innerHTML = QUICKSTART_STEPS.map((_, i) => `<span class="${i === _qsIndex ? 'on' : ''}"></span>`).join('');
+    $('#qs-back').disabled = _qsIndex === 0;
+    $('#qs-next').textContent = (_qsIndex === QUICKSTART_STEPS.length - 1) ? 'Finish' : 'Next';
+}
+function showQuickstart() {
+    const ov = $('#quickstart');
+    if (!ov) return;
+    _qsIndex = 0;
+    ov.style.display = 'flex';
+    renderQuickstartStep();
+}
+async function endQuickstart() {
+    const ov = $('#quickstart');
+    if (ov) ov.style.display = 'none';
+    await setSetting({ quickstartSeen: true });   // "don't show again"
+}
+async function maybeShowQuickstart() {
+    try {
+        const s = await api.settings.get();
+        if (!s.quickstartSeen) showQuickstart();
+    } catch {}
 }
 
 // ---------------------------------------------------------------------------
@@ -1816,6 +1857,19 @@ function wire() {
     // Phase 6: Help — live search.
     const helpSearchEl = $('#help-search');
     if (helpSearchEl) helpSearchEl.addEventListener('input', () => renderHelp(helpSearchEl.value));
+
+    // Phase 6: Quickstart tour controls.
+    const qsNext = $('#qs-next');
+    if (qsNext) qsNext.addEventListener('click', () => {
+        if (_qsIndex >= QUICKSTART_STEPS.length - 1) { endQuickstart(); return; }
+        _qsIndex++; renderQuickstartStep();
+    });
+    const qsBack = $('#qs-back');
+    if (qsBack) qsBack.addEventListener('click', () => { if (_qsIndex > 0) { _qsIndex--; renderQuickstartStep(); } });
+    const qsSkip = $('#qs-skip');
+    if (qsSkip) qsSkip.addEventListener('click', endQuickstart);
+    const qsReplay = $('#help-replay-tour');
+    if (qsReplay) qsReplay.addEventListener('click', showQuickstart);
 
     // Session preference reset — flips ~/.outlaw-session-pref back to "ask"
     // so the greeter shows again on next boot.

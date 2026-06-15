@@ -731,6 +731,7 @@
         <!-- Help -->
         <section class="screen" id="screen-help">
             <div class="row"><h2>Help</h2><span class="spacer"></span>
+                <button id="help-replay-tour" type="button" title="Replay the welcome tour">▶ Replay tour</button>
                 <input id="help-search" placeholder="Search help…" autocomplete="off" style="width:auto;flex:0 1 280px;min-width:180px;">
             </div>
             <p class="muted" style="margin:0 0 12px;">Everything about Outlaw OS — how each part works and how to fix common problems. Click a topic to expand it.</p>
@@ -772,6 +773,22 @@
 <!-- System Core scripts. dialogue.js (SC5) loads the cold-mode catalogue and
      must run BEFORE syscore.js so the picker is ready when boot_complete
      fires. syscore.js exposes window.outlawCore for renderer.js. -->
+<!-- Quickstart tour (Phase 6) — skippable first-boot orientation overlay -->
+<div id="quickstart" class="qs-overlay" style="display:none;">
+    <div class="qs-card">
+        <div class="qs-step-ico" id="qs-ico">✦</div>
+        <h2 id="qs-title">Welcome</h2>
+        <div class="qs-body" id="qs-body"></div>
+        <div class="qs-dots" id="qs-dots"></div>
+        <div class="qs-actions">
+            <button id="qs-skip" type="button">Skip</button>
+            <span class="spacer"></span>
+            <button id="qs-back" type="button">Back</button>
+            <button id="qs-next" class="primary" type="button">Next</button>
+        </div>
+    </div>
+</div>
+
 <script src="dialogue.js"></script>
 <script src="syscore.js"></script>
 <script src="help-data.js"></script>
