@@ -35,7 +35,7 @@ Outlaw Game OS is built in the open, one phase at a time. Each **completed** roa
 
 ```
 Foundations   ▰▰▰▰▰▰▰▰▰▰  done — 4 roadmaps, all shipped & tested
-This cycle    ▰▰▰▰▰▰▰▰▰▰▰▰▰▱▱▱  Completeness & Polish — phase 14 (Dev session rebuild) underway → v2.1.0
+This cycle    ▰▰▰▰▰▰▰▰▰▰▰▰▰▱▱▱▱  Completeness & Polish — phase 14 (Dev session rebuild) underway → v2.1.0
 ```
 
 > **Legend:** ✅ shipped & in your hands · 🚧 building now · 🔭 on the horizon
@@ -69,9 +69,10 @@ The foundations boot and run; this cycle makes the desktop feel *finished* and r
 | ✅ | **11 · "Broken" mode** | A third selectable theme (*Settings → Appearance*) where the system looks like it's *barely holding together* — a sickly washed-out palette with flicker, a rolling scanline tear and glitching, chromatic-split headings. Pure CSS, so it costs nothing when off. The live-demo "repair it by installing" vibe (live-mode feature-locks already shipped). |
 | ✅ | **12 · Loading screens** | A proper, styled loading screen for long jobs — phase steps on one side, a **live streamed log** on the other, with an animated progress strip (and the Broken-mode glitches when that theme's on). Wired into the graphics-stack install; a reusable overlay other long jobs can adopt. |
 | ✅ | **13 · AI that runs your system (experimental)** | Tell the on-device AI *"install Krita"* and it does it — resolving to a **known source** (the Apps catalog or official repos), proposing the action, and installing on your **one-click confirm**, shown live on the loading screen. Ships with a **small built-in model** so the System Core + AI Assistant work **out of the box, no setup** — toggle it off to use LM Studio instead. Desktop-only. |
-| 🚧 | **14 · Dev session rebuild** | A ground-up rework of the Dev session (Outlaw CodeMaker), which has several major issues. A comprehensive, question-driven build-out to make the AI game-dev workflow correct, robust, and genuinely great. |
-| 🔭 | **15 · Self-update service (feasibility)** | An experiment in letting Outlaw keep itself — and its dependencies — current automatically, and quietly roll in fixes. We're testing whether it can be made reliable and safe; it may or may not stay. |
-| 🔭 | **16 · Release readiness → v2.1.0** | A final fixing + **comprehensive testing** pass — including outstanding bugs like the installer's **automatic partition resizing** — to put the constant bugs to rest, leading to **v2.1.0 — the first fully-released version.** Updates continue after, but the rough-edges era ends here. |
+| 🚧 | **14 · Dev session rebuild** | A ground-up rework of the Dev session (Outlaw CodeMaker), built in subphases: **14a** shell basics (fill-screen, session switching, LM Studio / Godot launchers, settings) · **14b** the project "brain" — a game **description sheet** + a living **roadmap** + an auto-updating **file tree** · **14c** conversation compaction · **14d** a dev-vs-desktop model picker + base-AI assist · **14e** more low-resource features · **14f** polish + testing. Question-driven. |
+| 🔭 | **15 · AI Assistant overhaul** | Give the on-device AI a **name** (a fitting cyber-outlaw default, changeable, shared across sessions), **persistent chats** you can keep, delete and reference from one another — surviving updates — in both the Desktop assistant and CodeMaker, and an **installer that installs what you choose**: pick from described packages, or describe what you want and it says whether it's viable and installs it. *(Expanding.)* |
+| 🔭 | **16 · Self-update service (feasibility)** | An experiment in letting Outlaw keep itself — and its dependencies — current automatically, and quietly roll in fixes. We're testing whether it can be made reliable and safe; it may or may not stay. |
+| 🔭 | **17 · Release readiness → v2.1.0** | A final fixing + **comprehensive testing** pass — including outstanding bugs like the installer's **automatic partition resizing** — to put the constant bugs to rest, leading to **v2.1.0 — the first fully-released version.** Updates continue after, but the rough-edges era ends here. |
 
 ### 🌌 Beyond
 
