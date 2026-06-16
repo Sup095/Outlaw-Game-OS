@@ -527,6 +527,10 @@ class MainWindow(QMainWindow):
         sess_menu.addAction(act_check)
 
         sess_menu.addSeparator()
+        act_desktop = QAction("Switch to Desktop session…", self)
+        act_desktop.triggered.connect(self._switch_to_desktop)
+        sess_menu.addAction(act_desktop)
+
         act_quit = QAction("Quit", self)
         act_quit.setShortcut(QKeySequence.StandardKey.Quit)
         act_quit.triggered.connect(self.close)
@@ -911,6 +915,37 @@ class MainWindow(QMainWindow):
         self.thought_chamber.reset()
         self.hud.reset()
         self.terminal.append("info", "Started new session.")
+
+    def _switch_to_desktop(self) -> None:
+        """Phase 14a: leave the Dev session and boot into the Desktop session.
+
+        Mirrors the desktop shell's switch-to-Dev: write the session choice plus
+        a one-shot ``honor-once`` marker that the greeter reads, then quit — the
+        dev X-session ends and .xinitrc restarts straight into the Desktop.
+        """
+        from pathlib import Path
+        from PyQt6.QtWidgets import QApplication
+
+        reply = QMessageBox.question(
+            self,
+            "Switch to Desktop session",
+            "Close Outlaw CodeMaker and switch to the Desktop session?\n\n"
+            "The dev session will exit and the desktop will start up.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+        try:
+            home = Path.home()
+            (home / ".outlaw-session").write_text("desktop\n", encoding="utf-8")
+            (home / ".outlaw-session.honor-once").write_text("", encoding="utf-8")
+        except OSError as exc:
+            QMessageBox.warning(self, "Switch failed", f"Couldn't write the session file:\n{exc}")
+            return
+        # Quitting ends the dev X-session; the greeter, seeing honor-once, goes
+        # straight to the Desktop on the restart.
+        QApplication.quit()
 
     # ------------------------------------------------------------------
     # Settings / workspace

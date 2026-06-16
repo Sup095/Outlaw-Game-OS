@@ -222,7 +222,9 @@ def main() -> int:
 
     orchestrator = Orchestrator(config)
     window = MainWindow(orchestrator, config, projects_store=projects_store)
-    window.show()
+    # Phase 14a: open filling the screen (the Dev session is the whole screen).
+    # Maximized, not kiosk-fullscreen, so the title bar + taskbar stay reachable.
+    window.showMaximized()
 
     # Tell the boot failsafe we launched healthily (clears the crash counter).
     if boot_restore is not None:
