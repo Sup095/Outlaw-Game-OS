@@ -935,6 +935,44 @@ class Orchestrator(QObject):
     def save_description(self, data: dict) -> None:
         self.store.save_description(self.config["agent"]["workspace_root"], data)
 
+    def _conversation_summary(self, keep_recent: int) -> str:
+        """Phase 14c — compact the older turns (those beyond the recent window)
+        into a short summary so the agent keeps the gist of a long conversation
+        even though only the last `keep_recent` messages are sent verbatim.
+        Cached (recomputed only as more turns age out) and fully fail-safe: any
+        error just returns "" and the agent proceeds windowed as before."""
+        cur = self.memory.current
+        if not cur:
+            return ""
+        older = cur.older_messages(keep_recent)
+        if len(older) < 4:                      # not enough dropped history to bother
+            return ""
+
+        def _summarize() -> str:
+            convo = "\n".join(f"{m.role}: {m.content[:600]}" for m in older)[-8000:]
+            prompt = [
+                ChatMessage(role="system", content=(
+                    "Summarise the earlier part of this Godot game-dev conversation in "
+                    "6-10 tight bullet points: decisions made, what was built, open threads, "
+                    "and anything the assistant must remember. No preamble.")),
+                ChatMessage(role="user", content=convo),
+            ]
+            try:
+                return (self.client.complete(prompt, max_tokens=320, temperature=0.2) or "").strip()
+            except Exception:  # noqa: BLE001
+                return ""
+
+        try:
+            if self.context_cache is not None:
+                # Key on the count of aged-out messages: a cache hit until more turns drop.
+                key = signature("convsum", cur.session_id, len(older))
+                summary = self.context_cache.get_or_compute(key, _summarize, ttl=1800) or ""
+            else:
+                summary = _summarize()
+        except Exception:  # noqa: BLE001
+            summary = ""
+        return f"EARLIER IN THIS SESSION (compacted summary):\n{summary}" if summary else ""
+
     def _launch_worker(self, task: str, resume_state: dict | None) -> None:
         # Resolve the per-turn budget from the VRAM saver (mode = pref + free VRAM).
         budget = self.vram_saver.budget(self._base_max_tokens)
@@ -1011,6 +1049,14 @@ class Orchestrator(QObject):
         if recall_block:
             workspace_summary = f"{workspace_summary}\n\n{recall_block}"
             self.log.emit("info", "Recalled past solution(s) into context.")
+
+        # Phase 14c — fold the older turns into a compacted summary so a long
+        # conversation keeps its gist (only the last history_max_messages turns
+        # are sent verbatim). Cached + fail-safe.
+        conv_summary = self._conversation_summary(budget.history_max_messages)
+        if conv_summary:
+            workspace_summary = f"{workspace_summary}\n\n{conv_summary}"
+            self.log.emit("info", "Compacted earlier conversation into context.")
 
         worker = _AgentWorker(
             user_task=task,

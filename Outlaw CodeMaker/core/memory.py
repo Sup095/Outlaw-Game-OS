@@ -27,6 +27,15 @@ class SessionContext:
         """Trimmed chat history for prompt context."""
         return self.chat[-max_messages:]
 
+    def older_messages(self, keep_recent: int) -> list[ChatMessage]:
+        """The messages BEFORE the recent window — i.e. the ones as_history()
+        drops. Phase 14c compacts these into a summary so a long conversation
+        keeps its gist even though only the last `keep_recent` turns are sent
+        verbatim."""
+        if keep_recent <= 0 or len(self.chat) <= keep_recent:
+            return []
+        return self.chat[:-keep_recent]
+
 
 class MemoryManager:
     def __init__(self, store: MemoryStore):
