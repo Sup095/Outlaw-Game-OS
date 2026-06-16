@@ -50,6 +50,7 @@ from PyQt6.QtWidgets import (
 from core.orchestrator import Orchestrator
 from db.projects import ProjectsStore
 
+from .description_view import DescriptionView
 from .roadmap_view import RoadmapView
 from .session_browser import SessionBrowser
 from .snapshots_view import SnapshotsView
@@ -306,6 +307,8 @@ class MainWindow(QMainWindow):
         # Roadmap reads the current project's saved plan.
         self.roadmap_view.bind(self.orch.get_roadmap)
         self.roadmap_view.refresh()
+        # Design sheet reads/writes the current project's description (Phase 14b).
+        self.description_view.bind(self.orch.get_description, self.orch.save_description)
         # Show the Continue button if a paused task exists from a previous run.
         self.continue_btn.setVisible(self.orch.has_resumable())
 
@@ -359,6 +362,7 @@ class MainWindow(QMainWindow):
         self.workspace_view = WorkspaceView(self.config["agent"]["workspace_root"])
         self.session_browser = SessionBrowser()
         self.roadmap_view = RoadmapView()
+        self.description_view = DescriptionView()
         self.snapshots_view = SnapshotsView(self.orch)
         self.steam_panel = SteamPanel(self.config["agent"]["workspace_root"])
         self.steam_panel.log_message.connect(
@@ -368,6 +372,7 @@ class MainWindow(QMainWindow):
         self.left_tabs.addTab(self.workspace_view, "Workspace")
         self.left_tabs.addTab(self.session_browser, "History")
         self.left_tabs.addTab(self.roadmap_view, "Roadmap")
+        self.left_tabs.addTab(self.description_view, "Design")
         self.left_tabs.addTab(self.snapshots_view, "Snapshots")
         self.left_tabs.addTab(self.steam_panel, "Steam")
         # Refresh a tab's contents whenever it's opened, so it's never stale.
@@ -974,6 +979,7 @@ class MainWindow(QMainWindow):
         self.workspace_view.root = Path(ws)
         self.workspace_view.refresh()
         self.roadmap_view.refresh()  # roadmap is per-project
+        self.description_view.refresh()  # design sheet is per-project
         self.snapshots_view.refresh()  # snapshots are per-project
         self.steam_panel.set_workspace(ws)  # Steam config is per-project too
         self.workspace_label.setText(f"workspace: {ws}")
@@ -1310,10 +1316,13 @@ class MainWindow(QMainWindow):
             self.roadmap_view.refresh()
             self.left_tabs.setTabText(2, "Roadmap")  # clear the "new" dot
         elif index == 3:
+            # Design sheet — reload the per-project sheet each visit.
+            self.description_view.refresh()
+        elif index == 4:
             # Snapshots tab — re-read folder each visit so new captures show up
             # without needing the Refresh button.
             self.snapshots_view.refresh()
-        elif index == 4:
+        elif index == 5:
             # Re-check steamcmd/login state every time the user opens the tab
             # so cached login expiry is noticed without a manual refresh click.
             self.steam_panel._refresh_status()

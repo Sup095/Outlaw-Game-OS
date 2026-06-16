@@ -82,6 +82,15 @@ CREATE TABLE IF NOT EXISTS roadmap (
     updated_at    TEXT    NOT NULL
 );
 
+-- Phase 14b: per-project game design "description sheet" (type / audience /
+-- premise / features / notes). Same shape as roadmap; the AI and the user both
+-- read + edit it so they share one picture of what's being built.
+CREATE TABLE IF NOT EXISTS description_sheet (
+    workspace     TEXT    PRIMARY KEY,
+    data_json     TEXT    NOT NULL,
+    updated_at    TEXT    NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS task_state (
     session_id        INTEGER PRIMARY KEY REFERENCES sessions(id) ON DELETE CASCADE,
     user_task         TEXT    NOT NULL,
@@ -337,6 +346,29 @@ class MemoryStore:
         with self._conn() as c:
             row = c.execute(
                 "SELECT data_json FROM roadmap WHERE workspace = ?", (workspace,)
+            ).fetchone()
+            if not row:
+                return None
+            try:
+                return json.loads(row["data_json"])
+            except json.JSONDecodeError:
+                return None
+
+    # ----- description sheet (per project, Phase 14b) --------------------
+
+    def save_description(self, workspace: str, data: dict) -> None:
+        with self._conn() as c:
+            c.execute(
+                "INSERT INTO description_sheet(workspace, data_json, updated_at) VALUES (?,?,?) "
+                "ON CONFLICT(workspace) DO UPDATE SET data_json=excluded.data_json, "
+                "updated_at=excluded.updated_at",
+                (workspace, json.dumps(data), _now()),
+            )
+
+    def get_description(self, workspace: str) -> dict | None:
+        with self._conn() as c:
+            row = c.execute(
+                "SELECT data_json FROM description_sheet WHERE workspace = ?", (workspace,)
             ).fetchone()
             if not row:
                 return None

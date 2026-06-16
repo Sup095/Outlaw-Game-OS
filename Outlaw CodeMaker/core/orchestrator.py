@@ -901,6 +901,14 @@ class Orchestrator(QObject):
     def get_roadmap(self) -> dict | None:
         return self.store.get_roadmap(self.config["agent"]["workspace_root"])
 
+    # Phase 14b — per-project game design sheet (read + written by the Design
+    # tab; the AI will read/update it in a later slice via a <<DESCRIPTION>> block).
+    def get_description(self) -> dict | None:
+        return self.store.get_description(self.config["agent"]["workspace_root"])
+
+    def save_description(self, data: dict) -> None:
+        self.store.save_description(self.config["agent"]["workspace_root"], data)
+
     def _launch_worker(self, task: str, resume_state: dict | None) -> None:
         # Resolve the per-turn budget from the VRAM saver (mode = pref + free VRAM).
         budget = self.vram_saver.budget(self._base_max_tokens)
