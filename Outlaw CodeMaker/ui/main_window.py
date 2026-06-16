@@ -733,6 +733,7 @@ class MainWindow(QMainWindow):
         self.orch.question_requested.connect(self._on_question_requested)
         self.orch.batch_question_requested.connect(self._on_batch_question_requested)
         self.orch.roadmap_updated.connect(self._on_roadmap_updated)
+        self.orch.description_updated.connect(self._on_description_updated)
         self.orch.task_paused.connect(self._on_task_paused)
         self.orch.resumable_changed.connect(self._on_resumable_changed)
         # Refresh the VRAM mode badge immediately on a settings change / new task.
@@ -1236,6 +1237,13 @@ class MainWindow(QMainWindow):
         # Nudge the user to the Roadmap tab the first time one appears.
         self.left_tabs.setTabText(2, "Roadmap •")
 
+    @pyqtSlot(dict)
+    def _on_description_updated(self, data: dict) -> None:
+        # Phase 14b: the agent filled/updated the design sheet — reload it from
+        # the store and flag the Design tab so the user notices.
+        self.description_view.show_data(data)
+        self.left_tabs.setTabText(3, "Design •")
+
     @pyqtSlot(str)
     def _on_task_paused(self, hint: str) -> None:
         self.chat_panel.add_system(f"⏸ {hint}")
@@ -1318,6 +1326,7 @@ class MainWindow(QMainWindow):
         elif index == 3:
             # Design sheet — reload the per-project sheet each visit.
             self.description_view.refresh()
+            self.left_tabs.setTabText(3, "Design")  # clear the "new" dot
         elif index == 4:
             # Snapshots tab — re-read folder each visit so new captures show up
             # without needing the Refresh button.

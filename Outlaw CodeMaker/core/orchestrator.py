@@ -51,6 +51,7 @@ TOOL_PATTERN = re.compile(r"<<TOOL>>(.*?)<<END>>", re.DOTALL)
 ANSWER_PATTERN = re.compile(r"<<ANSWER>>(.*?)<<END>>", re.DOTALL)
 ASK_PATTERN = re.compile(r"<<ASK>>(.*?)<<END>>", re.DOTALL)
 ROADMAP_PATTERN = re.compile(r"<<ROADMAP>>(.*?)<<END>>", re.DOTALL)
+DESCRIPTION_PATTERN = re.compile(r"<<DESCRIPTION>>(.*?)<<END>>", re.DOTALL)  # Phase 14b: game design sheet
 CONTINUE_PATTERN = re.compile(r"<<CONTINUE>>", re.IGNORECASE)
 # Verbatim file writes — content needs NO JSON escaping (reliable for local models).
 WRITE_PATTERN = re.compile(
@@ -116,6 +117,7 @@ class Control:
     answer: str | None
     wants_continue: bool
     tool_errors: list[str]  # raw <<TOOL>> blocks that failed to parse (malformed JSON)
+    description: dict | None = None  # Phase 14b: AI-authored/updated game design sheet
 
 
 def parse_control(text: str) -> Control:
@@ -149,6 +151,16 @@ def parse_control(text: str) -> Control:
         except json.JSONDecodeError:
             pass
 
+    description = None
+    m = DESCRIPTION_PATTERN.search(text)
+    if m:
+        try:
+            data = json.loads(m.group(1).strip())
+            if isinstance(data, dict):
+                description = data
+        except json.JSONDecodeError:
+            pass
+
     return Control(
         tools=tools,
         asks=asks,
@@ -156,6 +168,7 @@ def parse_control(text: str) -> Control:
         answer=parse_answer(text),
         wants_continue=bool(CONTINUE_PATTERN.search(text)),
         tool_errors=tool_errors,
+        description=description,
     )
 
 
@@ -204,6 +217,7 @@ class _AgentWorker(QThread):
     failed = pyqtSignal(str)                  # error string
     progress = pyqtSignal(int, str)           # (percent 0-100, phase label)
     roadmap_updated = pyqtSignal(dict)        # agent created/updated the roadmap
+    description_updated = pyqtSignal(dict)     # agent created/updated the design sheet
     paused = pyqtSignal(str)                  # task paused but resumable (hint text)
     connection_lost = pyqtSignal(str)         # transient LM Studio error; reconnect mode on
 
@@ -273,6 +287,15 @@ class _AgentWorker(QThread):
         except Exception as exc:  # noqa: BLE001
             self.log.emit("warn", f"Roadmap save failed: {exc}")
 
+    def _save_description(self, data: dict) -> None:
+        try:
+            ws = self.memory.current.workspace_root if self.memory.current else ""
+            self.memory.store.save_description(ws, data)
+            self.description_updated.emit(data)
+            self.log.emit("ok", "Design sheet updated.")
+        except Exception as exc:  # noqa: BLE001
+            self.log.emit("warn", f"Design sheet save failed: {exc}")
+
     def _run_agent_loop(self) -> None:
         resuming = self.resume_state is not None
         # On resume, log a short "continue" rather than re-logging the whole task.
@@ -328,6 +351,8 @@ class _AgentWorker(QThread):
 
             if ctrl.roadmap:
                 self._save_roadmap(ctrl.roadmap)
+            if ctrl.description:
+                self._save_description(ctrl.description)
 
             acted = False
 
@@ -557,6 +582,7 @@ class Orchestrator(QObject):
     question_requested = pyqtSignal(dict, object)  # agent asks the user (forwarded from QuestionGate)
     batch_question_requested = pyqtSignal(list, object)  # several questions in one prompt
     roadmap_updated = pyqtSignal(dict)          # roadmap created/updated
+    description_updated = pyqtSignal(dict)       # design sheet created/updated
     task_paused = pyqtSignal(str)               # task pausable/resumable (hint)
     resumable_changed = pyqtSignal(bool)        # whether the current session has a resume point
     vram_mode_changed = pyqtSignal(str)         # current VRAM saver mode label (Full/Lean/Minimal)
@@ -1006,6 +1032,7 @@ class Orchestrator(QObject):
         worker.failed.connect(self._on_failed)
         worker.progress.connect(self.progress)
         worker.roadmap_updated.connect(self.roadmap_updated)
+        worker.description_updated.connect(self.description_updated)
         worker.paused.connect(self._on_paused)
         worker.connection_lost.connect(self._on_connection_lost)
         worker.finished.connect(self._on_worker_finished)
