@@ -16,6 +16,9 @@ VRAM; it's there so a fresh user is never stuck with no AI and no way to begin.
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 from .api_client import LMStudioClient, LMStudioConfig
 
 # The bundled base AI: Ollama's OpenAI-compatible endpoint + the model Outlaw OS
@@ -56,3 +59,37 @@ def make_base_ai_client(config: dict | None = None) -> LMStudioClient:
         request_timeout_seconds=60.0,
     )
     return LMStudioClient(cfg)
+
+
+# ---------------------------------------------------------------------------
+# Phase 15 — persistent V4rm1nt chats. Named, multi-turn conversations stored
+# beside CodeMaker's database (its data dir survives app updates), mirroring the
+# desktop Cr1tt3r chats. Best-effort: any failure just degrades to an in-memory
+# session, never crashes the dialog.
+# ---------------------------------------------------------------------------
+
+def chats_path(config: dict | None = None) -> Path:
+    """Where V4rm1nt conversations live. A FIXED per-user location (not derived
+    from config) so the same chats show up whether V4rm1nt is opened pre-session
+    from the picker (no config yet) or in-session from the menu. Under $HOME, so
+    it survives app updates. ``config`` is accepted for call-site symmetry."""
+    return Path.home() / ".outlaw-codemaker" / "v4rmint-chats.json"
+
+
+def load_chats(config: dict | None) -> dict:
+    try:
+        store = json.loads(chats_path(config).read_text(encoding="utf-8"))
+        if isinstance(store, dict) and isinstance(store.get("conversations"), list):
+            return store
+    except Exception:  # noqa: BLE001 — absent/corrupt → start fresh
+        pass
+    return {"activeId": None, "conversations": []}
+
+
+def save_chats(config: dict | None, store: dict) -> None:
+    try:
+        p = chats_path(config)
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(json.dumps(store, indent=2), encoding="utf-8")
+    except Exception:  # noqa: BLE001 — persistence is best-effort
+        pass
