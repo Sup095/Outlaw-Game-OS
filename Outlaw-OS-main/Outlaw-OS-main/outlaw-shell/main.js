@@ -822,10 +822,20 @@ async function resolveInstallable(name) {
         a.id === q || a.pkg === q || (a.label || '').toLowerCase() === q
         || a.id.includes(q) || (a.label || '').toLowerCase().includes(q));
     if (hit) return { pkg: hit.pkg, extra: hit.extra || [], label: hit.label, source: 'the Apps catalog' };
-    // Official repos — EXACT package name only (validated, no shell metacharacters).
+    // Official repos — EXACT package name first (validated, no shell metacharacters).
     if (IS_LINUX && /^[a-z0-9][a-z0-9._+-]*$/.test(q)) {
         const r = await runShell(`pacman -Si ${q}`, { timeout: 8000 });
         if (r.code === 0) return { pkg: q, extra: [], label: q, source: 'the official repositories' };
+    }
+    // Phase 15c — fuzzy fallback: search the repos for the best match so a DESCRIBED
+    // need ("something to edit audio") or a slightly-off name still resolves to a
+    // real, installable package. The user still confirms before anything installs.
+    if (IS_LINUX && /^[a-z0-9][a-z0-9 ._+-]{0,39}$/i.test(q)) {
+        const terms = q.split(/\s+/).filter(Boolean).map((w) => `'${w}'`).join(' ');
+        const r = await runShell(`pacman -Ss ${terms}`, { timeout: 12000 });
+        const line = (r.stdout || '').split('\n').find((l) => /^\w[\w-]*\/\S+\s+/.test(l));
+        const m = line && line.match(/^\w[\w-]*\/(\S+)\s+/);
+        if (m) return { pkg: m[1], extra: [], label: m[1], source: 'the official repositories', fuzzy: true };
     }
     return null;
 }
@@ -871,10 +881,13 @@ async function executeIntent(intent) {
             if (!resolved) {
                 return { text: `I can only install from known sources (the Apps catalog or the official repositories), and I couldn't find "${intent.arg}" there. You can browse the Apps page instead.`, did: 'none' };
             }
+            const proposal = resolved.fuzzy
+                ? `Closest match I found is "${resolved.label}" in ${resolved.source}. Confirm to install it (or browse the Apps page for more).`
+                : (intent.text || `I can install ${resolved.label} from ${resolved.source}. Confirm to proceed.`);
             return {
                 needsConfirm: true,
                 action: { tool: 'install_app', pkg: resolved.pkg, extra: resolved.extra || [], label: resolved.label, source: resolved.source },
-                text: intent.text || `I can install ${resolved.label} from ${resolved.source}. Confirm to proceed.`,
+                text: proposal,
             };
         }
         case 'run_command':

@@ -39,7 +39,7 @@ function systemPrompt(appIds, machine) {
         '- list_files: show a directory. arg = absolute path (default home if empty).',
         '- open_file: open a file/folder with its default app. arg = path.',
         '- system_info: report CPU/RAM/host info (arg empty).',
-        '- install_app: install an app the user asks for. arg = the app name (e.g. "krita", "blender"). Only known sources (the Apps catalog / official repos) are allowed, and the user must confirm before anything installs.',
+        '- install_app: install software the user names OR describes. arg = the most likely PACKAGE name (e.g. "something to edit audio" -> "audacity"; "a photo editor" -> "gimp"). Any official package works, not just famous ones — give your single best package-name guess. Known sources only (Apps catalog / official repos); the user confirms before anything installs.',
         '- run_command: ONLY when the user explicitly asks to run a shell command. arg = the command. This always asks the user to confirm first.',
         '',
         'Rules: pick the single best tool. Prefer "answer" for anything conversational.',
