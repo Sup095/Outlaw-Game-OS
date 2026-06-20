@@ -1103,6 +1103,60 @@ function rebuildAiChatSelect() {
     if (wrap && wrap.classList.contains('cselect')) wrap.remove();
     delete sel.dataset.enhanced;
     enhanceSelects(sel.parentElement);
+    rebuildRefSelect();
+}
+
+// Phase 15b (slice 3) — the "↗ Reference…" dropdown lists the OTHER chats; picking
+// one makes Cr1tt3r draw on it in this conversation. Referenced chats show a ✓.
+function rebuildRefSelect() {
+    const sel = $('#ai-ref-select');
+    if (!sel) return;
+    const c = aiActiveConvo();
+    sel.innerHTML = '';
+    const ph = document.createElement('option');
+    ph.value = ''; ph.textContent = '↗ Reference…';
+    sel.appendChild(ph);
+    for (const conv of aiChats.conversations) {
+        if (!c || conv.id === c.id) continue;
+        const opt = document.createElement('option');
+        opt.value = conv.id;
+        const on = !!(c.refs && c.refs.some((r) => r.id === conv.id));
+        opt.textContent = (on ? '✓ ' : '') + (conv.title || 'Untitled');
+        sel.appendChild(opt);
+    }
+    sel.value = '';
+    const wrap = sel.nextElementSibling;
+    if (wrap && wrap.classList.contains('cselect')) wrap.remove();
+    delete sel.dataset.enhanced;
+    enhanceSelects(sel.parentElement);
+}
+
+// A compact recap of a chat to feed as cross-chat context: its running summary if
+// it has one, else its most recent turns.
+function recapOf(convo) {
+    if (!convo) return '';
+    if (convo.summary) return convo.summary;
+    const msgs = (convo.messages || []).slice(-8)
+        .map((m) => (m.role === 'user' ? 'User: ' : 'Cr1tt3r: ') + String(m.content || ''));
+    return msgs.join('\n').slice(0, 1500) || '(empty chat)';
+}
+
+// Toggle a reference to another chat on/off for the active conversation.
+function referenceChat(id) {
+    const c = aiActiveConvo();
+    const src = aiChats.conversations.find((x) => x.id === id);
+    if (!c || !src || src.id === c.id) return;
+    if (!Array.isArray(c.refs)) c.refs = [];
+    const i = c.refs.findIndex((r) => r.id === id);
+    if (i >= 0) {
+        c.refs.splice(i, 1);
+        addMsg('sys', '↗ Stopped referencing "' + (src.title || 'Untitled') + '".');
+    } else {
+        c.refs.push({ id, title: src.title || 'Untitled' });
+        addMsg('sys', '↗ Now referencing "' + (src.title || 'Untitled') + '" — Cr1tt3r can draw on that chat.');
+    }
+    persistAiChats();
+    rebuildRefSelect();
 }
 
 function loadConvoIntoLog() {
@@ -1199,7 +1253,20 @@ function aiHistoryWindow() {
     const start = c.summaryUpTo || 0;
     const prior = c.messages.slice(start, -1);
     const capped = prior.slice(-(AI_CHAT_WINDOW + AI_SUMMARY_BATCH + 2));
-    return { history: capped, summary: c.summary || '' };
+    let summary = c.summary || '';
+    // Phase 15b (slice 3) — fold any referenced chats' recaps in as context, live
+    // (so they stay current). Skip refs whose source chat was deleted.
+    if (Array.isArray(c.refs) && c.refs.length) {
+        const parts = [];
+        for (const ref of c.refs) {
+            const src = aiChats.conversations.find((x) => x.id === ref.id);
+            if (src) parts.push('From your chat "' + (src.title || ref.title || 'Untitled') + '":\n' + recapOf(src));
+        }
+        if (parts.length) {
+            summary = (parts.join('\n\n') + (summary ? '\n\n— This chat —\n' + summary : '')).slice(0, 3000);
+        }
+    }
+    return { history: capped, summary };
 }
 
 // When enough turns have aged past the window, fold them into the running summary
@@ -1983,6 +2050,8 @@ function wire() {
     if (chatNew) chatNew.addEventListener('click', newAiChat);
     const chatDel = $('#ai-chat-delete');
     if (chatDel) chatDel.addEventListener('click', deleteAiChat);
+    const refSel = $('#ai-ref-select');
+    if (refSel) refSel.addEventListener('change', (e) => { const v = e.target.value; if (v) referenceChat(v); });
 
     // Apps panel search — type-as-you-go, no debounce needed (catalog is tiny).
     const appsSearchEl = $('#apps-search');
