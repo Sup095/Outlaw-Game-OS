@@ -1049,20 +1049,169 @@ function addMsg(kind, text) {
     log.scrollTop = log.scrollHeight;
 }
 
+// ---------------------------------------------------------------------------
+// Phase 15b — persistent AI chats (Cr1tt3r). Named, multi-turn conversations
+// kept in userData so they survive updates. Windowed memory: the most recent
+// turns are re-sent each ask so Cr1tt3r follows context; older turns stay saved.
+// (An AI summary of the older turns lands in the next slice.)
+// ---------------------------------------------------------------------------
+let aiChats = { activeId: null, conversations: [] };
+const AI_CHAT_WINDOW = 10;     // recent messages re-sent for memory
+let _aiChatsSaveTimer = null;
+let _deleteArmed = false;      // two-click delete guard (Electron has no confirm())
+
+function aiActiveConvo() {
+    return aiChats.conversations.find((c) => c.id === aiChats.activeId) || null;
+}
+
+function persistAiChats() {
+    clearTimeout(_aiChatsSaveTimer);
+    _aiChatsSaveTimer = setTimeout(() => {
+        if (api.ai && api.ai.chats) api.ai.chats.save(aiChats).catch(() => {});
+    }, 250);
+}
+
+function newConvoObject(title) {
+    return {
+        id: 'c' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+        title: title || 'New chat',
+        autoTitled: true,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        messages: [],
+        summary: '',
+        summaryUpTo: 0,
+    };
+}
+
+function rebuildAiChatSelect() {
+    const sel = $('#ai-chat-select');
+    if (!sel) return;
+    sel.innerHTML = '';
+    for (const c of aiChats.conversations) {
+        const opt = document.createElement('option');
+        opt.value = c.id;
+        opt.textContent = c.title || 'Untitled';
+        sel.appendChild(opt);
+    }
+    if (aiChats.activeId) sel.value = aiChats.activeId;
+    // The custom no-WM dropdown snapshots options at enhance time, so drop the
+    // old wrapper and re-enhance for the current conversation list.
+    const wrap = sel.nextElementSibling;
+    if (wrap && wrap.classList.contains('cselect')) wrap.remove();
+    delete sel.dataset.enhanced;
+    enhanceSelects(sel.parentElement);
+}
+
+function loadConvoIntoLog() {
+    const log = $('#ai-log');
+    if (log) log.innerHTML = '';
+    const c = aiActiveConvo();
+    if (!c) return;
+    if (!c.messages.length) {
+        addMsg('ai', 'Cr1tt3r here. Ask me anything — or try "open steam", "search godot docs", "install krita".');
+        return;
+    }
+    for (const m of c.messages) addMsg(m.role === 'user' ? 'user' : 'ai', m.content);
+}
+
+async function initAiChats() {
+    try {
+        if (api.ai && api.ai.chats) aiChats = await api.ai.chats.load();
+    } catch { aiChats = { activeId: null, conversations: [] }; }
+    if (!aiChats || !Array.isArray(aiChats.conversations)) aiChats = { activeId: null, conversations: [] };
+    if (!aiChats.conversations.length) {
+        const c = newConvoObject('Chat 1');
+        aiChats.conversations.push(c);
+        aiChats.activeId = c.id;
+        persistAiChats();
+    }
+    if (!aiActiveConvo()) aiChats.activeId = aiChats.conversations[0].id;
+    rebuildAiChatSelect();
+    loadConvoIntoLog();
+}
+
+function switchAiChat(id) {
+    if (!id || id === aiChats.activeId) return;
+    aiChats.activeId = id;
+    _deleteArmed = false;
+    persistAiChats();
+    rebuildAiChatSelect();
+    loadConvoIntoLog();
+}
+
+function newAiChat() {
+    const c = newConvoObject('Chat ' + (aiChats.conversations.length + 1));
+    aiChats.conversations.push(c);
+    aiChats.activeId = c.id;
+    _deleteArmed = false;
+    persistAiChats();
+    rebuildAiChatSelect();
+    loadConvoIntoLog();
+    const inp = $('#ai-in'); if (inp) inp.focus();
+}
+
+function deleteAiChat() {
+    const c = aiActiveConvo();
+    if (!c) return;
+    const btn = $('#ai-chat-delete');
+    // Two-click confirm (Electron has no window.confirm): first click arms it.
+    if (!_deleteArmed) {
+        _deleteArmed = true;
+        if (btn) btn.textContent = 'Delete?';
+        setTimeout(() => { _deleteArmed = false; if (btn) btn.textContent = 'Delete'; }, 3000);
+        return;
+    }
+    _deleteArmed = false;
+    if (btn) btn.textContent = 'Delete';
+    aiChats.conversations = aiChats.conversations.filter((x) => x.id !== c.id);
+    if (!aiChats.conversations.length) aiChats.conversations.push(newConvoObject('Chat 1'));
+    aiChats.activeId = aiChats.conversations[0].id;
+    persistAiChats();
+    rebuildAiChatSelect();
+    loadConvoIntoLog();
+}
+
+// Record a turn in the active conversation + persist. role: 'user' | 'assistant'.
+function recordAiTurn(role, content) {
+    const c = aiActiveConvo();
+    if (!c || !content) return;
+    c.messages.push({ role, content, ts: Date.now() });
+    c.updatedAt = Date.now();
+    // Auto-title from the first user message (so chats get meaningful names).
+    if (role === 'user' && c.autoTitled && c.messages.filter((m) => m.role === 'user').length === 1) {
+        c.title = content.slice(0, 40) + (content.length > 40 ? '…' : '');
+        rebuildAiChatSelect();
+    }
+    persistAiChats();
+}
+
+// Recent window of PRIOR turns (excludes the just-added user prompt, which is
+// sent separately as the new prompt) + the conversation summary, if any.
+function aiHistoryWindow() {
+    const c = aiActiveConvo();
+    if (!c) return { history: [], summary: '' };
+    const prior = c.messages.slice(0, -1);
+    return { history: prior.slice(-AI_CHAT_WINDOW), summary: c.summary || '' };
+}
+
 async function sendAI() {
     const input = $('#ai-in');
     const text = input.value.trim();
     if (!text) return;
     input.value = '';
     addMsg('user', text);
+    recordAiTurn('user', text);
+    const { history, summary } = aiHistoryWindow();
     const thinking = document.createElement('div');
     thinking.className = 'msg ai'; thinking.textContent = '…';
     $('#ai-log').appendChild(thinking);
-    const res = await api.ai.ask(text);
+    const res = await api.ai.ask(text, { history, summary });
     thinking.remove();
     if (res.error) { addMsg('sys', res.error); return; }
     if (res.needsConfirm) {
         addMsg('ai', res.text);
+        recordAiTurn('assistant', res.text);
         const act = res.action || {};
         // Phase 13: AI-proposed app install — confirm, then run it on the loading screen.
         if (act.tool === 'install_app') {
@@ -1076,7 +1225,8 @@ async function sendAI() {
             try {
                 const r = await api.ai.confirmAction(act);
                 loadingScreen.done(!!(r && r.ok));
-                addMsg('ai', (r && r.text) || '(done)');
+                const t = (r && r.text) || '(done)';
+                addMsg('ai', t); recordAiTurn('assistant', t);
             } catch (e) { loadingScreen.done(false); addMsg('sys', 'Error: ' + e.message); }
             return;
         }
@@ -1088,10 +1238,13 @@ async function sendAI() {
         });
         if (!ok) { addMsg('sys', 'Cancelled.'); return; }
         const r = await api.ai.confirmAction(res.action);
-        addMsg('ai', r.text || '(done)');
+        const t = r.text || '(done)';
+        addMsg('ai', t); recordAiTurn('assistant', t);
         return;
     }
-    addMsg('ai', res.text || '(no answer)');
+    const t = res.text || '(no answer)';
+    addMsg('ai', t);
+    recordAiTurn('assistant', t);
 }
 
 async function refreshAiStatus() {
@@ -1791,6 +1944,14 @@ function wire() {
     // AI input
     $('#ai-in').addEventListener('keydown', (e) => { if (e.key === 'Enter') sendAI(); });
 
+    // Phase 15b — persistent-chat controls (switch / new / delete).
+    const chatSel = $('#ai-chat-select');
+    if (chatSel) chatSel.addEventListener('change', (e) => switchAiChat(e.target.value));
+    const chatNew = $('#ai-chat-new');
+    if (chatNew) chatNew.addEventListener('click', newAiChat);
+    const chatDel = $('#ai-chat-delete');
+    if (chatDel) chatDel.addEventListener('click', deleteAiChat);
+
     // Apps panel search — type-as-you-go, no debounce needed (catalog is tiny).
     const appsSearchEl = $('#apps-search');
     if (appsSearchEl) {
@@ -2228,6 +2389,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     wire();
     await loadSettings();
     enhanceSelects();   // replace native <select> popups (broken with no WM)
+    initAiChats().catch(() => {});   // Phase 15b — load persistent Cr1tt3r chats
     await renderTiles();
     await loadSysInfo();
     // Probe whether a previous shell version exists on disk so the Rollback

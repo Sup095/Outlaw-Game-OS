@@ -165,6 +165,34 @@ function saveSettings(s) {
 }
 
 // ---------------------------------------------------------------------------
+// Phase 15b — persistent AI chats (Cr1tt3r). Named, multi-turn conversations
+// stored in userData so they SURVIVE app updates (the app code in /usr/share is
+// replaced on update; userData is not). The renderer owns the conversation
+// logic; these helpers just load/save the whole (small) store as one JSON blob.
+// ---------------------------------------------------------------------------
+const AI_CHATS_PATH = path.join(app.getPath('userData'), 'ai-chats.json');
+
+function loadAiChats() {
+    try {
+        const store = JSON.parse(fs.readFileSync(AI_CHATS_PATH, 'utf8'));
+        if (store && Array.isArray(store.conversations)) return store;
+    } catch { /* absent or corrupt — start fresh */ }
+    return { activeId: null, conversations: [] };
+}
+
+function saveAiChats(store) {
+    try {
+        fs.mkdirSync(path.dirname(AI_CHATS_PATH), { recursive: true });
+        const safe = (store && Array.isArray(store.conversations)) ? store : { activeId: null, conversations: [] };
+        fs.writeFileSync(AI_CHATS_PATH, JSON.stringify(safe, null, 2));
+        return true;
+    } catch (e) {
+        console.error('Could not persist AI chats:', e.message);
+        return false;
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Auth — 4-digit PIN (Outlaw-level convenience credential) + account password.
 // The PIN is stored ONLY as a salted scrypt hash in a 0600 file (never plain
 // text). The account password is verified against PAM via `sudo -S -v` (so the
@@ -1812,8 +1840,13 @@ function registerIpc() {
         }
     });
 
-    ipcMain.handle('ai:ask', async (_e, prompt) => {
+    ipcMain.handle('ai:ask', async (_e, payload) => {
         if (!settings.aiEnabled) return { error: 'AI is disabled. Enable it in Settings.' };
+        // payload is a plain string (legacy) or { prompt, history, summary } so a
+        // persistent chat can give Cr1tt3r conversation memory (Phase 15b).
+        const prompt = typeof payload === 'string' ? payload : ((payload && payload.prompt) || '');
+        const history = (payload && Array.isArray(payload.history)) ? payload.history : [];
+        const summary = (payload && typeof payload.summary === 'string') ? payload.summary : '';
         const be = aiBackend();
         const s = await aiAgent.status(be);
         if (!s.available) {
@@ -1826,12 +1859,16 @@ function registerIpc() {
         try {
             const appIds = Object.keys(APP_REGISTRY);
             const machine = machineSummary(await gatherSpecs());
-            const intent = await aiAgent.ask(prompt, { ...be, appIds, machine });
+            const intent = await aiAgent.ask(prompt, { ...be, appIds, machine, history, summary });
             return await executeIntent(intent);
         } catch (e) {
             return { error: e.message };
         }
     });
+
+    // Phase 15b — persistent AI chats: load/save the whole store (small JSON).
+    ipcMain.handle('ai:chats:load', () => loadAiChats());
+    ipcMain.handle('ai:chats:save', (_e, store) => ({ ok: saveAiChats(store) }));
 
     ipcMain.handle('ai:confirm-action', async (_e, action) => {
         if (action && action.tool === 'run_command') {

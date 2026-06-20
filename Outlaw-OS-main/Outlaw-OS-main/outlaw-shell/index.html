@@ -510,6 +510,11 @@
             </div>
 
             <div class="card">
+                <div class="row" id="ai-chats-bar" style="gap:6px;align-items:center;margin-bottom:8px;flex-wrap:wrap;">
+                    <select id="ai-chat-select" title="Switch conversation" style="width:auto;min-width:160px;flex:1;"></select>
+                    <button id="ai-chat-new" type="button" title="Start a new conversation">+ New</button>
+                    <button id="ai-chat-delete" type="button" title="Delete this conversation">Delete</button>
+                </div>
                 <div id="ai-log"></div>
                 <div class="row" style="margin-top:10px;">
                     <input id="ai-in" placeholder="Ask anything, or 'open steam', 'search ...', 'list files'…" autocomplete="off">

@@ -114,7 +114,22 @@ function parseIntent(raw) {
 
 // Ask the model. Returns a parsed intent { tool, arg, text }.
 // Uses the OpenAI-compatible /v1/chat/completions endpoint.
-async function ask(prompt, { model, appIds, machine, baseUrl } = {}) {
+async function ask(prompt, { model, appIds, machine, baseUrl, history, summary } = {}) {
+    const messages = [{ role: 'system', content: systemPrompt(appIds || [], machine) }];
+    // Phase 15b — persistent-chat memory: an optional summary of older turns plus
+    // the recent window, so Cr1tt3r can follow context across a conversation
+    // (e.g. "open it" after naming an app). Caller supplies both; both optional.
+    if (summary) {
+        messages.push({ role: 'system', content: 'Summary of earlier conversation: ' + String(summary).slice(0, 1500) });
+    }
+    if (Array.isArray(history)) {
+        for (const m of history) {
+            if (m && (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string' && m.content) {
+                messages.push({ role: m.role, content: m.content.slice(0, 2000) });
+            }
+        }
+    }
+    messages.push({ role: 'user', content: String(prompt || '').slice(0, 4000) });
     const body = {
         model: model || DEFAULT_MODEL,
         stream: false,
@@ -122,10 +137,7 @@ async function ask(prompt, { model, appIds, machine, baseUrl } = {}) {
         // Keep responses short — we only need a single JSON line. This also caps
         // VRAM cost on small machines.
         max_tokens: 256,
-        messages: [
-            { role: 'system', content: systemPrompt(appIds || [], machine) },
-            { role: 'user', content: String(prompt || '').slice(0, 4000) },
-        ],
+        messages,
     };
     const res = await timeoutFetch(`${baseUrl || LM_STUDIO_BASE}/chat/completions`, {
         method: 'POST',

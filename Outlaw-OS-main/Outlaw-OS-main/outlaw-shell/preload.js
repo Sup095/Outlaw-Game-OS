@@ -84,9 +84,15 @@ contextBridge.exposeInMainWorld('outlaw', {
         status: () => ipcRenderer.invoke('ai:status'),
         enable: () => ipcRenderer.invoke('ai:enable'),
         disable: () => ipcRenderer.invoke('ai:disable'),
-        ask: (prompt) => ipcRenderer.invoke('ai:ask', prompt),
+        // opts (Phase 15b) optionally carries { history, summary } for chat memory.
+        ask: (prompt, opts) => ipcRenderer.invoke('ai:ask', { prompt, ...(opts || {}) }),
         // Run a tool action the AI proposed, after the user approved it.
         confirmAction: (action) => ipcRenderer.invoke('ai:confirm-action', action),
+        // Phase 15b — persistent chats: load/save the whole conversation store.
+        chats: {
+            load: () => ipcRenderer.invoke('ai:chats:load'),
+            save: (store) => ipcRenderer.invoke('ai:chats:save', store),
+        },
         // Phase 4: spec-aware local-model recommendation for the setup guide.
         recommend: () => ipcRenderer.invoke('ai:recommend'),
         // Phase 4: hardware-aware plain-prose setup chat (walks the user through
