@@ -6,17 +6,52 @@
           content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none';">
     <title>Outlaw OS</title>
     <style>
+        /* Phase 14h — default palette = the desktop shell's GREEN phosphor theme.
+           The chooser recolors to gold / broken when the desktop is set to those
+           (body.theme-gold / body.theme-broken, applied by renderer.js from the
+           ~/.outlaw-theme the shell mirrors). The boot intro below stays green —
+           a fixed identity moment — regardless of theme. */
         :root {
+            --bg:       #050705;
+            --bg-alt:   #0a0e0a;
+            --panel:    #0a0e0a;
+            --panel-hi: #0d130d;
+            --border:   #143d0d;
+            --text:     #b9ffb0;
+            --muted:    #5f9e57;
+            --accent:   #33ff00;
+            --accent2:  #7dff66;
+            --accent-dim: #1a8000;
+            --accent-rgb: 51, 255, 0;
+        }
+        /* Gold-on-gunmetal — mirrors the shell's body.theme-gold palette. */
+        body.theme-gold {
             --bg:       #0b0e14;
             --bg-alt:   #11151f;
-            --panel:    #161b27;
-            --panel-hi: #1d2433;
+            --panel:    #12161f;
+            --panel-hi: #1a2130;
             --border:   #2a3242;
-            --text:     #e8eaed;
+            --text:     #e6dcc0;
             --muted:    #838c9c;
             --accent:   #e0b341;
             --accent2:  #f4d27a;
             --accent-dim: #7d6526;
+            --accent-rgb: 224, 179, 65;
+        }
+        /* "Broken" — sickly washed-out phosphor with failing-red hairlines.
+           Palette only here (no flicker FX) to keep the boot screen rock-solid. */
+        body.theme-broken {
+            --bg:       #060806;
+            --bg-alt:   #0b0f0b;
+            --panel:    #0b0f0b;
+            --panel-hi: #0e140e;
+            --border:   #6b1b1b;
+            --text:     #9ad48f;
+            --muted:    #5f7d5a;
+            --accent:   #4be04b;
+            --accent2:  #6be06b;
+            --accent-dim: #2a7a2a;
+            --accent-rgb: 75, 224, 75;
         }
         * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; }
         html, body {
@@ -34,8 +69,8 @@
             border: 1px solid var(--border);
             border-radius: 10px;
             background:
-                radial-gradient(circle at 50% -10%, rgba(224, 179, 65, 0.10), transparent 60%),
-                linear-gradient(180deg, #11151f 0%, #0b0e14 100%);
+                radial-gradient(circle at 50% -10%, rgba(var(--accent-rgb), 0.10), transparent 60%),
+                linear-gradient(180deg, var(--bg-alt) 0%, var(--bg) 100%);
         }
         header {
             display: flex;

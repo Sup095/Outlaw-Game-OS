@@ -56,6 +56,20 @@ function writePref(value) {
     }
 }
 
+// Phase 14h — the desktop shell mirrors its chosen visual theme to
+// ~/.outlaw-theme ('green' | 'gold' | 'broken'). Read it so the session chooser
+// matches the user's system look instead of a fixed gold-on-gunmetal palette.
+// Defaults to 'green' (the shell default) when absent/unreadable.
+const THEME_PATH = path.join(os.homedir(), '.outlaw-theme');
+const THEME_BG = { green: '#050705', gold: '#0b0e14', broken: '#060806' };
+function readTheme() {
+    try {
+        const raw = fs.readFileSync(THEME_PATH, 'utf8').trim().toLowerCase();
+        if (['green', 'gold', 'broken'].includes(raw)) return raw;
+    } catch { /* absent — default below */ }
+    return 'green';
+}
+
 function persistChoice(choice) {
     if (chosen) return;  // first call wins
     chosen = choice;
@@ -67,6 +81,7 @@ function persistChoice(choice) {
 }
 
 function createWindow() {
+    const theme = readTheme();
     const display = screen.getPrimaryDisplay();
     const { width, height } = display.workAreaSize;
     mainWindow = new BrowserWindow({
@@ -77,7 +92,7 @@ function createWindow() {
         movable: false,
         fullscreen: false,
         kiosk: false,             // a small centered card, not a fullscreen takeover
-        backgroundColor: '#0b0e14',
+        backgroundColor: THEME_BG[theme] || THEME_BG.green,
         alwaysOnTop: true,
         show: false,
         webPreferences: {
@@ -89,7 +104,9 @@ function createWindow() {
         },
     });
     mainWindow.setMenu(null);
-    mainWindow.loadFile('index.html');
+    // Pass the theme in via the file query so the renderer can apply it before
+    // the chooser is revealed (the green boot intro covers it until then → no flash).
+    mainWindow.loadFile('index.html', { query: { theme } });
     mainWindow.once('ready-to-show', () => {
         mainWindow.center();
         mainWindow.show();

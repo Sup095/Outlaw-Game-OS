@@ -8,6 +8,18 @@
 'use strict';
 
 const api = window.greeter;
+
+// Phase 14h — match the chooser's palette to the desktop's chosen theme (passed
+// in via the loadFile query, mirrored from ~/.outlaw-theme). 'green' is the
+// default and needs no class. The boot intro stays green (a fixed identity
+// moment) and hides the chooser until now, so this never flashes.
+(function applyTheme() {
+    try {
+        const t = new URLSearchParams(location.search).get('theme');
+        if (t === 'gold' || t === 'broken') document.body.classList.add('theme-' + t);
+    } catch { /* default green */ }
+})();
+
 let introActive = !!document.getElementById('boot-intro');
 
 const _esc = (s) => String(s).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));

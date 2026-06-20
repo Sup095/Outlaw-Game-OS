@@ -141,6 +141,18 @@ function loadSettings() {
     }
 }
 
+// Phase 14h — mirror the chosen theme to a plain $HOME dotfile so the boot-time
+// greeter (a SEPARATE Electron app that can't reach this app's userData) can
+// match its palette to the desktop's. Best-effort and non-fatal: if it never
+// lands, the greeter just falls back to the green default. Mirrors the existing
+// ~/.outlaw-session* convention the greeter already reads.
+function mirrorThemeToHome(theme) {
+    try {
+        const t = (typeof theme === 'string' && theme) ? theme : 'green';
+        fs.writeFileSync(path.join(app.getPath('home'), '.outlaw-theme'), t + '\n', { mode: 0o600 });
+    } catch { /* non-fatal — greeter falls back to green */ }
+}
+
 function saveSettings(s) {
     try {
         fs.mkdirSync(path.dirname(SETTINGS_PATH), { recursive: true });
@@ -148,6 +160,7 @@ function saveSettings(s) {
     } catch (e) {
         console.error('Could not persist settings:', e.message);
     }
+    mirrorThemeToHome(s && s.theme);
     return s;
 }
 
@@ -2287,6 +2300,10 @@ function startAutoCheck() {
 
 app.whenReady().then(() => {
     registerIpc();
+    // Phase 14h — make sure the greeter can already see the current theme on the
+    // very next boot, even for users who set it before this feature existed (they
+    // wouldn't have re-saved settings). Cheap one-shot write.
+    mirrorThemeToHome(settings && settings.theme);
     createWindow();
     startAutoCheck();
     // SC7 — start the VRAM tier background poll now that a renderer exists.
