@@ -605,11 +605,18 @@ function fmtGb(kb) { return (kb / 1024 / 1024).toFixed(1) + 'G'; }
 // can realistically run in LM Studio, plus suggested settings. We always also
 // return a "starter" model that runs on practically any PC — once it's loaded
 // it can guide the user through the rest of the setup itself.
-function recommendModel(ramGb, vramGb) {
+// opts (Phase 14d): { purpose:'desktop'|'dev', tier:'powerful'|'minimal' (desktop),
+// spill:bool (dev — spill the model into system RAM beyond VRAM) }. Defaults
+// (no opts) = desktop/powerful, identical to the original behaviour so existing
+// callers (gatherSpecs, machineSummary) are unaffected.
+function recommendModel(ramGb, vramGb, opts = {}) {
+    const purpose = opts.purpose === 'dev' ? 'dev' : 'desktop';
+    const tier = opts.tier === 'minimal' ? 'minimal' : 'powerful';
+    const spill = !!opts.spill;
     const gpu = vramGb >= 4;                       // a usable discrete GPU?
     const starter = { model: 'Qwen2.5 0.5B Instruct (Q4_K_M)', size: '~0.4 GB',
                       note: 'Runs on almost anything, even old laptops.' };
-    // Model catalogue (Q4_K_M quant), smallest → largest.
+    // General instruct catalogue (desktop), smallest → largest.
     const M = {
         s05: { model: 'Qwen2.5 0.5B Instruct (Q4_K_M)', size: '~0.4 GB', ctx: 2048, tier: 'tiny' },
         s3:  { model: 'Llama 3.2 3B Instruct (Q4_K_M)',  size: '~2.2 GB', ctx: 4096, tier: 'small' },
@@ -617,24 +624,50 @@ function recommendModel(ramGb, vramGb) {
         s14: { model: 'Qwen2.5 14B Instruct (Q4_K_M)',   size: '~9 GB',   ctx: 8192, tier: 'large' },
         s32: { model: 'Qwen2.5 32B Instruct (Q4_K_M)',   size: '~19 GB',  ctx: 8192, tier: 'xl' },
     };
-    let rec, budget;
-    if (gpu) {
-        // GPU inference — size by VRAM; the card keeps even big models fast.
-        budget = vramGb;
-        rec = vramGb < 6 ? M.s3 : vramGb < 11 ? M.s7 : vramGb < 20 ? M.s14 : M.s32;
+    // Coding catalogue (Dev session) — Qwen2.5-Coder, bigger context for code.
+    const C = {
+        c15: { model: 'Qwen2.5-Coder 1.5B (Q4_K_M)', size: '~1.0 GB', ctx: 8192,  tier: 'tiny' },
+        c7:  { model: 'Qwen2.5-Coder 7B (Q4_K_M)',   size: '~4.7 GB', ctx: 16384, tier: 'medium' },
+        c14: { model: 'Qwen2.5-Coder 14B (Q4_K_M)',  size: '~9 GB',   ctx: 16384, tier: 'large' },
+        c32: { model: 'Qwen2.5-Coder 32B (Q4_K_M)',  size: '~19 GB',  ctx: 16384, tier: 'xl' },
+    };
+    let rec, budget, runsOn, note;
+
+    if (purpose === 'dev') {
+        // Best CODING model the machine can run. Optional spill borrows spare RAM
+        // beyond VRAM for a bigger (slower) model.
+        if (gpu) {
+            budget = spill ? vramGb + Math.max(0, ramGb - 4) * 0.5 : vramGb;
+            runsOn = spill
+                ? `GPU + RAM spill (${vramGb} GB VRAM + system RAM — larger model, a little slower)`
+                : `GPU only (${vramGb} GB VRAM — fastest)`;
+        } else {
+            budget = Math.max(1, ramGb - 4);
+            runsOn = 'CPU + RAM (no discrete GPU — slower; a smaller coder model stays usable)';
+        }
+        rec = budget < 6 ? C.c15 : budget < 11 ? C.c7 : budget < 20 ? C.c14 : C.c32;
+        note = 'Coding model for the Dev session (Outlaw CodeMaker).';
+    } else if (tier === 'minimal') {
+        // Desktop, minimal-but-useful — small + capable, for system control and
+        // the built-in AI's job done better. Deliberately light on resources.
+        budget = gpu ? vramGb : Math.max(1, ramGb - 4);
+        rec = budget >= 6 ? M.s7 : M.s3;
+        runsOn = gpu ? `GPU offload (${vramGb} GB VRAM — light)` : 'CPU + RAM (light footprint)';
+        note = "Lean desktop assistant — system control + the built-in AI's job, but better.";
     } else {
-        // CPU + RAM inference — every token is computed on the CPU, which is far
-        // slower than a GPU. Stay conservative: pick what stays *usable*, not just
-        // what technically fits (a 14B "fits" in 16 GB but crawls). Cap at 14B —
-        // 32B on CPU is unusably slow. Leave headroom for the OS.
-        budget = Math.max(1, ramGb - 4);
-        rec = ramGb < 6 ? M.s05 : ramGb < 12 ? M.s3 : ramGb < 24 ? M.s7 : M.s14;
+        // Desktop, most-powerful — the biggest general model the PC can run.
+        if (gpu) { budget = vramGb; rec = vramGb < 6 ? M.s3 : vramGb < 11 ? M.s7 : vramGb < 20 ? M.s14 : M.s32; }
+        else { budget = Math.max(1, ramGb - 4); rec = ramGb < 6 ? M.s05 : ramGb < 12 ? M.s3 : ramGb < 24 ? M.s7 : M.s14; }
+        runsOn = gpu ? `GPU offload (${vramGb} GB VRAM — fast)`
+                     : 'CPU + RAM (works everywhere, but slower — drop to a smaller model if it lags)';
+        note = 'The most capable general model your PC can run.';
     }
+
     return {
-        gpu, budgetGb: Math.round(budget * 10) / 10,
-        runsOn: gpu ? `GPU offload (${vramGb} GB VRAM — fast)`
-                    : 'CPU + RAM (works everywhere, but slower — drop to a smaller model if it lags)',
-        gpuOffload: gpu,
+        gpu, purpose, budgetGb: Math.round(budget * 10) / 10,
+        tier: purpose === 'desktop' ? tier : null,
+        spill: purpose === 'dev' ? spill : null,
+        runsOn, note, gpuOffload: gpu,
         starter, recommended: rec,
         sameAsStarter: rec.model === starter.model,
     };
@@ -1718,8 +1751,13 @@ function registerIpc() {
     });
 
     // Phase 4: read this PC's specs and recommend a local model + settings.
-    ipcMain.handle('ai:recommend', async () => {
-        return { ok: true, ...(await gatherSpecs()) };
+    ipcMain.handle('ai:recommend', async (_e, opts) => {
+        // Phase 14d: opts = { purpose:'desktop'|'dev', tier, spill }. Specs are
+        // cached; recompute the recommendation fresh for the chosen purpose so the
+        // dev-vs-desktop + powerful/minimal + spill choices are honoured.
+        const s = await gatherSpecs();
+        const rec = recommendModel(s.ramGb, s.vramGb, opts || {});
+        return { ok: true, ...s, ...rec };
     });
 
     // Phase 4: hardware-aware setup guide. A plain-prose chat (NOT the JSON-intent

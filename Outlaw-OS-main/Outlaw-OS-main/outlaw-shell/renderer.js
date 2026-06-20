@@ -1657,6 +1657,7 @@ function renderAiRecommendation(r) {
             </div>
             <p style="margin:8px 0 2px;"><b>Recommended:</b> ${escapeHtml(rec.model)}
                 <span class="muted">(${escapeHtml(rec.size)})</span></p>
+            ${r.note ? `<p class="muted" style="margin:0 0 2px;">${escapeHtml(r.note)}</p>` : ''}
             <p class="muted" style="margin:0;">Runs on: ${escapeHtml(r.runsOn)} · context length ${rec.ctx}</p>
             ${starterLine}
             <ol style="margin:10px 0 0;padding-left:20px;line-height:1.6;">
@@ -1908,14 +1909,29 @@ function wire() {
         });
     }
 
-    // Phase 4: AI setup guide — read this PC's specs and recommend a model.
+    // Phase 14d: AI setup guide — purpose-aware (dev vs desktop) recommendation.
+    const aiPurpose = $('#ai-purpose');
+    const aiTierWrap = $('#ai-tier-wrap');
+    const aiSpillWrap = $('#ai-spill-wrap');
+    const syncAiPurposeUi = () => {
+        const dev = aiPurpose && aiPurpose.value === 'dev';
+        if (aiTierWrap) aiTierWrap.style.display = dev ? 'none' : '';
+        if (aiSpillWrap) aiSpillWrap.style.display = dev ? 'inline-flex' : 'none';
+    };
+    if (aiPurpose) { aiPurpose.addEventListener('change', syncAiPurposeUi); syncAiPurposeUi(); }
+
     const checkPcBtn = $('#ai-check-pc');
     if (checkPcBtn) {
         checkPcBtn.addEventListener('click', async () => {
             const out = $('#ai-setup-result');
             if (out) out.innerHTML = '<span class="muted">Reading your hardware…</span>';
+            const opts = {
+                purpose: aiPurpose ? aiPurpose.value : 'desktop',
+                tier: ($('#ai-tier') || {}).value || 'powerful',
+                spill: !!($('#ai-spill') && $('#ai-spill').checked),
+            };
             try {
-                renderAiRecommendation(await api.ai.recommend());
+                renderAiRecommendation(await api.ai.recommend(opts));
             } catch (err) {
                 if (out) out.innerHTML = '<span class="muted">Could not read specs: ' + escapeHtml(err.message) + '</span>';
             }
