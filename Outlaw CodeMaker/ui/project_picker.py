@@ -150,8 +150,10 @@ class ProjectPicker(QDialog):
         setup_hint.setWordWrap(True)
         setup_hint.setStyleSheet(f"color: {COLORS['accent']}; font-size: 9pt;")
         godot_btn = QPushButton("🎮  Open Godot")
+        godot_btn.setToolTip("Launch Godot — or download & install it first if it's missing.")
         godot_btn.clicked.connect(self._open_godot)
         lm_btn = QPushButton("✦  Open LM Studio")
+        lm_btn.setToolTip("Launch LM Studio — or open its download page if it isn't installed yet.")
         lm_btn.clicked.connect(self._open_lmstudio)
         ask_btn = QPushButton("💬  Ask V4rm1nt")
         ask_btn.setToolTip("Chat with the bundled base AI for setup help — no LM Studio needed.")
@@ -320,7 +322,25 @@ class ProjectPicker(QDialog):
         )
 
     def _open_godot(self) -> None:
-        self._launch([["godot"], ["godot4"], ["Godot"]], "Godot")
+        import shutil
+        if shutil.which("godot") or shutil.which("godot4") or shutil.which("Godot"):
+            self._launch([["godot"], ["godot4"], ["Godot"]], "Godot")
+            return
+        # Not installed yet — offer to download + install it (the 'godot' Arch
+        # package) right here, then launch it. One-click, no password (the
+        # 49-outlaw polkit rule covers the installer helper).
+        reply = QMessageBox.question(
+            self, "Install Godot",
+            "Godot isn't installed yet.\n\nDownload and install it now? "
+            "It's a one-click install and takes a few minutes.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.Yes,
+        )
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+        from .pkg_install import install_package
+        if install_package("godot", "Godot", self):
+            self._launch([["godot"], ["godot4"], ["Godot"]], "Godot")
 
     def _open_lmstudio(self) -> None:
         # outlaw-lm-studio launches LM Studio (or opens its download page).
