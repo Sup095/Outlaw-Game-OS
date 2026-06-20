@@ -410,7 +410,13 @@ class MainWindow(QMainWindow):
         input_row.setSpacing(8)
         self.input = QLineEdit()
         self.input.setPlaceholderText("Describe what you want — e.g. 'add a state machine to Player.gd'")
+        self.input.setToolTip("↑ / ↓ recalls your previous prompts")
         self.input.returnPressed.connect(self._on_send)
+        # Phase 14e — shell-style prompt history: Up/Down recalls prior prompts.
+        self._prompt_history: list[str] = []
+        self._history_pos: int | None = None   # None = editing a fresh line
+        self._history_draft: str = ""           # unsent line, stashed on first Up
+        self.input.installEventFilter(self)
 
         self.send_btn = QPushButton("Send  ➤")
         self.send_btn.setObjectName("PrimaryButton")
@@ -760,6 +766,11 @@ class MainWindow(QMainWindow):
         text = self.input.text().strip()
         if not text:
             return
+        # Record for Up/Down recall (skip consecutive duplicates), reset browse.
+        if not self._prompt_history or self._prompt_history[-1] != text:
+            self._prompt_history.append(text)
+        self._history_pos = None
+        self._history_draft = ""
         self.input.clear()
         self.chat_panel.add_user(text)
         self.thought_chamber.reset()
@@ -767,6 +778,42 @@ class MainWindow(QMainWindow):
         # Stash for the live "WORKING ON" headline.
         self._current_task_summary = text
         self.orch.submit_task(text)
+
+    def eventFilter(self, obj, event):
+        # Phase 14e — Up/Down on the prompt box walk the prompt history (Up/Down
+        # are inert in a single-line QLineEdit otherwise, so this is safe).
+        from PyQt6.QtCore import QEvent
+        if obj is self.input and event.type() == QEvent.Type.KeyPress:
+            key = event.key()
+            if key == Qt.Key.Key_Up:
+                self._history_recall(-1)
+                return True
+            if key == Qt.Key.Key_Down:
+                self._history_recall(1)
+                return True
+        return super().eventFilter(obj, event)
+
+    def _history_recall(self, direction: int) -> None:
+        hist = self._prompt_history
+        if not hist:
+            return
+        if self._history_pos is None:
+            if direction > 0:
+                return  # Down with nothing being browsed — leave the draft alone
+            self._history_draft = self.input.text()  # stash the unsent line
+            self._history_pos = len(hist) - 1
+        else:
+            self._history_pos += direction
+            if self._history_pos < 0:
+                self._history_pos = 0
+            elif self._history_pos >= len(hist):
+                # Stepped past the newest entry → restore the stashed draft.
+                self._history_pos = None
+                self.input.setText(self._history_draft)
+                self.input.end(False)
+                return
+        self.input.setText(hist[self._history_pos])
+        self.input.end(False)  # cursor to end of recalled text
 
     @pyqtSlot(bool)
     def _on_busy_changed(self, busy: bool) -> None:
