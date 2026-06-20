@@ -1057,8 +1057,10 @@ function addMsg(kind, text) {
 // ---------------------------------------------------------------------------
 let aiChats = { activeId: null, conversations: [] };
 const AI_CHAT_WINDOW = 10;     // recent messages re-sent for memory
+const AI_SUMMARY_BATCH = 6;    // summarize once this many turns age past the window
 let _aiChatsSaveTimer = null;
 let _deleteArmed = false;      // two-click delete guard (Electron has no confirm())
+let _summarizing = false;      // at most one summary request in flight
 
 function aiActiveConvo() {
     return aiChats.conversations.find((c) => c.id === aiChats.activeId) || null;
@@ -1184,15 +1186,45 @@ function recordAiTurn(role, content) {
         rebuildAiChatSelect();
     }
     persistAiChats();
+    // After a reply lands, fold any aged-out turns into the running summary.
+    if (role === 'assistant') maybeSummarize();
 }
 
-// Recent window of PRIOR turns (excludes the just-added user prompt, which is
-// sent separately as the new prompt) + the conversation summary, if any.
+// Turns since the last summary (excludes the just-added user prompt, sent as the
+// new prompt) + the running summary of everything before that. A safety cap keeps
+// a long un-summarized burst from overflowing a small model.
 function aiHistoryWindow() {
     const c = aiActiveConvo();
     if (!c) return { history: [], summary: '' };
-    const prior = c.messages.slice(0, -1);
-    return { history: prior.slice(-AI_CHAT_WINDOW), summary: c.summary || '' };
+    const start = c.summaryUpTo || 0;
+    const prior = c.messages.slice(start, -1);
+    const capped = prior.slice(-(AI_CHAT_WINDOW + AI_SUMMARY_BATCH + 2));
+    return { history: capped, summary: c.summary || '' };
+}
+
+// When enough turns have aged past the window, fold them into the running summary
+// (Cr1tt3r's long-term memory). Best-effort + non-blocking; one at a time.
+async function maybeSummarize() {
+    if (_summarizing) return;
+    const c = aiActiveConvo();
+    if (!c || !api.ai || !api.ai.summarize) return;
+    const upTo = c.messages.length - AI_CHAT_WINDOW;        // summarize everything older than the window
+    const start = c.summaryUpTo || 0;
+    if (upTo - start < AI_SUMMARY_BATCH) return;            // not enough aged out yet
+    const slice = c.messages.slice(start, upTo);
+    if (!slice.length) return;
+    _summarizing = true;
+    try {
+        const r = await api.ai.summarize({ messages: slice, priorSummary: c.summary || '' });
+        // The user may have switched/deleted chats while we awaited — re-fetch by id.
+        const cur = aiChats.conversations.find((x) => x.id === c.id);
+        if (cur && r && typeof r.summary === 'string' && r.summary) {
+            cur.summary = r.summary;
+            cur.summaryUpTo = upTo;
+            persistAiChats();
+        }
+    } catch { /* best-effort — keep the prior summary */ }
+    finally { _summarizing = false; }
 }
 
 async function sendAI() {

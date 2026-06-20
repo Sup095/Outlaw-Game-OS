@@ -1870,6 +1870,32 @@ function registerIpc() {
     ipcMain.handle('ai:chats:load', () => loadAiChats());
     ipcMain.handle('ai:chats:save', (_e, store) => ({ ok: saveAiChats(store) }));
 
+    // Phase 15b (slice 2) — fold older turns into a running summary so long chats
+    // keep memory without resending everything. Best-effort: on any failure the
+    // caller keeps its prior summary. payload = { messages:[{role,content}], priorSummary }.
+    ipcMain.handle('ai:summarize', async (_e, payload) => {
+        const prior = (payload && typeof payload.priorSummary === 'string') ? payload.priorSummary : '';
+        if (!settings.aiEnabled) return { summary: prior };
+        const msgs = (payload && Array.isArray(payload.messages)) ? payload.messages : [];
+        if (!msgs.length) return { summary: prior };
+        const be = aiBackend();
+        const s = await aiAgent.status(be);
+        if (!s.available) return { summary: prior };
+        try {
+            const convo = msgs
+                .map((m) => (m.role === 'user' ? 'User: ' : 'Cr1tt3r: ') + String(m.content || ''))
+                .join('\n');
+            const prompt = [
+                { role: 'system', content: 'You keep a terse running summary of a chat. Preserve names, decisions, facts, and any unfinished threads. Reply with 4–8 short bullet points only — no preamble.' },
+                { role: 'user', content: (prior ? 'Current summary:\n' + prior + '\n\n' : '') + 'New turns to fold in:\n' + convo + '\n\nReturn the updated summary as bullets.' },
+            ];
+            const summary = await aiAgent.chat(prompt, { ...be, maxTokens: 320 });
+            return { summary: String(summary || prior || '').slice(0, 2000) };
+        } catch {
+            return { summary: prior };
+        }
+    });
+
     ipcMain.handle('ai:confirm-action', async (_e, action) => {
         if (action && action.tool === 'run_command') {
             const r = await runShell(action.arg, { timeout: 120000 });

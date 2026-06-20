@@ -93,6 +93,8 @@ contextBridge.exposeInMainWorld('outlaw', {
             load: () => ipcRenderer.invoke('ai:chats:load'),
             save: (store) => ipcRenderer.invoke('ai:chats:save', store),
         },
+        // Phase 15b (slice 2) — fold older turns into a running summary.
+        summarize: (payload) => ipcRenderer.invoke('ai:summarize', payload),
         // Phase 4: spec-aware local-model recommendation for the setup guide.
         recommend: () => ipcRenderer.invoke('ai:recommend'),
         // Phase 4: hardware-aware plain-prose setup chat (walks the user through
