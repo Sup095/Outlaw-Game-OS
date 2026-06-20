@@ -145,6 +145,18 @@ body.theme-gold .card {
     background-image: linear-gradient(180deg, rgba(224, 179, 65, 0.03), transparent 64px);
 }
 
+/* Phase 15a — the desktop assistant's fixed persona name (Cr1tt3r), shown in the
+   AI Assistant header. Uses the palette accent so it recolors with the theme. */
+.ai-name {
+    color: var(--term);
+    font-weight: 700;
+    letter-spacing: 1px;
+    font-size: 13px;
+    opacity: 0.9;
+    margin-left: 10px;
+    align-self: center;
+}
+
 /* Live-mode ("broken mode", basic form) — the live ISO is a limited preview, so
  * flag it and let locked controls read as deliberately disabled. The full
  * glitch/fake-error aesthetic + a selectable "Broken" theme land in a later
