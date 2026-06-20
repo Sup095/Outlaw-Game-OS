@@ -105,9 +105,11 @@ class SettingsDialog(QDialog):
         # the classic phosphor look that matches the desktop shell. Applies on
         # next launch (no live re-style, to keep things simple and crash-free).
         self.theme_combo = QComboBox()
-        self.theme_combo.addItem("Gold Gunmetal · sci-fi fortress (default)", "gold")
+        self.theme_combo.addItem("Match system theme · follows the desktop (default)", "system")
+        self.theme_combo.addItem("Gold Gunmetal · sci-fi fortress", "gold")
         self.theme_combo.addItem("Green Phosphor · classic terminal", "green")
-        current_theme = "green" if (config.get("ui") or {}).get("theme") == "green" else "gold"
+        self.theme_combo.addItem("Broken · sickly, barely-holding-together", "broken")
+        current_theme = (config.get("ui") or {}).get("theme") or "system"
         for idx in range(self.theme_combo.count()):
             if self.theme_combo.itemData(idx) == current_theme:
                 self.theme_combo.setCurrentIndex(idx)
@@ -155,6 +157,6 @@ class SettingsDialog(QDialog):
         cfg.setdefault("vision", {})["godot_window_title_match"] = self.title_edit.text() or "Godot"
         cfg.setdefault("godot", {})["log_path"] = self.log_row.text()
         cfg.setdefault("vram_saver", {})["mode"] = self.vram_combo.currentData() or "auto"
-        cfg.setdefault("ui", {})["theme"] = self.theme_combo.currentData() or "gold"
+        cfg.setdefault("ui", {})["theme"] = self.theme_combo.currentData() or "system"
         self.result_config = cfg
         self.accept()
