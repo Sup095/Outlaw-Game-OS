@@ -58,6 +58,9 @@ contextBridge.exposeInMainWorld('outlaw', {
         // the main process resolves it against the catalog allowlist.
         install: (id) => ipcRenderer.invoke('apps:install', id),
         uninstall: (id) => ipcRenderer.invoke('apps:uninstall', id),
+        // Phase 15c — search ALL official packages + install any by name.
+        search: (query) => ipcRenderer.invoke('apps:search', query),
+        installPkg: (pkg) => ipcRenderer.invoke('apps:install-pkg', pkg),
         // Refresh local pacman DB. Useful before an install if the DB is stale.
         refreshDb: () => ipcRenderer.invoke('apps:refresh-db'),
         // Phase 2 — apps the user installed themselves (.desktop entries +

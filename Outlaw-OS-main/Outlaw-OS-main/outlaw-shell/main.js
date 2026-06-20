@@ -1640,6 +1640,51 @@ function registerIpc() {
         return APP_CATALOG.map((a) => ({ id: a.id, installed: installed.has(a.pkg) }));
     });
 
+    // Phase 15c — search ALL official packages (not just the curated catalog), so
+    // the user can install anything. Read-only `pacman -Ss`; the query is strictly
+    // validated (must start alphanumeric, safe charset) and each term single-quoted
+    // so it can never be a shell injection or a stray pacman flag.
+    ipcMain.handle('apps:search', async (_e, query) => {
+        if (!IS_LINUX) return { ok: false, error: 'Search runs on Outlaw OS.', results: [] };
+        const q = String(query || '').trim();
+        if (q.length < 2) return { ok: true, results: [] };
+        if (!/^[a-z0-9][a-z0-9 ._+-]{0,39}$/i.test(q)) {
+            return { ok: false, error: 'Search with letters, numbers, spaces or . _ + - only.', results: [] };
+        }
+        const terms = q.split(/\s+/).filter(Boolean).map((w) => `'${w}'`).join(' ');
+        const r = await runShell(`pacman -Ss ${terms}`, { timeout: 12000 });
+        const lines = (r.stdout || '').split('\n');
+        const results = [];
+        for (let i = 0; i < lines.length && results.length < 30; i++) {
+            const m = lines[i].match(/^(\w[\w-]*)\/(\S+)\s+(\S+)(.*)$/);
+            if (m) {
+                results.push({
+                    repo: m[1],
+                    name: m[2],
+                    version: m[3],
+                    installed: /\[installed/.test(m[4] || ''),
+                    description: (lines[i + 1] || '').trim(),
+                });
+            }
+        }
+        return { ok: true, results };
+    });
+
+    // Phase 15c — install any official package by name (the "install anything" path
+    // behind the search results above). Name is strictly validated, then verified
+    // to be a real repo package before we hand it to the privileged installer.
+    ipcMain.handle('apps:install-pkg', async (_e, pkg) => {
+        if (!IS_LINUX) return { ok: false, error: 'Install runs on Outlaw OS.' };
+        const name = String(pkg || '').trim();
+        if (!/^[a-z0-9][a-z0-9@._+-]{0,79}$/i.test(name)) return { ok: false, error: 'Invalid package name.' };
+        const info = await runShell(`pacman -Si '${name}'`, { timeout: 8000 });
+        if (info.code !== 0) return { ok: false, error: `"${name}" isn't an available package.` };
+        const r = await privInstall(name, 1000 * 60 * 20);
+        const tail = (r.stdout || r.stderr || `exit ${r.code}`).slice(-3000);
+        if (r.code !== 0) return { ok: false, error: tail };
+        return { ok: true, text: `${name} installed.` };
+    });
+
     ipcMain.handle('apps:install', async (_e, id) => {
         if (!IS_LINUX) return { ok: false, error: 'Install runs on Outlaw OS.' };
         const app = APP_CATALOG.find((a) => a.id === id);

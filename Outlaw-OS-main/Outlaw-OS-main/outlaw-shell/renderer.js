@@ -326,6 +326,9 @@ let _appsState = {
     filter: 'all',
     search: '',
     discovered: [],   // Phase 2 — apps found on this PC (.desktop + AppImages)
+    repoResults: [],  // Phase 15c — "install anything": pacman -Ss results
+    repoQuery: '',
+    repoSearching: false,
 };
 
 function _escapeHtml(s) {
@@ -370,6 +373,44 @@ function _renderDiscoveredList(root) {
     root.innerHTML = html.join('');
 }
 
+// Phase 15c — the "install anything" section: a button to search ALL official
+// packages for the current query, and the results (with Install) once searched.
+function _repoSectionHtml() {
+    const q = (_appsState.search || '').trim();
+    if (!q) return '';
+    const parts = ['<div style="margin-top:20px;border-top:1px solid var(--line);padding-top:12px;">'];
+    const haveResults = _appsState.repoQuery === q && _appsState.repoResults.length;
+    if (!haveResults) {
+        const label = _appsState.repoSearching
+            ? 'Searching all packages…'
+            : `🔎  Search all packages for "${_escapeHtml(q)}"`;
+        parts.push(`<button data-search-all="1" ${_appsState.repoSearching ? 'disabled' : ''}>${label}</button>`);
+        parts.push('<div class="muted" style="font-size:11px;margin-top:6px;">Installs from the official Arch repositories.</div>');
+    } else {
+        parts.push(`<div class="muted" style="margin:2px 0 8px;">All packages matching "${_escapeHtml(q)}" (${_appsState.repoResults.length}):</div>`);
+        parts.push('<div class="grid cols-2">');
+        for (const p of _appsState.repoResults) {
+            const busy = _appsState.busy.has('pkg:' + p.name);
+            const action = p.installed
+                ? '<span class="muted" style="font-size:11px;">installed</span>'
+                : `<button class="primary" ${busy ? 'disabled' : ''} data-install-pkg="${_escapeHtml(p.name)}">${busy ? 'Installing…' : 'Install'}</button>`;
+            parts.push(`
+                <div class="card">
+                    <div class="row" style="align-items:flex-start;gap:10px;">
+                        <div style="flex:1;min-width:0;">
+                            <div style="font-weight:600;word-break:break-word;">${_escapeHtml(p.name)} <span class="muted" style="font-weight:400;font-size:11px;">${_escapeHtml(p.repo)}</span></div>
+                            <div class="muted" style="font-size:11px;margin-top:3px;">${_escapeHtml(p.description || '')}</div>
+                        </div>
+                        <div class="row" style="gap:6px;flex:0 0 auto;">${action}</div>
+                    </div>
+                </div>`);
+        }
+        parts.push('</div>');
+    }
+    parts.push('</div>');
+    return parts.join('');
+}
+
 function _renderAppsList() {
     const root = $('#apps-list');
     if (!root) return;
@@ -389,7 +430,7 @@ function _renderAppsList() {
     const filtered = catalog.filter(matches);
     if (!filtered.length) {
         root.innerHTML = '<div class="muted" style="padding:24px;text-align:center;">' +
-            'No matches. Try a different filter or clear the search.</div>';
+            'No matches in the curated catalog.</div>' + _repoSectionHtml();
         return;
     }
     const byCat = new Map();
@@ -432,6 +473,7 @@ function _renderAppsList() {
         }
         html.push('</div>');
     }
+    html.push(_repoSectionHtml());
     root.innerHTML = html.join('');
 }
 
@@ -499,6 +541,51 @@ async function handleAppsInstall(id) {
     }
     _appsState.busy.delete(id);
     await refreshAppsInstalledOnly();
+}
+
+// Phase 15c — search all official packages for the current Apps-panel query.
+async function searchAllPackages() {
+    const q = (_appsState.search || '').trim();
+    if (!q || _appsState.repoSearching) return;
+    _appsState.repoSearching = true;
+    _renderAppsList();
+    try {
+        const r = await api.apps.search(q);
+        _appsState.repoResults = (r && r.ok && Array.isArray(r.results)) ? r.results : [];
+        _appsState.repoQuery = q;
+        if (r && !r.ok && r.error) toast(r.error);
+        else if (!_appsState.repoResults.length) toast(`No packages found for "${q}".`);
+    } catch (e) {
+        toast('Search failed: ' + e.message);
+        _appsState.repoResults = [];
+    }
+    _appsState.repoSearching = false;
+    _renderAppsList();
+}
+
+// Phase 15c — install any official package by name (from the search results).
+async function handleAppsInstallPkg(name) {
+    if (!name) return;
+    // Installing arbitrary software is an "important" action — gate on PIN/password.
+    const ok = await requireImportantAuth();
+    if (!ok) { toast('Cancelled — not installed.'); return; }
+    _appsState.busy.add('pkg:' + name);
+    _renderAppsList();
+    toast(`Installing ${name}…`);
+    try {
+        const r = await api.apps.installPkg(name);
+        if (r.ok) {
+            toast(`${name} installed.`);
+            const hit = _appsState.repoResults.find((p) => p.name === name);
+            if (hit) hit.installed = true;
+        } else {
+            toast('Install failed: ' + ((r.error || '').split('\n')[0].slice(0, 140) || 'unknown error'));
+        }
+    } catch (e) {
+        toast('Install failed: ' + e.message);
+    }
+    _appsState.busy.delete('pkg:' + name);
+    _renderAppsList();
 }
 
 async function handleAppsUninstall(id) {
@@ -1946,6 +2033,10 @@ function wire() {
         if (installBtn) { handleAppsInstall(installBtn.dataset.installId); return; }
         const uninstallBtn = e.target.closest('[data-uninstall-id]');
         if (uninstallBtn) { handleAppsUninstall(uninstallBtn.dataset.uninstallId); return; }
+        const searchAllBtn = e.target.closest('[data-search-all]');
+        if (searchAllBtn) { searchAllPackages(); return; }
+        const installPkgBtn = e.target.closest('[data-install-pkg]');
+        if (installPkgBtn) { handleAppsInstallPkg(installPkgBtn.dataset.installPkg); return; }
         const filterChip = e.target.closest('[data-apps-filter]');
         if (filterChip) { setAppsFilter(filterChip.dataset.appsFilter); return; }
         if (e.target.id === 'apps-refresh-db') {
