@@ -124,6 +124,9 @@ class ProjectPicker(QDialog):
         super().__init__(parent)
         self.setWindowTitle("Outlaw CodeMaker — Choose a project")
         self.resize(680, 520)
+        # Phase 14g: the pre-session screen fills the screen too (the Dev session
+        # is the whole screen), and offers real setup/exit actions below.
+        self.setWindowState(Qt.WindowState.WindowMaximized)
 
         self.store = store
         self.chosen_path: str | None = None
@@ -138,6 +141,28 @@ class ProjectPicker(QDialog):
         )
         intro.setWordWrap(True)
         intro.setStyleSheet(f"color: {COLORS['muted']};")
+
+        # Phase 14g — set-up / tools row so you're never trapped here: open Godot
+        # and LM Studio to set them up, switch back to the Desktop, or quit.
+        setup_hint = QLabel(
+            "First time? Open Godot and LM Studio below to set them up, then start a new game."
+        )
+        setup_hint.setWordWrap(True)
+        setup_hint.setStyleSheet(f"color: {COLORS['accent']}; font-size: 9pt;")
+        godot_btn = QPushButton("🎮  Open Godot")
+        godot_btn.clicked.connect(self._open_godot)
+        lm_btn = QPushButton("✦  Open LM Studio")
+        lm_btn.clicked.connect(self._open_lmstudio)
+        to_desktop_btn = QPushButton("⌂  Switch to Desktop")
+        to_desktop_btn.clicked.connect(self._switch_to_desktop)
+        quit_btn = QPushButton("Quit")
+        quit_btn.clicked.connect(self._quit_app)
+        setup_row = QHBoxLayout()
+        setup_row.addWidget(godot_btn)
+        setup_row.addWidget(lm_btn)
+        setup_row.addStretch(1)
+        setup_row.addWidget(to_desktop_btn)
+        setup_row.addWidget(quit_btn)
 
         recent_label = QLabel("RECENT PROJECTS")
         recent_label.setStyleSheet(
@@ -185,6 +210,8 @@ class ProjectPicker(QDialog):
         layout.setContentsMargins(20, 20, 20, 20)
         layout.setSpacing(10)
         layout.addWidget(intro)
+        layout.addWidget(setup_hint)
+        layout.addLayout(setup_row)
         layout.addSpacing(6)
         layout.addWidget(recent_label)
         layout.addWidget(self.list, 1)
@@ -265,6 +292,60 @@ class ProjectPicker(QDialog):
         if confirm == QMessageBox.StandardButton.Yes:
             self.store.remove(proj.id)
             self._refresh()
+
+    # ------------------------------------------------------------------
+    # Phase 14g — set-up / tools actions (so you're never trapped pre-session)
+    # ------------------------------------------------------------------
+
+    def _launch(self, candidates: list[list[str]], label: str) -> None:
+        """Launch the first available command, detached. Fail-safe."""
+        import shutil
+        import subprocess
+        for cmd in candidates:
+            exe = cmd[0]
+            if shutil.which(exe) or Path(exe).exists():
+                try:
+                    subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                    return
+                except OSError:
+                    continue
+        QMessageBox.information(
+            self, label,
+            f"Couldn't start {label}. Make sure it's installed "
+            "(you can install it from the Desktop session's Apps page).",
+        )
+
+    def _open_godot(self) -> None:
+        self._launch([["godot"], ["godot4"], ["Godot"]], "Godot")
+
+    def _open_lmstudio(self) -> None:
+        # outlaw-lm-studio launches LM Studio (or opens its download page).
+        self._launch(
+            [["outlaw-lm-studio"], ["/usr/local/bin/outlaw-lm-studio"],
+             ["lm-studio"], ["lmstudio"]],
+            "LM Studio",
+        )
+
+    def _switch_to_desktop(self) -> None:
+        reply = QMessageBox.question(
+            self, "Switch to Desktop session",
+            "Leave the Dev session and switch to the Desktop?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+        try:
+            home = Path.home()
+            (home / ".outlaw-session").write_text("desktop\n", encoding="utf-8")
+            (home / ".outlaw-session.honor-once").write_text("", encoding="utf-8")
+        except OSError:
+            pass
+        super().reject()   # exit → the dev session restarts into the Desktop
+
+    def _quit_app(self) -> None:
+        # Bypass the first-run "no cancel" guard — an explicit Quit always exits.
+        super().reject()
 
     # ------------------------------------------------------------------
     # Helpers
