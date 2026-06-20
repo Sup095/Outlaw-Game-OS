@@ -542,6 +542,10 @@ class MainWindow(QMainWindow):
         sess_menu.addAction(act_quit)
 
         tools_menu = bar.addMenu("&Tools")
+        act_v4rmint = QAction("Ask V4rm1nt (base AI)…", self)
+        act_v4rmint.triggered.connect(self._ask_v4rmint)
+        tools_menu.addAction(act_v4rmint)
+        tools_menu.addSeparator()
         act_grab = QAction("Capture Godot window", self)
         act_grab.triggered.connect(self._capture_godot)
         tools_menu.addAction(act_grab)
@@ -952,6 +956,21 @@ class MainWindow(QMainWindow):
         # Quitting ends the dev X-session; the greeter, seeing honor-once, goes
         # straight to the Desktop on the restart.
         QApplication.quit()
+
+    def _ask_v4rmint(self) -> None:
+        """Open the base-AI (V4rm1nt) setup-help chat.
+
+        Backed by the bundled Ollama model, independent of LM Studio — so it
+        works even before a coding model is loaded. Available any time from the
+        Tools menu, and pre-session from the project picker.
+        """
+        try:
+            from .ask_v4rmint import AskV4rmintDialog
+        except Exception as exc:  # noqa: BLE001
+            QMessageBox.information(self, "V4rm1nt",
+                                    f"The base-AI assistant isn't available ({exc}).")
+            return
+        AskV4rmintDialog(config=getattr(self, "config", None), parent=self).exec()
 
     # ------------------------------------------------------------------
     # Settings / workspace
