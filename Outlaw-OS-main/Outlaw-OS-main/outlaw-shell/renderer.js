@@ -1428,6 +1428,11 @@ async function sendAI() {
         addMsg('ai', t); recordAiTurn('assistant', t);
         return;
     }
+    // QoL — the assistant changed a setting for the user; apply it through the
+    // normal settings path (full side-effects) and refresh the UI.
+    if (res.settingsPatch) {
+        try { await setSetting(res.settingsPatch); await loadSettings(); refreshAiStatus(); } catch {}
+    }
     const t = res.text || '(no answer)';
     addMsg('ai', t);
     recordAiTurn('assistant', t);

@@ -886,6 +886,37 @@ async function resolveInstallable(name) {
     return null;
 }
 
+// QoL — settings the AI is allowed to change on the user's behalf. Safe, reversible
+// ones only (no auth / updater / sensitive keys). Booleans accept on/off synonyms;
+// the rest are value allowlists. The renderer applies the patch via settings:set so
+// all the usual side-effects (vram apply, theme mirror, auto-check restart) still run.
+const AI_SETTABLE = {
+    theme: { values: ['green', 'gold', 'broken'] },
+    crtFx: { bool: true },
+    glow: { bool: true },
+    performanceMode: { bool: true },
+    vramSaverMode: { values: ['auto', 'off', 'lean', 'minimal'] },
+    aiEngine: { values: ['base', 'lmstudio', 'ollama'] },
+    autoCheck: { bool: true },
+    coreVoiceEnabled: { bool: true },
+};
+
+function parseSettingChange(arg) {
+    const m = String(arg || '').match(/^\s*([a-zA-Z]+)\s*[:=\s]\s*([a-zA-Z0-9]+)\s*$/);
+    if (!m) return null;
+    const key = m[1];
+    const val = m[2].toLowerCase();
+    const spec = AI_SETTABLE[key];
+    if (!spec) return null;
+    if (spec.bool) {
+        if (['on', 'true', 'yes', '1', 'enable', 'enabled'].includes(val)) return { [key]: true };
+        if (['off', 'false', 'no', '0', 'disable', 'disabled'].includes(val)) return { [key]: false };
+        return null;
+    }
+    if (spec.values && spec.values.includes(val)) return { [key]: val };
+    return null;
+}
+
 async function executeIntent(intent) {
     switch (intent.tool) {
         case 'system_info': {
@@ -919,6 +950,18 @@ async function executeIntent(intent) {
         case 'open_file': {
             const r = await openPath(intent.arg || '');
             return { text: r.ok ? `Opened ${intent.arg}.` : r.error, did: r.ok ? 'open_file' : 'none' };
+        }
+        case 'set_setting': {
+            // QoL — let the assistant adjust a safe, reversible setting for the user.
+            const patch = parseSettingChange(intent.arg || '');
+            if (!patch) {
+                return { text: 'I can change: theme, crtFx, glow, performanceMode, vramSaverMode, aiEngine, '
+                    + 'autoCheck, coreVoiceEnabled — e.g. "vramSaverMode=lean". I couldn\'t apply "'
+                    + (intent.arg || '') + '".', did: 'none' };
+            }
+            const key = Object.keys(patch)[0];
+            // The renderer applies this through settings:set (full side-effects).
+            return { did: 'set_setting', settingsPatch: patch, text: intent.text || ('Set ' + key + ' to ' + patch[key] + '.') };
         }
         case 'install_app': {
             // Phase 13: only ever install from a KNOWN source, and only after the
