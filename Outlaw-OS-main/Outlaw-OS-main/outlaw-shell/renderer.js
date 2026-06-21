@@ -263,6 +263,14 @@ function showScreen(name) {
     const el = $('#screen-' + name);
     if (el) el.classList.add('active');
     $$('.nav-item[data-screen]').forEach((n) => n.classList.toggle('active', n.dataset.screen === name));
+    // C13 — a freshly-shown tab starts at the top; the AI chat jumps to its latest.
+    if (name === 'ai') {
+        const log = $('#ai-log');
+        if (log) requestAnimationFrame(() => { log.scrollTop = log.scrollHeight; });
+    } else {
+        const content = document.querySelector('.content');
+        if (content) content.scrollTop = 0;
+    }
     if (name === 'files') loadFiles(currentDir || null);
     if (name === 'tasks') { refreshTasks(); startTasksPoll(); } else { stopTasksPoll(); }
     if (name === 'gaming') refreshGaming();
@@ -2346,10 +2354,13 @@ function wire() {
     { const b = $('#errlog-clear'); if (b) b.addEventListener('click', errlogClear); }
     const _themeSel = $('#theme-select');
     if (_themeSel) _themeSel.addEventListener('change', (e) => {
-        const t = e.target.value === 'gold' ? 'gold' : 'green';
+        const v = e.target.value;
+        const t = (v === 'gold' || v === 'broken') ? v : 'green';   // broken was falling through to green
         applyTheme(t);
         setSetting({ theme: t });
-        toast(t === 'gold' ? 'Gold Gunmetal engaged.' : 'Green Phosphor restored.');
+        toast(t === 'gold' ? 'Gold Gunmetal engaged.'
+            : t === 'broken' ? 'Broken mode — barely holding on…'
+                : 'Green Phosphor restored.');
     });
     $('#perf-toggle').addEventListener('change', async (e) => { await api.gaming.setPerformance(e.target.checked); toast('Performance mode ' + (e.target.checked ? 'ON' : 'OFF')); });
     // SC7 — Aggressive VRAM saver dropdown. setMode immediately invalidates
