@@ -728,28 +728,43 @@ function recommendModel(ramGb, vramGb, opts = {}) {
 let _specsCache = null;
 async function gatherSpecs() {
     if (_specsCache) return _specsCache;
-    const mem = memInfo();
-    const ramGb = Math.round((mem.totalKb / 1024 / 1024) * 10) / 10;
-    let vramGb = 0, gpuName = '';
-    if (IS_LINUX) {
-        const nv = await runShell(
-            'nvidia-smi --query-gpu=name,memory.total --format=csv,noheader,nounits 2>/dev/null | head -n 1',
-            { timeout: 3000 });
-        if (nv.code === 0 && nv.stdout) {
-            const p = nv.stdout.split(',').map((s) => s.trim());
-            gpuName = p[0] || 'NVIDIA GPU';
-            vramGb = Math.round((Number(p[1]) || 0) / 1024 * 10) / 10;
-        } else {
-            const lspci = await runShell(
-                "lspci 2>/dev/null | grep -Ei 'vga|3d|display' | sed 's/^.*: //' | head -n 1",
-                { timeout: 2000 });
-            gpuName = (lspci.stdout || '').trim();
+    // The probe must NEVER hard-fail — the AI Setup card AND the settings tuner
+    // depend on it, and an early throw shows up to the user as the whole thing
+    // "failing immediately". Any unexpected error falls back to Node's own readings.
+    try {
+        const mem = memInfo();
+        const ramGb = Math.round((mem.totalKb / 1024 / 1024) * 10) / 10;
+        let vramGb = 0, gpuName = '';
+        if (IS_LINUX) {
+            const nv = await runShell(
+                'nvidia-smi --query-gpu=name,memory.total --format=csv,noheader,nounits 2>/dev/null | head -n 1',
+                { timeout: 3000 }).catch(() => ({ code: 1, stdout: '' }));
+            if (nv.code === 0 && nv.stdout) {
+                const p = nv.stdout.split(',').map((s) => s.trim());
+                gpuName = p[0] || 'NVIDIA GPU';
+                vramGb = Math.round((Number(p[1]) || 0) / 1024 * 10) / 10;
+            } else {
+                const lspci = await runShell(
+                    "lspci 2>/dev/null | grep -Ei 'vga|3d|display' | sed 's/^.*: //' | head -n 1",
+                    { timeout: 2000 }).catch(() => ({ stdout: '' }));
+                gpuName = (lspci.stdout || '').trim();
+            }
         }
+        const cores = os.cpus().length;
+        const cpu = (os.cpus()[0] || {}).model || 'CPU';
+        _specsCache = { ramGb, vramGb, gpuName, cores, cpu, ...recommendModel(ramGb, vramGb) };
+        return _specsCache;
+    } catch (e) {
+        const ramGb = Math.round((os.totalmem() / (1024 ** 3)) * 10) / 10;
+        _specsCache = {
+            ramGb, vramGb: 0, gpuName: '',
+            cores: os.cpus().length || 1,
+            cpu: (os.cpus()[0] || {}).model || 'CPU',
+            probeNote: 'limited probe (' + ((e && e.message) || 'unknown') + ')',
+            ...recommendModel(ramGb, 0),
+        };
+        return _specsCache;
     }
-    const cores = os.cpus().length;
-    const cpu = (os.cpus()[0] || {}).model || 'CPU';
-    _specsCache = { ramGb, vramGb, gpuName, cores, cpu, ...recommendModel(ramGb, vramGb) };
-    return _specsCache;
 }
 
 // Compact one-liner used to make the local AI hardware-aware in its prompt.

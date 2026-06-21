@@ -2095,12 +2095,14 @@ function escapeHtml(s) {
 function renderAiRecommendation(r) {
     const out = $('#ai-setup-result');
     if (!out) return;
+    r = r || {};
     const gpuTxt = r.vramGb > 0
         ? `${escapeHtml(r.gpuName || 'GPU')} · ${r.vramGb} GB VRAM`
         : (r.gpuName ? `${escapeHtml(r.gpuName)} · no dedicated VRAM` : 'no discrete GPU');
     const rec = r.recommended || {};
-    const starterLine = r.sameAsStarter ? '' :
-        `<p class="muted" style="margin:6px 0 0;">Weak PC or not sure? Start with <b>${escapeHtml(r.starter.model)}</b> (${escapeHtml(r.starter.size)}) — ${escapeHtml(r.starter.note)} Once it's running you can ask <em>it</em> how to set up the bigger one.</p>`;
+    const starter = r.starter || {};
+    const starterLine = (r.sameAsStarter || !starter.model) ? '' :
+        `<p class="muted" style="margin:6px 0 0;">Weak PC or not sure? Start with <b>${escapeHtml(starter.model)}</b> (${escapeHtml(starter.size || '')}) — ${escapeHtml(starter.note || '')} Once it's running you can ask <em>it</em> how to set up the bigger one.</p>`;
     out.innerHTML = `
         <div style="border-top:1px solid var(--line,#2a2f29);padding-top:10px;">
             <div class="mono muted" style="font-size:12px;">
