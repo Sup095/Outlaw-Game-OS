@@ -333,8 +333,16 @@ shrink_partition() {
             # ends past the filesystem — safe direction.
             ntfsresize --no-action -s "${new_mib}M" "$part" >/dev/null \
                 || die "Windows refused a test-shrink of $part. Boot Windows, run 'chkdsk /f', disable Fast Startup, shut down fully, then retry."
-            ntfsresize -f -s "${new_mib}M" "$part" \
-                || die "NTFS shrink failed on $part — nothing else was changed."
+            # The REAL resize prompts "Are you sure you want to proceed (y/[N])?"
+            # and reads stdin — run non-interactively (GUI / pkexec, no terminal)
+            # it gets EOF, answers N, and aborts with "nothing changed". Feed it a
+            # 'y' (printf, not `yes`, so pipefail can't trip on SIGPIPE), and keep
+            # the output so a genuine failure is reported instead of a generic one.
+            local _nr_out
+            if ! _nr_out="$(printf 'y\n' | ntfsresize -f -s "${new_mib}M" "$part" 2>&1)"; then
+                printf '%s\n' "$_nr_out" >&2
+                die "NTFS shrink failed on $part — nothing else was changed. ($(printf '%s' "$_nr_out" | grep -iE 'error|fail|cannot|refus|dirty|denied' | tail -n1))"
+            fi
             ;;
         ext4|ext3|ext2)
             e2fsck -f -y "$part" >/dev/null 2>&1 || true
