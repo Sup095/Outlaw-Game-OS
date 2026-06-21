@@ -220,8 +220,23 @@ def main() -> int:
     config.setdefault("agent", {})["workspace_root"] = startup.workspace_root
     projects_store.touch(startup.workspace_root)
 
-    orchestrator = Orchestrator(config)
-    window = MainWindow(orchestrator, config, projects_store=projects_store)
+    # Build the orchestrator + main window. If anything here throws (AI client,
+    # workspace load, a bad config), report it clearly instead of hard-crashing
+    # back to the session picker — and log the full traceback so it lands in the
+    # error log for diagnosis.
+    try:
+        orchestrator = Orchestrator(config)
+        window = MainWindow(orchestrator, config, projects_store=projects_store)
+    except Exception:  # noqa: BLE001
+        import traceback
+        logging.getLogger("outlaw").exception("Failed to start the workspace window")
+        from PyQt6.QtWidgets import QMessageBox
+        QMessageBox.critical(
+            None, "Outlaw CodeMaker — startup error",
+            "Something went wrong opening the workspace. It's been written to the "
+            "error log.\n\nDetails:\n" + traceback.format_exc()[-1600:],
+        )
+        return 1
     # Phase 14a: open filling the screen (the Dev session is the whole screen).
     # Maximized, not kiosk-fullscreen, so the title bar + taskbar stay reachable.
     window.showMaximized()

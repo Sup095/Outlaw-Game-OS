@@ -36,6 +36,7 @@ from PyQt6.QtWidgets import (
     QPlainTextEdit,
     QPushButton,
     QRadioButton,
+    QScrollArea,
     QStackedWidget,
     QVBoxLayout,
     QWidget,
@@ -224,7 +225,8 @@ class NewGameWizard(QDialog):
     def __init__(self, default_parent_dir: Path, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Outlaw CodeMaker — New Game")
-        self.resize(720, 580)
+        self.resize(760, 640)
+        self.setMinimumSize(560, 460)
 
         self.default_parent_dir = default_parent_dir
         self.mode: str = "quick"
@@ -278,11 +280,19 @@ class NewGameWizard(QDialog):
         footer_row.addWidget(self.back_btn)
         footer_row.addWidget(self.next_btn)
 
+        # Wrap the page stack in a scroll area so tall pages (the template list,
+        # long summaries / descriptions) can scroll instead of being clipped.
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroll.setWidget(self.stack)
+
         layout = QVBoxLayout(self)
         layout.setContentsMargins(20, 20, 20, 20)
         layout.setSpacing(12)
         layout.addLayout(header_row)
-        layout.addWidget(self.stack, 1)
+        layout.addWidget(scroll, 1)
         layout.addLayout(footer_row)
 
     # ----- Pages -----
@@ -671,7 +681,8 @@ class NewGameWizard(QDialog):
                 file_path = target / rel
                 file_path.parent.mkdir(parents=True, exist_ok=True)
                 file_path.write_text(content, encoding="utf-8")
-        except OSError as exc:
+        except Exception as exc:  # noqa: BLE001 — any failure here must NOT crash the app
+            logger.exception("New Game scaffold failed")
             QMessageBox.critical(
                 self, "Couldn't create project",
                 f"Failed to write the project files:\n\n{exc}",
