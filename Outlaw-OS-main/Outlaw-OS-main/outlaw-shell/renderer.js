@@ -1252,7 +1252,8 @@ function loadConvoIntoLog() {
     const c = aiActiveConvo();
     if (!c) return;
     if (!c.messages.length) {
-        addMsg('ai', 'Cr1tt3r here. Ask me anything — or try "open steam", "search godot docs", "install krita".');
+        addMsg('ai', 'Cr1tt3r here. Ask me anything, or tell me to do things — "install krita", '
+            + '"tune my settings", "use less power", "switch to the gold theme", "open settings".');
         return;
     }
     for (const m of c.messages) addMsg(m.role === 'user' ? 'user' : 'ai', m.content);
