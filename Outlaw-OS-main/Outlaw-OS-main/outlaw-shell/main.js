@@ -28,6 +28,12 @@ const { DiagnosticRunner, listReports: listDiagReports, readReport: readDiagRepo
 const tts = require('./tts');
 const { VramTierMonitor } = require('./vram-tier');
 const coreai = require('./coreai');
+const errorlog = require('./errorlog');   // F1 — combined error/warning log
+
+// Capture the shell's own crashes/rejections into the combined log so a desktop
+// crash-loop is diagnosable. Never let the handler itself throw.
+process.on('uncaughtException', (e) => { try { errorlog.append('error', 'shell-main', (e && e.stack) || e); } catch {} });
+process.on('unhandledRejection', (e) => { try { errorlog.append('error', 'shell-main', (e && e.stack) || e); } catch {} });
 
 const IS_LINUX = process.platform === 'linux';
 // Phase 13.2 — local AI backends (both OpenAI-compatible). The BUILT-IN base AI
@@ -2117,6 +2123,17 @@ function registerIpc() {
         const r = await runStreamingJob('ollama', ['pull', name], labels, matchers);
         return { ok: r.ok, error: r.ok ? '' : 'Pull failed. Check the model name and your connection.' };
     });
+
+    // F1 — combined error/warning log (desktop + dev + xorg + journal).
+    ipcMain.handle('errorlog:read', () => errorlog.read());
+    ipcMain.handle('errorlog:collect', () => errorlog.collect());
+    ipcMain.handle('errorlog:clear', () => { errorlog.clear(); return { ok: true }; });
+    ipcMain.handle('errorlog:add', (_e, payload) => {
+        const p = payload || {};
+        errorlog.append(p.level || 'error', p.source || 'shell-ui', p.message || '');
+        return { ok: true };
+    });
+    ipcMain.handle('errorlog:issue-url', () => errorlog.issueUrl(settings.updateRepo, APP_VERSION));
 
     ipcMain.handle('ai:confirm-action', async (_e, action) => {
         if (action && action.tool === 'run_command') {

@@ -121,17 +121,6 @@
                 <h2>System</h2>
                 <div id="sysinfo" class="dim mono">Loading…</div>
             </div>
-            <!-- Support card — only shown when a sponsor/donate URL is configured
-                 (Settings → Support Development), so it's never naggy by default. -->
-            <div class="card" id="dash-support" hidden>
-                <div class="row" style="align-items:center;gap:12px;flex-wrap:wrap;">
-                    <div style="flex:1;min-width:200px;">
-                        <h3 style="margin:0;">♥ Support Outlaw OS</h3>
-                        <div class="dim" style="font-size:12px;margin-top:3px;">Built in the open by a tiny team. If it's useful to you, a tip keeps it going — thank you.</div>
-                    </div>
-                    <button class="primary" data-action="donate" type="button">Support</button>
-                </div>
-            </div>
             <h3>Launchers</h3>
             <div class="grid apps" id="launchers"></div>
         </section>
@@ -822,15 +811,15 @@
             </div>
 
             <div class="card">
-                <h3>Support Development</h3>
-                <div class="setting">
-                    <div class="label">Sponsor URL<small>Ko-fi, Buy Me a Coffee, GitHub Sponsors, PayPal.me — anything</small></div>
-                    <input id="sponsor-url" placeholder="https://ko-fi.com/your-handle" style="width:auto;min-width:280px;">
+                <h3>Report a problem</h3>
+                <p class="muted" style="margin:0 0 10px;">If something failed, crashed, or bounced you to the session picker, collect the log and send it. It gathers errors + warnings from the desktop, the dev session, Xorg and the system journal — deduplicated, no repeats.</p>
+                <div class="row" style="gap:8px;flex-wrap:wrap;margin-bottom:10px;">
+                    <button class="primary" id="errlog-refresh" type="button">Collect errors</button>
+                    <button id="errlog-github" type="button">Send to GitHub</button>
+                    <button id="errlog-download" type="button">Download .log</button>
+                    <button class="danger" id="errlog-clear" type="button">Clear</button>
                 </div>
-                <div class="row" style="margin-top:8px;">
-                    <button class="primary" data-action="donate">Open Sponsor Page</button>
-                </div>
-                <div class="muted" style="margin-top:8px;">Keeps Outlaw OS updated and secure for everyone.</div>
+                <textarea id="errlog-view" readonly style="width:100%;height:170px;font-family:monospace;font-size:11px;background:var(--panel-2,#0d130d);color:var(--text);border:1px solid var(--line);border-radius:8px;padding:8px;" placeholder="Click “Collect errors” to gather recent errors + warnings…"></textarea>
             </div>
         </section>
 

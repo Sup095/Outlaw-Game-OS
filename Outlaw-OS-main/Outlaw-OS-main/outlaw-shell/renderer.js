@@ -9,7 +9,14 @@ const api = window.outlaw;
 const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => Array.from(document.querySelectorAll(sel));
 
-// The sponsor URL is configurable in Settings → Support Development.
+// F1 — capture renderer errors/rejections into the combined error log, so a
+// desktop crash leaves a trace even when nobody's reading the console.
+window.addEventListener('error', (e) => {
+    try { window.outlaw.errorlog.add({ level: 'error', source: 'shell-ui', message: (e.message || '') + ' @ ' + (e.filename || '') + ':' + (e.lineno || '') }); } catch {}
+});
+window.addEventListener('unhandledrejection', (e) => {
+    try { window.outlaw.errorlog.add({ level: 'error', source: 'shell-ui', message: 'unhandledrejection: ' + String((e.reason && e.reason.message) || e.reason) }); } catch {}
+});
 
 let statsTimer = null;
 let confirmResolver = null;
@@ -2016,10 +2023,6 @@ async function loadSettings() {
     const chanEl = $('#update-channel');
     if (chanEl) chanEl.value = s.updateChannel || 'stable';
     $('#auto-check').checked = !!s.autoCheck;
-    $('#sponsor-url').value = s.sponsorUrl || '';
-    // Surface the support card on the dashboard only when a URL is configured.
-    const dashSupport = $('#dash-support');
-    if (dashSupport) dashSupport.hidden = !((s.sponsorUrl || '').trim());
     // P2 — stability reporting: label the current version + reflect any
     // prior local vote. The community tally is fetched lazily (button /
     // first Settings open) so there's zero network cost otherwise.
@@ -2140,6 +2143,36 @@ function renderAiRecommendation(r) {
 }
 
 // ---------------------------------------------------------------------------
+// F1 — Report-a-problem (error/warning log) controls.
+// ---------------------------------------------------------------------------
+async function errlogRefresh() {
+    const view = $('#errlog-view');
+    if (view) view.value = 'Collecting errors + warnings…';
+    let txt = '';
+    try { txt = await api.errorlog.collect(); } catch {}
+    if (view) view.value = txt || '(no errors or warnings logged — nice.)';
+}
+async function errlogDownload() {
+    let txt = '';
+    try { txt = await api.errorlog.read(); } catch {}
+    const blob = new Blob([txt || '(empty)'], { type: 'text/plain' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'outlaw-errors.log';
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+}
+async function errlogGithub() {
+    try { const url = await api.errorlog.issueUrl(); if (url) window.open(url, '_blank'); }
+    catch { toast('Could not open the issue page.'); }
+}
+async function errlogClear() {
+    try { await api.errorlog.clear(); } catch {}
+    const view = $('#errlog-view'); if (view) view.value = '';
+    toast('Error log cleared.');
+}
+
+// ---------------------------------------------------------------------------
 // Event wiring (delegation)
 // ---------------------------------------------------------------------------
 function wire() {
@@ -2236,12 +2269,6 @@ function wire() {
             case 'power-cancel': closePower(); break;
             case 'reboot': closePower(); api.power.reboot(); break;
             case 'shutdown': closePower(); api.power.shutdown(); break;
-            case 'donate': {
-                const url = ($('#sponsor-url').value || '').trim();
-                if (!/^https?:\/\//i.test(url)) { toast('Add a sponsor URL first.'); break; }
-                window.open(url, '_blank');
-                break;
-            }
             case 'stability-works':  setStabilityVote('works'); break;
             case 'stability-broken': setStabilityVote('broken'); break;
             case 'stability-refresh': refreshStabilityTally(); break;
@@ -2312,6 +2339,11 @@ function wire() {
     $('#glow-toggle').addEventListener('change', (e) => { document.body.classList.toggle('glow', e.target.checked); setSetting({ glow: e.target.checked }); });
     { const rm = $('#reduce-motion-toggle'); if (rm) rm.addEventListener('change', (e) => { document.body.classList.toggle('reduce-motion', e.target.checked); setSetting({ reduceMotion: e.target.checked }); }); }
     { const us = $('#ui-scale'); if (us) us.addEventListener('change', (e) => { const f = parseFloat(e.target.value) || 1; if (api.setZoom) api.setZoom(f); setSetting({ uiScale: f }); }); }
+    // F1 — error-log controls.
+    { const b = $('#errlog-refresh'); if (b) b.addEventListener('click', errlogRefresh); }
+    { const b = $('#errlog-github'); if (b) b.addEventListener('click', errlogGithub); }
+    { const b = $('#errlog-download'); if (b) b.addEventListener('click', errlogDownload); }
+    { const b = $('#errlog-clear'); if (b) b.addEventListener('click', errlogClear); }
     const _themeSel = $('#theme-select');
     if (_themeSel) _themeSel.addEventListener('change', (e) => {
         const t = e.target.value === 'gold' ? 'gold' : 'green';
@@ -2684,11 +2716,6 @@ function wire() {
                 : 'Stable channel — only tested releases.');
         });
     }
-    let sponsorSaveTimer = null;
-    $('#sponsor-url').addEventListener('input', (e) => {
-        clearTimeout(sponsorSaveTimer);
-        sponsorSaveTimer = setTimeout(() => setSetting({ sponsorUrl: e.target.value.trim() }), 400);
-    });
 
     // Toast events from the main process (used by background update checks).
     api.on('toast', (msg) => toast(String(msg)));

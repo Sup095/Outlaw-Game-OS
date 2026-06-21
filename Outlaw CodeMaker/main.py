@@ -101,6 +101,44 @@ def load_config() -> dict:
         return _sanitize_config(json.load(fh))
 
 
+class _SharedErrorLogHandler(logging.Handler):
+    """F1 — mirror WARNING+ records into the combined ``~/.outlaw-errors.log`` the
+    desktop's "Report a problem" reads, so the DEV SESSION's errors ship in the same
+    report. Deduped (never the same line twice, seeded from the file across sessions);
+    best-effort — never raises."""
+
+    _path = Path.home() / ".outlaw-errors.log"
+
+    def __init__(self) -> None:
+        super().__init__(level=logging.WARNING)
+        self._seen: set[int] = set()
+        try:
+            for line in self._path.read_text(encoding="utf-8").splitlines():
+                body = line.split("] ", 1)[-1].strip()
+                if body:
+                    self._seen.add(hash(body))
+        except Exception:  # noqa: BLE001
+            pass
+
+    def emit(self, record: logging.LogRecord) -> None:
+        try:
+            if record.levelno < logging.WARNING:
+                return
+            msg = " ".join(self.format(record).split())[:600]
+            body = "codemaker: " + msg
+            key = hash(body)
+            if key in self._seen:
+                return
+            self._seen.add(key)
+            import datetime
+            level = "ERROR" if record.levelno >= logging.ERROR else "WARN"
+            stamp = datetime.datetime.now().isoformat(timespec="seconds")
+            with open(self._path, "a", encoding="utf-8") as fh:
+                fh.write(f"[{stamp}] {level} {body}\n")
+        except Exception:  # noqa: BLE001 — logging must never crash the app
+            pass
+
+
 def configure_logging() -> None:
     logging.basicConfig(
         level=logging.INFO,
@@ -108,6 +146,13 @@ def configure_logging() -> None:
         datefmt="%H:%M:%S",
         handlers=[logging.StreamHandler(sys.stdout)],
     )
+    # F1 — also feed errors/warnings into the shared system error log.
+    try:
+        h = _SharedErrorLogHandler()
+        h.setFormatter(logging.Formatter("%(name)s | %(message)s"))
+        logging.getLogger().addHandler(h)
+    except Exception:  # noqa: BLE001
+        pass
     # Install the diagnostic ring buffer alongside the console handler. It
     # captures the last few hundred records in memory so Help → Save
     # diagnostic bundle has something useful to ship — without us having to

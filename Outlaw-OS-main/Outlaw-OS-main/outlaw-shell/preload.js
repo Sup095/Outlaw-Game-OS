@@ -116,6 +116,14 @@ contextBridge.exposeInMainWorld('outlaw', {
     },
     // QoL/accessibility — scale the whole UI (text size). Clamped for safety.
     setZoom: (factor) => { try { webFrame.setZoomFactor(Math.max(0.7, Math.min(2, Number(factor) || 1))); } catch {} },
+    // F1 — combined error/warning log.
+    errorlog: {
+        read: () => ipcRenderer.invoke('errorlog:read'),
+        collect: () => ipcRenderer.invoke('errorlog:collect'),
+        clear: () => ipcRenderer.invoke('errorlog:clear'),
+        add: (payload) => ipcRenderer.invoke('errorlog:add', payload),
+        issueUrl: () => ipcRenderer.invoke('errorlog:issue-url'),
+    },
 
     // --- Gaming -------------------------------------------------------------
     gaming: {
