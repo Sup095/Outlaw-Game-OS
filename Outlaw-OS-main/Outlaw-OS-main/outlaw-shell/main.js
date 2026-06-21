@@ -756,6 +756,15 @@ async function gatherSpecs() {
                     "lspci 2>/dev/null | grep -Ei 'vga|3d|display' | sed 's/^.*: //' | head -n 1",
                     { timeout: 2000 }).catch(() => ({ stdout: '' }));
                 gpuName = (lspci.stdout || '').trim();
+                // C4 — AMD / Intel (and other non-NVIDIA) discrete VRAM via the DRM
+                // sysfs node (bytes). Integrated GPUs report 0 / no node — they
+                // share system RAM — so vramGb stays 0, which correctly routes to
+                // the RAM-based recommendations + the RAM-only AI path.
+                const vram = await runShell(
+                    'cat /sys/class/drm/card*/device/mem_info_vram_total 2>/dev/null | sort -rn | head -n 1',
+                    { timeout: 2000 }).catch(() => ({ stdout: '' }));
+                const bytes = Number((vram.stdout || '').trim());
+                if (bytes > 0) vramGb = Math.round(bytes / (1024 ** 3) * 10) / 10;
             }
         }
         const cores = os.cpus().length;
