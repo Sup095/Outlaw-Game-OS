@@ -1433,6 +1433,8 @@ async function sendAI() {
     if (res.settingsPatch) {
         try { await setSetting(res.settingsPatch); await loadSettings(); refreshAiStatus(); } catch {}
     }
+    // QoL — the assistant navigated somewhere for the user.
+    if (res.openScreen) { try { showScreen(res.openScreen); } catch {} }
     const t = res.text || '(no answer)';
     addMsg('ai', t);
     recordAiTurn('assistant', t);

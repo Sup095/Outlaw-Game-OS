@@ -934,6 +934,10 @@ function parseSettingChange(arg) {
     return null;
 }
 
+// QoL — screens the AI may navigate to for the user (matches the sidebar).
+const AI_SCREENS = ['dashboard', 'syscore', 'files', 'tasks', 'terminal',
+    'gaming', 'gamedev', 'apps', 'ai', 'calc', 'settings', 'help'];
+
 async function executeIntent(intent) {
     switch (intent.tool) {
         case 'system_info': {
@@ -967,6 +971,14 @@ async function executeIntent(intent) {
         case 'open_file': {
             const r = await openPath(intent.arg || '');
             return { text: r.ok ? `Opened ${intent.arg}.` : r.error, did: r.ok ? 'open_file' : 'none' };
+        }
+        case 'open_screen': {
+            // QoL — let the assistant take the user to a section of the shell.
+            const name = String(intent.arg || '').toLowerCase().trim();
+            if (!AI_SCREENS.includes(name)) {
+                return { text: 'I can open: ' + AI_SCREENS.join(', ') + '. There\'s no "' + (intent.arg || '') + '" screen.', did: 'none' };
+            }
+            return { did: 'open_screen', openScreen: name, text: intent.text || ('Opening ' + name + '.') };
         }
         case 'set_setting': {
             // QoL — let the assistant adjust a safe, reversible setting for the user.

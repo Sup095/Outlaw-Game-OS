@@ -20,7 +20,7 @@ const DEFAULT_MODEL = 'local-model';
 // Tools the model is allowed to propose. Keep the surface tiny so small models
 // stay reliable. `run_command` is intentionally marked dangerous so the main
 // process always routes it through user confirmation.
-const TOOLS = ['answer', 'open_app', 'search_web', 'list_files', 'open_file', 'system_info', 'install_app', 'set_setting', 'run_command'];
+const TOOLS = ['answer', 'open_app', 'search_web', 'list_files', 'open_file', 'system_info', 'install_app', 'set_setting', 'open_screen', 'run_command'];
 
 function systemPrompt(appIds, machine) {
     return [
@@ -40,6 +40,7 @@ function systemPrompt(appIds, machine) {
         '- open_file: open a file/folder with its default app. arg = path.',
         '- system_info: report CPU/RAM/host info (arg empty).',
         '- install_app: install software the user names OR describes. arg = the most likely PACKAGE name (e.g. "something to edit audio" -> "audacity"; "a photo editor" -> "gimp"). Any official package works, not just famous ones — give your single best package-name guess. Known sources only (Apps catalog / official repos); the user confirms before anything installs.',
+        '- open_screen: take the user to a section of Outlaw OS. arg = one of: dashboard, syscore, files, tasks, terminal, gaming, gamedev, apps, ai, calc, settings, help. e.g. "take me to settings" -> {"tool":"open_screen","arg":"settings","text":"Here\'s Settings."}.',
         '- set_setting: change a system setting for the user. arg = "key=value". Keys/values: theme=green|gold|broken, crtFx=on|off, glow=on|off, performanceMode=on|off, vramSaverMode=auto|off|lean|minimal, aiEngine=base|lmstudio|ollama, autoCheck=on|off, coreVoiceEnabled=on|off. e.g. "use less power" -> {"tool":"set_setting","arg":"vramSaverMode=lean","text":"Easing off VRAM use."}. For a broad "set everything best for me", tell them to click the "Tune my settings" button.',
         '- run_command: ONLY when the user explicitly asks to run a shell command. arg = the command. This always asks the user to confirm first.',
         '',
