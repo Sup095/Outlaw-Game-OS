@@ -106,6 +106,13 @@ contextBridge.exposeInMainWorld('outlaw', {
         // Phase 13.2: pull the built-in base model if it's missing (first run).
         ensureBaseModel: () => ipcRenderer.invoke('ai:ensure-base-model'),
     },
+    // Phase 16 — Ollama model management (status / list / pull) for running a
+    // larger model through Ollama as a full LM Studio replacement.
+    ollama: {
+        status: () => ipcRenderer.invoke('ollama:status'),
+        list: () => ipcRenderer.invoke('ollama:list'),
+        pull: (model) => ipcRenderer.invoke('ollama:pull', model),
+    },
 
     // --- Gaming -------------------------------------------------------------
     gaming: {

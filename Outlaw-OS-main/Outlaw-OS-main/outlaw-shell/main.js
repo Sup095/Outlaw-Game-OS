@@ -95,6 +95,13 @@ const DEFAULT_SETTINGS = {
     // = fall back to LM Studio if it's installed + running. "Start without AI"
     // at boot flips the master aiEnabled off so nothing loads at all.
     baseAiEnabled: true,
+    // Phase 16 — which engine runs the AI. 'base' = the tiny bundled Ollama model
+    // (default, runs on anything); 'lmstudio' = a model you load in LM Studio;
+    // 'ollama' = a LARGER model you pull through Ollama (a full LM Studio
+    // replacement for CPUs that can't run LM Studio, e.g. AVX1-only). Empty = derive
+    // from baseAiEnabled for backward compatibility. `ollamaModel` is the chosen tag.
+    aiEngine: '',
+    ollamaModel: '',
     crtFx: false,            // CRT scanline/flicker effect OFF by default (crisp + readable)
     glow: false,             // text glow OFF by default (no discoloration)
     // P1 — visual theme. 'green' = classic green-phosphor terminal (default,
@@ -756,14 +763,37 @@ function machineSummary(s) {
         + `Starter model that runs on anything: ${s.starter.model}.`;
 }
 
-// Phase 13.2 — which local AI backend the desktop uses right now. Default = the
-// built-in bundled Ollama model; when the user turns the built-in AI off, fall
-// back to LM Studio (status() will report it unavailable if it isn't running).
+// Phase 13.2 / 16 — which local AI backend the desktop uses right now. Three
+// engines: 'base' (tiny bundled Ollama model, default — runs on anything),
+// 'lmstudio' (a model loaded in LM Studio), or 'ollama' (a LARGER model pulled
+// through Ollama — a full LM Studio replacement for AVX1-only CPUs). aiEngine is
+// authoritative; when empty we derive it from the legacy baseAiEnabled toggle.
+function aiEngine() {
+    if (settings.aiEngine === 'base' || settings.aiEngine === 'lmstudio' || settings.aiEngine === 'ollama') {
+        return settings.aiEngine;
+    }
+    return settings.baseAiEnabled !== false ? 'base' : 'lmstudio';
+}
 function aiBackend() {
-    if (settings.baseAiEnabled !== false) {
+    const engine = aiEngine();
+    if (engine === 'ollama') {
+        return { baseUrl: OLLAMA_V1, model: settings.ollamaModel || BASE_AI_MODEL, kind: 'ollama' };
+    }
+    if (engine === 'base') {
         return { baseUrl: OLLAMA_V1, model: BASE_AI_MODEL, kind: 'base' };
     }
     return { baseUrl: LM_STUDIO_V1, model: settings.aiModel || 'local-model', kind: 'lmstudio' };
+}
+
+// Phase 16 — a "the AI isn't reachable yet" message tailored to the active engine.
+function aiUnavailableMsg(be) {
+    if (be.kind === 'base') {
+        return 'The built-in AI isn\'t ready yet — it may still be downloading its model. Try again shortly (or check that Ollama is running).';
+    }
+    if (be.kind === 'ollama') {
+        return `Ollama isn't reachable, or "${be.model}" isn't pulled yet. Make sure Ollama is running and pull the model from AI setup.`;
+    }
+    return 'LM Studio isn\'t reachable. Open LM Studio, load a model, then click "Start Server" (port 1234).';
 }
 
 // Pull the bundled base model if it isn't present yet (first desktop run). Runs
@@ -1800,7 +1830,11 @@ function registerIpc() {
             updateRepo: settings.updateRepo,
             vramSaverMode: settings.vramSaverMode,
         };
-        settings = saveSettings({ ...settings, ...(patch || {}) });
+        const merged = { ...settings, ...(patch || {}) };
+        // Phase 16 — keep the legacy baseAiEnabled flag in step with the chosen
+        // engine so the (many) existing `baseAiEnabled` checks stay correct.
+        if (patch && patch.aiEngine) merged.baseAiEnabled = (patch.aiEngine === 'base');
+        settings = saveSettings(merged);
         // If updater config changed, restart the background timer accordingly.
         if (before.autoCheck !== settings.autoCheck || before.updateRepo !== settings.updateRepo) {
             startAutoCheck();
@@ -1820,7 +1854,8 @@ function registerIpc() {
         const be = aiBackend();
         const s = await aiAgent.status(be);
         return { ...s, enabled: settings.aiEnabled, model: be.model, backend: be.kind,
-                 baseAiEnabled: settings.baseAiEnabled !== false };
+                 baseAiEnabled: settings.baseAiEnabled !== false,
+                 aiEngine: aiEngine(), ollamaModel: settings.ollamaModel || '' };
     });
 
     ipcMain.handle('ai:enable', async () => {
@@ -1888,13 +1923,7 @@ function registerIpc() {
             const text = await aiAgent.chat(messages, { ...aiBackend(), maxTokens: 420 });
             return { ok: true, text: text || 'No reply.' };
         } catch (e) {
-            return {
-                ok: false,
-                error: settings.baseAiEnabled !== false
-                    ? 'The built-in AI isn\'t ready yet — it may still be downloading its model. Try again shortly.'
-                    : 'LM Studio isn\'t answering yet. Install it, load the starter model ('
-                        + s.starter.model + '), click "Start Server", then ask again.',
-            };
+            return { ok: false, error: aiUnavailableMsg(aiBackend()) };
         }
     });
 
@@ -1908,11 +1937,7 @@ function registerIpc() {
         const be = aiBackend();
         const s = await aiAgent.status(be);
         if (!s.available) {
-            return {
-                error: be.kind === 'base'
-                    ? 'The built-in AI isn\'t ready yet — it may still be downloading its model. Try again shortly (or check that Ollama is running).'
-                    : 'LM Studio isn\'t reachable. Open LM Studio, load a model, then click "Start Server" (port 1234).',
-            };
+            return { error: aiUnavailableMsg(be) };
         }
         try {
             const appIds = Object.keys(APP_REGISTRY);
@@ -1952,6 +1977,40 @@ function registerIpc() {
         } catch {
             return { summary: prior };
         }
+    });
+
+    // Phase 16 — Ollama model management (status / list / pull) so the user can run
+    // a LARGER model through Ollama as a full LM Studio replacement.
+    ipcMain.handle('ollama:status', async () => {
+        if (!IS_LINUX) return { installed: false, running: false };
+        const installed = (await runShell('command -v ollama', { timeout: 4000 })).code === 0;
+        let running = false;
+        if (installed) {
+            const r = await runShell('curl -sf -m 3 http://127.0.0.1:11434/api/tags', { timeout: 5000 });
+            running = r.code === 0;
+        }
+        return { installed, running };
+    });
+
+    ipcMain.handle('ollama:list', async () => {
+        if (!IS_LINUX) return { models: [] };
+        const r = await runShell('ollama list 2>/dev/null', { timeout: 8000 });
+        // Skip the header row; first column is the model tag.
+        const models = (r.stdout || '').split('\n').slice(1)
+            .map((l) => l.trim().split(/\s+/)[0]).filter(Boolean);
+        return { models };
+    });
+
+    ipcMain.handle('ollama:pull', async (_e, model) => {
+        if (!IS_LINUX) return { ok: false, error: 'Ollama runs on Outlaw OS.' };
+        const name = String(model || '').trim();
+        // Ollama tags look like "qwen2.5-coder:7b" — strict charset, passed as an
+        // argv entry (no shell) so it can't be an injection.
+        if (!/^[a-z0-9][a-z0-9._:/-]{0,60}$/i.test(name)) return { ok: false, error: 'Invalid model name.' };
+        const labels = ['Preparing', 'Downloading model', 'Verifying', 'Finishing'];
+        const matchers = [null, /pulling|downloading|manifest/i, /verifying|writing/i, /success/i];
+        const r = await runStreamingJob('ollama', ['pull', name], labels, matchers);
+        return { ok: r.ok, error: r.ok ? '' : 'Pull failed. Check the model name and your connection.' };
     });
 
     ipcMain.handle('ai:confirm-action', async (_e, action) => {

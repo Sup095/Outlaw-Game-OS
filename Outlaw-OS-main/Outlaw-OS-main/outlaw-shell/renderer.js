@@ -1433,6 +1433,38 @@ async function sendAI() {
     recordAiTurn('assistant', t);
 }
 
+// Phase 16 — show the Ollama model row only when the Ollama engine is selected.
+function syncOllamaRow(engine) {
+    const row = $('#ollama-model-row');
+    if (row) row.style.display = (engine === 'ollama') ? '' : 'none';
+}
+
+// Phase 16 — pull a larger Ollama model and switch the engine to it.
+async function handleOllamaPull() {
+    const inp = $('#ollama-model');
+    const model = (inp ? inp.value : '').trim();
+    if (!model) { toast('Type a model tag first (e.g. qwen2.5-coder:7b).'); return; }
+    if (!api.ollama) { toast('Ollama support is unavailable.'); return; }
+    try {
+        const st = await api.ollama.status();
+        if (!st.installed) { toast('Ollama isn\'t installed on this system.'); return; }
+    } catch {}
+    // Select it first, so even a slow pull leaves Ollama configured as the engine.
+    await setSetting({ aiEngine: 'ollama', baseAiEnabled: false, ollamaModel: model });
+    loadingScreen.open('Pulling ' + model);
+    try {
+        const r = await api.ollama.pull(model);
+        loadingScreen.done(!!(r && r.ok));
+        toast(r && r.ok
+            ? (model + ' is ready — Ollama is now your AI engine.')
+            : ('Pull failed: ' + ((r && r.error) || 'unknown error')));
+    } catch (e) {
+        loadingScreen.done(false);
+        toast('Pull failed: ' + e.message);
+    }
+    await refreshAiStatus();
+}
+
 async function refreshAiStatus() {
     let s = { enabled: false, available: false };
     try { s = await api.ai.status(); } catch {}
@@ -1447,25 +1479,30 @@ async function refreshAiStatus() {
     if (toggle) toggle.checked = !!s.enabled;
     const baseToggle = $('#base-ai-toggle');
     if (baseToggle) baseToggle.checked = (s.baseAiEnabled !== false);
-    const builtIn = s.backend === 'base';
-    const where = builtIn ? 'the built-in AI' : 'LM Studio';
+    const backend = s.backend;   // 'base' | 'ollama' | 'lmstudio'
+    const where = backend === 'base' ? 'the built-in AI'
+        : backend === 'ollama' ? 'Ollama'
+        : 'LM Studio';
+    const waiting = backend === 'base'
+        ? 'Starting — the built-in model may still be downloading.'
+        : backend === 'ollama'
+            ? 'Waiting for Ollama — make sure it\'s running and the model is pulled.'
+            : 'Waiting for LM Studio — open it, load a model, click Start Server (port 1234).';
     const sub = $('#ai-sub');
     if (sub) sub.textContent = s.enabled
-        ? (s.available
-            ? 'Active · using ' + where
-            : (builtIn
-                ? 'Starting — the built-in model may still be downloading.'
-                : 'Waiting for LM Studio — open it, load a model, click Start Server (port 1234).'))
+        ? (s.available ? 'Active · using ' + where : waiting)
         : 'Off · the System Core + AI Assistant run locally on this machine';
     const modelSub = $('#ai-model-sub');
     if (modelSub) {
-        if (builtIn) {
+        if (backend === 'base') {
             modelSub.textContent = 'Built-in model: ' + (s.model || 'bundled') + ' — runs on this machine, no setup.';
+        } else if (backend === 'ollama') {
+            modelSub.textContent = 'Ollama model: ' + (s.model || '(none chosen)') + ' — pull a different one in AI engine settings.';
         } else if (s.enabled && s.available) {
             const loaded = (s.models && s.models[0]) || s.model || '(no model loaded)';
             modelSub.textContent = 'Loaded in LM Studio: ' + loaded + ' — swap models there.';
         } else {
-            modelSub.textContent = 'Turn off the built-in AI to use LM Studio — change the model there.';
+            modelSub.textContent = 'Switch the AI engine to LM Studio to use a model you load there.';
         }
     }
 }
@@ -1885,6 +1922,13 @@ async function loadSettings() {
     applyTheme(s.theme || 'green');
     const themeSel = $('#theme-select');
     if (themeSel) themeSel.value = s.theme || 'green';
+    // Phase 16 — AI engine + Ollama model. Set here (before enhanceSelects) so the
+    // custom dropdown renders the right value.
+    const engineSel = $('#ai-engine');
+    if (engineSel) engineSel.value = s.aiEngine || (s.baseAiEnabled !== false ? 'base' : 'lmstudio');
+    syncOllamaRow(engineSel ? engineSel.value : 'base');
+    const ollModelInput = $('#ollama-model');
+    if (ollModelInput) ollModelInput.value = s.ollamaModel || '';
     // LM Studio handles model selection itself — no dropdown to seed.
     $('#perf-toggle').checked = !!s.performanceMode;
     $('#update-repo').value = s.updateRepo || '';
@@ -2143,6 +2187,17 @@ function wire() {
     if (chatDel) chatDel.addEventListener('click', deleteAiChat);
     const refSel = $('#ai-ref-select');
     if (refSel) refSel.addEventListener('change', (e) => { const v = e.target.value; if (v) referenceChat(v); });
+
+    // Phase 16 — AI engine selector + Ollama model pull.
+    const engineSel = $('#ai-engine');
+    if (engineSel) engineSel.addEventListener('change', async (e) => {
+        const eng = e.target.value;
+        await setSetting({ aiEngine: eng, baseAiEnabled: eng === 'base' });
+        syncOllamaRow(eng);
+        refreshAiStatus();
+    });
+    const ollPull = $('#ollama-pull');
+    if (ollPull) ollPull.addEventListener('click', handleOllamaPull);
 
     // Apps panel search — type-as-you-go, no debounce needed (catalog is tiny).
     const appsSearchEl = $('#apps-search');
