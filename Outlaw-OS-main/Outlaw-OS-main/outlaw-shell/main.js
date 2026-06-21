@@ -104,6 +104,7 @@ const DEFAULT_SETTINGS = {
     ollamaModel: '',
     crtFx: false,            // CRT scanline/flicker effect OFF by default (crisp + readable)
     glow: false,             // text glow OFF by default (no discoloration)
+    reduceMotion: false,     // QoL — off decorative animations/transitions (a11y + low-end perf)
     // P1 — visual theme. 'green' = classic green-phosphor terminal (default,
     // unchanged for existing users). 'gold' = retro gold-on-gunmetal "sci-fi
     // fortress" look that matches Outlaw CodeMaker. Pure CSS-variable swap, so
@@ -909,6 +910,7 @@ const AI_SETTABLE = {
     theme: { values: ['green', 'gold', 'broken'] },
     crtFx: { bool: true },
     glow: { bool: true },
+    reduceMotion: { bool: true },
     performanceMode: { bool: true },
     vramSaverMode: { values: ['auto', 'off', 'lean', 'minimal'] },
     aiEngine: { values: ['base', 'lmstudio', 'ollama'] },

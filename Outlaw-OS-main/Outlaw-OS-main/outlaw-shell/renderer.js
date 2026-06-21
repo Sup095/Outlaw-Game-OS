@@ -1487,6 +1487,8 @@ function recommendSettings(specs, status, answers) {
     const fancy = priority === 'visuals' && (!vramGb || vramGb >= 4);
     patch.crtFx = fancy;
     patch.glow = fancy;
+    // Reduce motion when going for low-power or running heavy apps alongside.
+    patch.reduceMotion = priority === 'lowpower' || multitask;
     // CPU governor + background update checks.
     patch.performanceMode = priority === 'performance';
     patch.autoCheck = priority !== 'lowpower';
@@ -1517,6 +1519,7 @@ async function tuneSettings() {
     const bits = [
         'VRAM saver ' + patch.vramSaverMode,
         'effects ' + (patch.crtFx ? 'on' : 'off'),
+        'reduce motion ' + (patch.reduceMotion ? 'on' : 'off'),
         'performance ' + (patch.performanceMode ? 'on' : 'off'),
         patch.aiEngine ? ('AI engine ' + patch.aiEngine) : null,
         'update checks ' + (patch.autoCheck ? 'on' : 'off'),
@@ -1983,8 +1986,11 @@ async function loadSettings() {
     try { s = await api.settings.get(); } catch {}
     document.body.classList.toggle('crt', !!s.crtFx);
     document.body.classList.toggle('glow', !!s.glow);
+    document.body.classList.toggle('reduce-motion', !!s.reduceMotion);
     $('#crt-toggle').checked = !!s.crtFx;
     $('#glow-toggle').checked = !!s.glow;
+    const rmToggle = $('#reduce-motion-toggle');
+    if (rmToggle) rmToggle.checked = !!s.reduceMotion;
     // P1 — theme. 'gold' adds body.theme-gold which re-points the CSS palette
     // variables to the gold-on-gunmetal scheme. Default 'green' = no class.
     applyTheme(s.theme || 'green');
@@ -2004,6 +2010,9 @@ async function loadSettings() {
     if (chanEl) chanEl.value = s.updateChannel || 'stable';
     $('#auto-check').checked = !!s.autoCheck;
     $('#sponsor-url').value = s.sponsorUrl || '';
+    // Surface the support card on the dashboard only when a URL is configured.
+    const dashSupport = $('#dash-support');
+    if (dashSupport) dashSupport.hidden = !((s.sponsorUrl || '').trim());
     // P2 — stability reporting: label the current version + reflect any
     // prior local vote. The community tally is fetched lazily (button /
     // first Settings open) so there's zero network cost otherwise.
@@ -2294,6 +2303,7 @@ function wire() {
     // Settings toggles
     $('#crt-toggle').addEventListener('change', (e) => { document.body.classList.toggle('crt', e.target.checked); setSetting({ crtFx: e.target.checked }); });
     $('#glow-toggle').addEventListener('change', (e) => { document.body.classList.toggle('glow', e.target.checked); setSetting({ glow: e.target.checked }); });
+    { const rm = $('#reduce-motion-toggle'); if (rm) rm.addEventListener('change', (e) => { document.body.classList.toggle('reduce-motion', e.target.checked); setSetting({ reduceMotion: e.target.checked }); }); }
     const _themeSel = $('#theme-select');
     if (_themeSel) _themeSel.addEventListener('change', (e) => {
         const t = e.target.value === 'gold' ? 'gold' : 'green';

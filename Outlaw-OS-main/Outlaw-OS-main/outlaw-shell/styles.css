@@ -157,6 +157,19 @@ body.theme-gold .card {
     align-self: center;
 }
 
+/* QoL — Reduce motion (Settings → Appearance). Near-instant animations/transitions
+   everywhere, which also calms the Broken-mode flicker/tear/jitter and trims work on
+   low-end GPUs. Functional UI uses [hidden] toggles, not transitions, so nothing
+   breaks. 0.001ms (not "none") keeps any animation-end handlers firing. */
+body.reduce-motion *,
+body.reduce-motion *::before,
+body.reduce-motion *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+}
+
 /* Live-mode ("broken mode", basic form) — the live ISO is a limited preview, so
  * flag it and let locked controls read as deliberately disabled. The full
  * glitch/fake-error aesthetic + a selectable "Broken" theme land in a later
