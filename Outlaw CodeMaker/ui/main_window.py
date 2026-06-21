@@ -330,9 +330,11 @@ class MainWindow(QMainWindow):
         self._conn_timer.timeout.connect(self.orch.refresh_connection_async)
         self._conn_timer.start()
 
-        # Hardware (VRAM/RAM) readout, polled every 2s.
+        # Hardware (VRAM/RAM) readout. Phase QoL: 3s (was 2s) is plenty for a status
+        # badge and trims a third of the NVML/psutil polling; it also pauses while the
+        # window is minimized (see changeEvent) to honour the lightweight invariant.
         self._hw_timer = QTimer(self)
-        self._hw_timer.setInterval(2_000)
+        self._hw_timer.setInterval(3_000)
         self._hw_timer.timeout.connect(self._refresh_hardware)
         self._hw_timer.start()
         QTimer.singleShot(400, self._refresh_hardware)
@@ -792,6 +794,18 @@ class MainWindow(QMainWindow):
                 self._history_recall(1)
                 return True
         return super().eventFilter(obj, event)
+
+    def changeEvent(self, event):
+        # Phase QoL — pause the hardware poll while minimized (resume + refresh on
+        # restore) so an idle, minimized window costs nothing.
+        from PyQt6.QtCore import QEvent
+        if event.type() == QEvent.Type.WindowStateChange and hasattr(self, "_hw_timer"):
+            if self.windowState() & Qt.WindowState.WindowMinimized:
+                self._hw_timer.stop()
+            elif not self._hw_timer.isActive():
+                self._hw_timer.start()
+                self._refresh_hardware()
+        super().changeEvent(event)
 
     def _history_recall(self, direction: int) -> None:
         hist = self._prompt_history
