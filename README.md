@@ -35,10 +35,11 @@ Outlaw Game OS is built in the open, one phase at a time. Each **completed** roa
 
 ```
 Foundations   ▰▰▰▰▰▰▰▰▰▰  done — 4 roadmaps, all shipped & tested
-This cycle    ▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▱▱  Completeness & Polish — release-readiness stretch (phases 17–18) → v2.1.0
+Completeness  ▰▰▰▰▰▰▰▰▰▰  done — 16 phases; the desktop + dev tool are feature-complete
+This cycle    ▰▰▰▰▱▱▱▱▱▱  Hardening & Capability — fixing what real testing surfaced + adding capability → v2.1.0
 ```
 
-> **Legend:** ✅ shipped & in your hands · 🚧 building now · 🔭 on the horizon
+> **Legend:** ✅ shipped & in your hands · 🚧 building / diagnosing now · 🔭 planned · 🧪 experimental (post-1.0)
 
 ### ✅ Shipped & solid — completed roadmaps
 
@@ -49,10 +50,12 @@ This cycle    ▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▱▱  Completene
 | 🛰 | **System Core** | The sci-fi centerpiece — live telemetry, three-tier diagnostics, scheduled checks, cold-mode dialogue + local TTS, Live AI with tool calls, two-layer VRAM tiering. |
 | ⚙ | **Release & boot hardening** | Automated ISO build + publish on tag, live-ISO welcome card, GParted in the live environment, on-demand AUR install for `steamcmd`, the first-boot setup wizard, a boot crash-guard, and the long boot-anywhere fight (real hardware **and** VM). |
 | 🔄 | **Updates, channels & control** | Package/driver updater · OS self-updater with one-click rollback · **stable / beta** channels · *Works / Broken* community testing · System Core **System Control** panel · CI package preflight · **Tune This PC** (hardware scan + thermal-watched stress test + auto-settings) · **low-VRAM CodeMaker** (spills the model into system RAM, right-sizes the model, caches context to disk). |
+| ✨ | **Completeness & Polish** *(16 phases)* | Made the whole thing feel **finished**: Gold + **Broken** themes, app auto-discovery, the real-hardware installer / Wi-Fi / window-management shakedown, **AI you can actually run** (tiny built-in model + LM Studio), a task manager, help + quickstart, the one-click reviewer, a cinematic boot, driver profiles, loading screens, **AI that runs your system**, a ground-up **Dev session rebuild**, the **AI Assistant overhaul** (Cr1tt3r + V4rm1nt, persistent chats, smart installer), a **system tuner**, **accessibility** (text size, reduce motion), and **Ollama as a full LM Studio replacement**. |
 
-### 🚧 Completeness & Polish — current cycle *(the road to v2.1)*
+<details>
+<summary><b>✅ Completeness &amp; Polish — all 16 phases shipped</b> (click to expand the detail)</summary>
 
-The foundations boot and run; this cycle makes the desktop feel *finished* and rock-solid on real hardware. We keep iterating here through the `2.0.x` betas — when it's genuinely complete, this becomes the **v2.1** release. When a phase ships, the next moves to *building now*.
+The cycle that made the desktop + dev tool feel **finished** — every phase below shipped across the `2.0.x` betas.
 
 | | Phase | What you get |
 |:--:|:--|:--|
@@ -72,12 +75,40 @@ The foundations boot and run; this cycle makes the desktop feel *finished* and r
 | ✅ | **14 · Dev session rebuild** | A ground-up rework of the Dev session (Outlaw CodeMaker), built in subphases: **14a** shell basics (fill-screen, session switching, LM Studio / Godot launchers, settings) · **14b** the project "brain" — a game **description sheet** + a living **roadmap** + an auto-updating **file tree** · **14c** conversation compaction · **14d** a dev-vs-desktop model picker + base-AI assist · **14e** more low-resource features · **14g** a real dev-session shell (a UI *before* you pick a project — Godot + LM Studio setup, the base AI, settings, exit — so you can actually get a game going) · **14h** consistent theming everywhere (greeter + CodeMaker match your chosen look) · **14f** polish + testing. Question-driven. |
 | ✅ | **15 · AI Assistant overhaul** | Two named AI personas — **Cr1tt3r** on the desktop, **V4rm1nt** in the dev session — plus **persistent chats** you can keep, delete and reference from one another (surviving updates) in both the Desktop assistant and CodeMaker, and an **installer that installs what you choose**: pick from described packages, or describe what you want and it says whether it's viable and installs it. *(Expanding.)* |
 | ✅ | **16 · Ollama as a full LM Studio replacement** | For PCs that **can't run LM Studio** (e.g. CPUs with only AVX1), let **Ollama** stand in as a full local-model backend for the desktop *and* dev session — not just the built-in base AI. |
-| 🔭 | **17 · Self-update service (feasibility)** | An experiment in letting Outlaw keep itself — and its dependencies — current automatically, and quietly roll in fixes. We're testing whether it can be made reliable and safe; it may or may not stay. |
-| 🔭 | **18 · Release readiness → v2.1.0** | A final fixing + **comprehensive testing** pass — including outstanding bugs like the installer's **automatic partition resizing** — to put the constant bugs to rest, leading to **v2.1.0 — the first fully-released version.** Updates continue after, but the rough-edges era ends here. |
+
+</details>
+
+### 🚧 Hardening & Capability — current cycle *(→ v2.1.0)*
+
+Real-world testing has begun. This cycle squashes the bugs testers actually hit and adds capability + quality-of-life, iterating through the `2.0.x` betas until it's solid enough to drop the `-beta` and become **v2.1.0**.
+
+**🔧 Fixes from testing**
+
+| | What | |
+|:--:|:--|:--|
+| ✅ | CodeMaker **New Game** | create-crash fixed + wizard pages scroll (no more clipped descriptions) |
+| ✅ | **Broken mode** | now actually applies (the theme selector was falling through to green) |
+| ✅ | **Report a problem** | one combined, deduped error/warning log — desktop + dev session + Xorg + journal — that you download or send as a pre-filled GitHub issue |
+| 🚧 | **Boot crash-loops** | desktop + CodeMaker bouncing to the picker — diagnosing via the new log |
+| 🚧 | Installer **"keep my other OS"** | "couldn't shrink partition" — a careful, tested fix is next |
+| 🚧 | **Hotswap** | needs a manual second reboot to take — fixing |
+
+**🧠 Capability + quality-of-life**
+
+- Base AIs with **near-complete control of settings + the system** (safeguarded — they may *read* system files but never alter them), and **V4rm1nt** gets the same — but **sleeps/rests** to free all resources when CodeMaker (or another model) is active.
+- **RAM-only AI** for machines without (or not using) VRAM, with **automatic fallback** when no VRAM is found, and **AMD / Intel GPU** support alongside Nvidia.
+- **AI personalities** (and naming themselves when they switch models) · assistants that **run in the background and notify you** · **storage-as-RAM** · a from-scratch **updater overhaul** that fully reinstalls while keeping all your data + settings · a **UI + loading-screens** pass · an **offline mode**.
+
+### 🧪 Experimental — post-1.0
+
+After **v2.1.0** the updater runs regularly, so these ship as ongoing experiments (more added then):
+
+- **Slow-but-light AI** — let the AI take longer / run in stages so it uses less VRAM or RAM at any one moment, letting lower-end machines run better behaviour than they otherwise could.
+- **Self-update service (feasibility)** — letting Outlaw keep itself + its dependencies current automatically; we're testing whether it can be made reliable and safe.
 
 ### 🌌 Beyond
 
-More project templates, deeper Godot integration, broader hardware support, and quality-of-life polish — steered by what testers report through the in-OS stability reporting. Ideas and bug reports are always welcome on the [Issues](../../issues) page.
+More project templates, deeper Godot integration, broader hardware support, a future **ultra-lightweight stripped-down edition** for older machines, and ongoing quality-of-life polish — steered by what testers report through the in-OS reporting. Ideas and bug reports are always welcome on the [Issues](../../issues) page.
 
 ---
 
