@@ -116,8 +116,11 @@ function parseIntent(raw) {
 
 // Ask the model. Returns a parsed intent { tool, arg, text }.
 // Uses the OpenAI-compatible /v1/chat/completions endpoint.
-async function ask(prompt, { model, appIds, machine, baseUrl, history, summary } = {}) {
+async function ask(prompt, { model, appIds, machine, baseUrl, history, summary, sysSettings } = {}) {
     const messages = [{ role: 'system', content: systemPrompt(appIds || [], machine) }];
+    // QoL — current settings snapshot so the assistant is state-aware (answers
+    // "what theme am I on?" and won't redundantly re-set things).
+    if (sysSettings) messages.push({ role: 'system', content: String(sysSettings).slice(0, 600) });
     // Phase 15b — persistent-chat memory: an optional summary of older turns plus
     // the recent window, so Cr1tt3r can follow context across a conversation
     // (e.g. "open it" after naming an app). Caller supplies both; both optional.

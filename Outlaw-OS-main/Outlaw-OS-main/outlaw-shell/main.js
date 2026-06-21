@@ -780,6 +780,20 @@ function machineSummary(s) {
         + `Starter model that runs on anything: ${s.starter.model}.`;
 }
 
+// QoL — a one-line snapshot of the user's current settings so Cr1tt3r is aware of
+// the system state (can answer "what theme am I on?" and avoid redundant changes).
+function settingsSummary() {
+    const onoff = (v) => (v ? 'on' : 'off');
+    return 'Current settings — '
+        + `AI engine: ${aiEngine()}; `
+        + (aiEngine() === 'ollama' ? `Ollama model: ${settings.ollamaModel || '(none)'}; ` : '')
+        + `theme: ${settings.theme || 'system'}; `
+        + `CRT: ${onoff(settings.crtFx)}; glow: ${onoff(settings.glow)}; `
+        + `reduce motion: ${onoff(settings.reduceMotion)}; text size: ${settings.uiScale || 1}; `
+        + `VRAM saver: ${settings.vramSaverMode || 'auto'}; performance mode: ${onoff(settings.performanceMode)}; `
+        + `update checks: ${onoff(settings.autoCheck)}; voice: ${onoff(settings.coreVoiceEnabled)}.`;
+}
+
 // Phase 13.2 / 16 — which local AI backend the desktop uses right now. Three
 // engines: 'base' (tiny bundled Ollama model, default — runs on anything),
 // 'lmstudio' (a model loaded in LM Studio), or 'ollama' (a LARGER model pulled
@@ -2033,7 +2047,7 @@ function registerIpc() {
         try {
             const appIds = Object.keys(APP_REGISTRY);
             const machine = machineSummary(await gatherSpecs());
-            const intent = await aiAgent.ask(prompt, { ...be, appIds, machine, history, summary });
+            const intent = await aiAgent.ask(prompt, { ...be, appIds, machine, history, summary, sysSettings: settingsSummary() });
             return await executeIntent(intent);
         } catch (e) {
             return { error: e.message };
