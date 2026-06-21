@@ -72,9 +72,56 @@ COLORS_GREEN = {
 }
 
 
+# Phase 14h — "Broken" palette, mirroring the desktop shell's body.theme-broken:
+# a sickly washed-out phosphor with failing-red hairlines. Same keys as COLORS so
+# the QSS template + palette code work unchanged. Selected when the effective
+# theme is "broken" (usually via "Match system theme" when the desktop is broken).
+COLORS_BROKEN = {
+    "bg":         "#060806",
+    "bg_alt":     "#0b0f0b",
+    "panel":      "#0b0f0b",
+    "panel_hi":   "#0e140e",
+    "border":     "#6b1b1b",   # failing red hairlines
+    "border_hi":  "#8a2a2a",
+    "text":       "#9ad48f",
+    "muted":      "#5f7d5a",
+    "accent":     "#4be04b",   # sickly, washed-out phosphor
+    "accent2":    "#6be06b",
+    "accent_dim": "#2a7a2a",
+    "ok":         "#6be06b",
+    "warn":       "#ffae3b",
+    "err":        "#ff3b3b",
+    "info":       "#5ad0a0",
+    "thought_bg": "#0a120a",
+    "code_bg":    "#050805",
+    "code_border": "#6b1b1b",
+}
+
+_PALETTES = {"gold": COLORS, "green": COLORS_GREEN, "broken": COLORS_BROKEN}
+
+
+def _read_system_theme() -> str:
+    """Read the desktop's chosen theme from ~/.outlaw-theme (green|gold|broken),
+    which the Outlaw OS shell mirrors there. Default 'gold' (CodeMaker's house
+    style) when absent/unreadable — e.g. running off a non-Outlaw machine."""
+    try:
+        from pathlib import Path
+        raw = (Path.home() / ".outlaw-theme").read_text(encoding="utf-8").strip().lower()
+        if raw in _PALETTES:
+            return raw
+    except Exception:  # noqa: BLE001 — theme read must never crash startup
+        pass
+    return "gold"
+
+
 def _palette_for(ui_config: dict) -> dict:
-    """Pick the colour palette from config. Default = gold-on-gunmetal."""
-    return COLORS_GREEN if (ui_config or {}).get("theme") == "green" else COLORS
+    """Pick the colour palette. 'system' (the default) follows the desktop's
+    chosen theme so the Dev tool matches the rest of the OS; 'gold' / 'green' /
+    'broken' pin a specific look regardless of the system."""
+    theme = (ui_config or {}).get("theme") or "system"
+    if theme == "system":
+        theme = _read_system_theme()
+    return _PALETTES.get(theme, COLORS)
 
 
 QSS = """

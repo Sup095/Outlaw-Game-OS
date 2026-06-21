@@ -121,6 +121,17 @@
                 <h2>System</h2>
                 <div id="sysinfo" class="dim mono">Loading…</div>
             </div>
+            <!-- Support card — only shown when a sponsor/donate URL is configured
+                 (Settings → Support Development), so it's never naggy by default. -->
+            <div class="card" id="dash-support" hidden>
+                <div class="row" style="align-items:center;gap:12px;flex-wrap:wrap;">
+                    <div style="flex:1;min-width:200px;">
+                        <h3 style="margin:0;">♥ Support Outlaw OS</h3>
+                        <div class="dim" style="font-size:12px;margin-top:3px;">Built in the open by a tiny team. If it's useful to you, a tip keeps it going — thank you.</div>
+                    </div>
+                    <button class="primary" data-action="donate" type="button">Support</button>
+                </div>
+            </div>
             <h3>Launchers</h3>
             <div class="grid apps" id="launchers"></div>
         </section>
@@ -466,7 +477,7 @@
 
         <!-- AI -->
         <section class="screen" id="screen-ai">
-            <div class="row"><h2>AI Assistant</h2><span class="spacer"></span>
+            <div class="row"><h2>AI Assistant</h2><span class="ai-name" id="ai-name">✦ Cr1tt3r</span><span class="spacer"></span>
                 <span class="badge off" id="ai-badge">offline</span>
             </div>
 
@@ -510,9 +521,15 @@
             </div>
 
             <div class="card">
+                <div class="row" id="ai-chats-bar" style="gap:6px;align-items:center;margin-bottom:8px;flex-wrap:wrap;">
+                    <select id="ai-chat-select" title="Switch conversation" style="width:auto;min-width:160px;flex:1;"></select>
+                    <button id="ai-chat-new" type="button" title="Start a new conversation">+ New</button>
+                    <button id="ai-chat-delete" type="button" title="Delete this conversation">Delete</button>
+                    <select id="ai-ref-select" title="Reference another chat into this one — Cr1tt3r will draw on it" style="width:auto;min-width:130px;"></select>
+                </div>
                 <div id="ai-log"></div>
                 <div class="row" style="margin-top:10px;">
-                    <input id="ai-in" placeholder="Ask anything, or 'open steam', 'search ...', 'list files'…" autocomplete="off">
+                    <input id="ai-in" placeholder="Ask anything, or 'install krita', 'tune my settings', 'open apps'…" autocomplete="off">
                     <button class="primary" data-action="ai-send">Send</button>
                 </div>
             </div>
@@ -578,9 +595,43 @@
                     <div class="label">Enable on-device AI<small id="ai-sub">Off · the System Core + AI Assistant run locally on this machine</small></div>
                     <label class="switch"><input type="checkbox" id="ai-toggle"><span class="track"></span></label>
                 </div>
-                <div class="setting">
-                    <div class="label">Use the built-in AI<small id="base-ai-sub">On · a small bundled model that runs on anything — no setup. Turn off to use LM Studio instead.</small></div>
+                <div class="setting" style="display:none;">
+                    <div class="label">Use the built-in AI<small id="base-ai-sub">superseded by AI engine below</small></div>
                     <label class="switch"><input type="checkbox" id="base-ai-toggle" checked><span class="track"></span></label>
+                </div>
+                <div class="setting">
+                    <div class="label">AI engine<small id="ai-engine-sub">What runs the model on this PC.</small></div>
+                    <select id="ai-engine" style="width:auto;min-width:210px;">
+                        <option value="base">Built-in · tiny model, runs on anything</option>
+                        <option value="lmstudio">LM Studio · load your own model</option>
+                        <option value="ollama">Ollama · a bigger model, no LM Studio</option>
+                    </select>
+                </div>
+                <div class="setting" id="ollama-model-row" style="display:none;">
+                    <div class="label">Ollama model<small id="ollama-model-sub">Model tag to run (e.g. qwen2.5-coder:7b). Pull downloads it, then uses it.</small></div>
+                    <div class="row" style="gap:6px;align-items:center;">
+                        <input id="ollama-model" placeholder="qwen2.5-coder:7b" autocomplete="off" style="width:170px;">
+                        <button id="ollama-pull" type="button">Pull &amp; use</button>
+                    </div>
+                </div>
+                <div class="setting" style="display:block;border-top:1px solid var(--line,#2a3242);margin-top:8px;padding-top:10px;">
+                    <div class="label" style="margin-bottom:8px;">Let Cr1tt3r tune everything for you<small>Answer two quick questions and Cr1tt3r picks the best settings for your hardware — visual effects, VRAM saver, performance, update checks and the AI engine — so you don't have to.</small></div>
+                    <div class="row" style="gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:8px;">
+                        <span class="muted">Priority:</span>
+                        <select id="tune-priority" style="width:auto;min-width:170px;">
+                            <option value="balanced">Balanced (recommended)</option>
+                            <option value="performance">Max performance</option>
+                            <option value="lowpower">Quiet &amp; low-power</option>
+                            <option value="visuals">Best visuals</option>
+                        </select>
+                        <span class="muted">Run heavy apps at once?</span>
+                        <select id="tune-multitask" style="width:auto;min-width:80px;">
+                            <option value="no">No</option>
+                            <option value="yes">Yes</option>
+                        </select>
+                        <button class="primary" id="tune-apply" type="button">Tune my settings</button>
+                    </div>
+                    <div id="tune-result" class="muted" style="font-size:11px;"></div>
                 </div>
                 <div class="setting">
                     <div class="label">Current model<small id="ai-model-sub">Built-in model, or whatever you load in LM Studio when the built-in AI is off.</small></div>
@@ -653,6 +704,19 @@
                 <div class="setting">
                     <div class="label">Phosphor glow<small>Subtle text glow. Off for maximum readability</small></div>
                     <label class="switch"><input type="checkbox" id="glow-toggle"><span class="track"></span></label>
+                </div>
+                <div class="setting">
+                    <div class="label">Reduce motion<small>Turns off decorative animations + transitions — easier on the eyes and lighter on low-end PCs</small></div>
+                    <label class="switch"><input type="checkbox" id="reduce-motion-toggle"><span class="track"></span></label>
+                </div>
+                <div class="setting">
+                    <div class="label">Text size<small>Scales the whole interface up or down — easier to read</small></div>
+                    <select id="ui-scale" style="width:auto;min-width:140px;">
+                        <option value="0.9">Compact</option>
+                        <option value="1">Normal</option>
+                        <option value="1.15">Large</option>
+                        <option value="1.3">Extra large</option>
+                    </select>
                 </div>
             </div>
 

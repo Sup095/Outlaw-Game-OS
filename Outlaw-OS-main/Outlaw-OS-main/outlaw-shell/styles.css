@@ -42,43 +42,63 @@ body.theme-broken {
     --ok:         #6be06b;
     --text:       #9ad48f;   /* desaturated, slightly off */
     --term-rgb:   75, 224, 75;
-    animation: brk-flicker 7s steps(40) infinite;   /* unsteady power */
+    animation: brk-flicker 9s steps(64) infinite;   /* erratic, dying power */
 }
-/* Faint red instability vignette + a rolling scanline tear. Both fixed,
- * non-interactive, and sit under modal overlays. */
+/* Layered overlay: persistent CRT scanlines (static = free) + a red instability
+ * vignette that slowly pulses like a failing power supply. Fixed + non-interactive,
+ * sits under modal overlays. */
 body.theme-broken::before {
     content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 35;
-    background: radial-gradient(ellipse at 50% 50%, transparent 52%, rgba(150, 0, 0, 0.16) 100%);
+    background:
+        repeating-linear-gradient(0deg, rgba(0,0,0,0.22) 0, rgba(0,0,0,0.22) 1px, transparent 2px, transparent 3px),
+        radial-gradient(ellipse at 50% 50%, transparent 46%, rgba(150, 0, 0, 0.20) 100%);
+    animation: brk-pulse 5s ease-in-out infinite;
 }
+/* A rolling signal-loss band — brighter, with a red chromatic edge. */
 body.theme-broken::after {
-    content: ''; position: fixed; left: 0; right: 0; height: 16px; pointer-events: none; z-index: 36;
-    background: linear-gradient(rgba(75,224,75,0), rgba(75,224,75,0.10), rgba(75,224,75,0));
-    animation: brk-tear 6.5s linear infinite;
+    content: ''; position: fixed; left: 0; right: 0; height: 24px; pointer-events: none; z-index: 36;
+    background: linear-gradient(rgba(75,224,75,0), rgba(130,255,130,0.16) 38%, rgba(255,45,45,0.12) 62%, rgba(75,224,75,0));
+    animation: brk-tear 7.5s linear infinite;
 }
+/* Erratic brownouts — a couple of deep dips per cycle where it nearly cuts out. */
 @keyframes brk-flicker {
     0%, 100% { opacity: 1; }
-    7% { opacity: .93; }  8% { opacity: 1; }
-    42% { opacity: .87; } 43% { opacity: 1; }
-    73% { opacity: .96; } 74% { opacity: 1; }
+    3% { opacity: .80; }  4% { opacity: 1; }
+    11% { opacity: .95; } 12% { opacity: .62; } 13% { opacity: 1; }
+    37% { opacity: .90; } 38% { opacity: 1; }
+    58% { opacity: .85; } 59% { opacity: 1; }
+    70% { opacity: .50; } 71% { opacity: 1; }
+    88% { opacity: .93; } 89% { opacity: 1; }
 }
-@keyframes brk-tear { 0% { top: -6%; } 100% { top: 106%; } }
-/* Headings glitch — a chromatic split, jittering once a cycle. Scoped to
- * headings so body text stays readable. */
-body.theme-broken h2, body.theme-broken h3 {
-    text-shadow: 1px 0 rgba(255, 0, 0, 0.5), -1px 0 rgba(0, 200, 255, 0.4);
-    animation: brk-jitter 5.5s steps(1) infinite;
+@keyframes brk-pulse { 0%, 100% { opacity: .6; } 50% { opacity: 1; } }
+@keyframes brk-tear { 0% { top: -8%; } 100% { top: 108%; } }
+/* Headings glitch — heavier chromatic split + a hard displacement/skew once a
+ * cycle. Scoped to headings so body text stays readable. */
+body.theme-broken h1, body.theme-broken h2, body.theme-broken h3 {
+    text-shadow: 1.5px 0 rgba(255, 0, 0, 0.55), -1.5px 0 rgba(0, 200, 255, 0.45);
+    animation: brk-jitter 4.5s steps(1) infinite;
 }
 @keyframes brk-jitter {
-    0%, 49%, 53%, 100% { transform: translate(0, 0); }
-    50% { transform: translate(-2px, 1px); }
-    51% { transform: translate(2px, -1px); }
-    52% { transform: translate(-1px, 0); }
+    0%, 45%, 56%, 100% { transform: translate(0, 0); }
+    47% { transform: translate(-3px, 1px) skewX(-7deg); }
+    49% { transform: translate(3px, -1px) skewX(5deg); }
+    52% { transform: translate(-2px, 0); }
+    54% { transform: translate(2px, 1px); }
 }
+/* Both the OS "Reduce motion" setting and the OS-level preference calm it down to
+ * just the palette (no flicker/tear/jitter). */
 @media (prefers-reduced-motion: reduce) {
     body.theme-broken,
+    body.theme-broken::before,
     body.theme-broken::after,
-    body.theme-broken h2, body.theme-broken h3 { animation: none; }
+    body.theme-broken h1, body.theme-broken h2, body.theme-broken h3 { animation: none; }
 }
+body.reduce-motion.theme-broken,
+body.reduce-motion.theme-broken::before,
+body.reduce-motion.theme-broken::after,
+body.reduce-motion.theme-broken h1,
+body.reduce-motion.theme-broken h2,
+body.reduce-motion.theme-broken h3 { animation: none !important; }
 
 /* ===========================================================================
  * Phase 12 — loading screen overlay (installs / long jobs). Two panes: phase
@@ -143,6 +163,34 @@ body.theme-gold h3 {
 body.theme-gold .card {
     border-top: 1px solid var(--term-faint);
     background-image: linear-gradient(180deg, rgba(224, 179, 65, 0.03), transparent 64px);
+}
+
+/* Phase 15a — the desktop assistant's fixed persona name (Cr1tt3r), shown in the
+   AI Assistant header. Uses the palette accent so it recolors with the theme. */
+.ai-name {
+    color: var(--term);
+    font-weight: 700;
+    letter-spacing: 1px;
+    font-size: 13px;
+    opacity: 0.9;
+    margin-left: 10px;
+    align-self: center;
+}
+
+/* QoL — Reduce motion (Settings → Appearance). Near-instant animations/transitions
+   everywhere, which also calms the Broken-mode flicker/tear/jitter and trims work on
+   low-end GPUs. Functional UI uses [hidden] toggles, not transitions, so nothing
+   breaks. 0.001ms (not "none") keeps any animation-end handlers firing. */
+body.reduce-motion,
+body.reduce-motion::before,
+body.reduce-motion::after,
+body.reduce-motion *,
+body.reduce-motion *::before,
+body.reduce-motion *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
 }
 
 /* Live-mode ("broken mode", basic form) — the live ISO is a limited preview, so
@@ -337,7 +385,11 @@ h3 { font-size: 13px; text-transform: uppercase; color: var(--term-dim); }
 .screen.active { display: block; animation: fade .15s ease; }
 @keyframes fade { from { opacity: 0; } to { opacity: 1; } }
 
-.card { background: var(--panel-2); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; margin-bottom: 16px; }
+.card { background: var(--panel-2); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; margin-bottom: 16px;
+    /* Subtle depth — a faint accent top-highlight + a soft drop shadow. Static
+       (no blur filter / no animation) so it's cheap on low-end GPUs, and recolors
+       with the theme via --term-rgb. */
+    box-shadow: 0 1px 0 rgba(var(--term-rgb), 0.05) inset, 0 6px 18px rgba(0, 0, 0, 0.28); }
 .grid { display: grid; gap: 12px; }
 .grid.cols-2 { grid-template-columns: 1fr 1fr; }
 .grid.cols-3 { grid-template-columns: repeat(3, 1fr); }

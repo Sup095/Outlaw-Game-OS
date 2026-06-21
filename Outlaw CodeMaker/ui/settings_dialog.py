@@ -76,6 +76,14 @@ class SettingsDialog(QDialog):
         self.url_edit = QLineEdit(config["lm_studio"]["base_url"])
         self.model_edit = QLineEdit(config["lm_studio"].get("model", "local-model"))
         self.model_edit.setPlaceholderText("local-model = auto-detect the loaded model")
+        # Phase 16 — one-click engine preset. CodeMaker's client is OpenAI-compatible,
+        # so pointing the URL at Ollama (port 11434) runs models through Ollama as a
+        # full LM Studio replacement — for CPUs that can't run LM Studio (AVX1-only).
+        self.engine_combo = QComboBox()
+        self.engine_combo.addItem("LM Studio · port 1234", "lmstudio")
+        self.engine_combo.addItem("Ollama · port 11434 (for AVX1-only CPUs)", "ollama")
+        self.engine_combo.setCurrentIndex(1 if "11434" in (config["lm_studio"]["base_url"] or "") else 0)
+        self.engine_combo.currentIndexChanged.connect(self._on_engine_changed)
         self.temp_spin = QDoubleSpinBox()
         self.temp_spin.setRange(0.0, 2.0)
         self.temp_spin.setSingleStep(0.1)
@@ -105,16 +113,19 @@ class SettingsDialog(QDialog):
         # the classic phosphor look that matches the desktop shell. Applies on
         # next launch (no live re-style, to keep things simple and crash-free).
         self.theme_combo = QComboBox()
-        self.theme_combo.addItem("Gold Gunmetal · sci-fi fortress (default)", "gold")
+        self.theme_combo.addItem("Match system theme · follows the desktop (default)", "system")
+        self.theme_combo.addItem("Gold Gunmetal · sci-fi fortress", "gold")
         self.theme_combo.addItem("Green Phosphor · classic terminal", "green")
-        current_theme = "green" if (config.get("ui") or {}).get("theme") == "green" else "gold"
+        self.theme_combo.addItem("Broken · sickly, barely-holding-together", "broken")
+        current_theme = (config.get("ui") or {}).get("theme") or "system"
         for idx in range(self.theme_combo.count()):
             if self.theme_combo.itemData(idx) == current_theme:
                 self.theme_combo.setCurrentIndex(idx)
                 break
 
         form.addRow("Godot project folder", self.project_row)
-        form.addRow("LM Studio URL", self.url_edit)
+        form.addRow("AI engine", self.engine_combo)
+        form.addRow("Backend URL", self.url_edit)
         form.addRow("Model", self.model_edit)
         form.addRow("Temperature", self.temp_spin)
         form.addRow("Aggressive VRAM saver", self.vram_combo)
@@ -146,6 +157,15 @@ class SettingsDialog(QDialog):
         layout.addWidget(hint)
         layout.addLayout(btns)
 
+    def _on_engine_changed(self, _idx: int) -> None:
+        # Fill the backend URL for the chosen engine; the user can still edit it.
+        if self.engine_combo.currentData() == "ollama":
+            self.url_edit.setText("http://127.0.0.1:11434/v1")
+            self.model_edit.setPlaceholderText("an Ollama tag, e.g. qwen2.5-coder:7b")
+        else:
+            self.url_edit.setText("http://localhost:1234/v1")
+            self.model_edit.setPlaceholderText("local-model = auto-detect the loaded model")
+
     def _save(self) -> None:
         cfg = copy.deepcopy(self._config)
         cfg["agent"]["workspace_root"] = self.project_row.text() or cfg["agent"]["workspace_root"]
@@ -155,6 +175,6 @@ class SettingsDialog(QDialog):
         cfg.setdefault("vision", {})["godot_window_title_match"] = self.title_edit.text() or "Godot"
         cfg.setdefault("godot", {})["log_path"] = self.log_row.text()
         cfg.setdefault("vram_saver", {})["mode"] = self.vram_combo.currentData() or "auto"
-        cfg.setdefault("ui", {})["theme"] = self.theme_combo.currentData() or "gold"
+        cfg.setdefault("ui", {})["theme"] = self.theme_combo.currentData() or "system"
         self.result_config = cfg
         self.accept()

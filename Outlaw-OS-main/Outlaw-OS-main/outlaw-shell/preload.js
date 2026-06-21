@@ -6,7 +6,7 @@
 // `ipcRenderer`, or raw shell access. Everything is funnelled through named IPC
 // channels that are validated in the main process.
 // ============================================================================
-const { contextBridge, ipcRenderer } = require('electron');
+const { contextBridge, ipcRenderer, webFrame } = require('electron');
 
 // Whitelisted one-way event channels the renderer may subscribe to.
 const EVENT_CHANNELS = ['ai-stream', 'system-tick', 'toast',
@@ -58,6 +58,9 @@ contextBridge.exposeInMainWorld('outlaw', {
         // the main process resolves it against the catalog allowlist.
         install: (id) => ipcRenderer.invoke('apps:install', id),
         uninstall: (id) => ipcRenderer.invoke('apps:uninstall', id),
+        // Phase 15c — search ALL official packages + install any by name.
+        search: (query) => ipcRenderer.invoke('apps:search', query),
+        installPkg: (pkg) => ipcRenderer.invoke('apps:install-pkg', pkg),
         // Refresh local pacman DB. Useful before an install if the DB is stale.
         refreshDb: () => ipcRenderer.invoke('apps:refresh-db'),
         // Phase 2 — apps the user installed themselves (.desktop entries +
@@ -84,17 +87,35 @@ contextBridge.exposeInMainWorld('outlaw', {
         status: () => ipcRenderer.invoke('ai:status'),
         enable: () => ipcRenderer.invoke('ai:enable'),
         disable: () => ipcRenderer.invoke('ai:disable'),
-        ask: (prompt) => ipcRenderer.invoke('ai:ask', prompt),
+        // opts (Phase 15b) optionally carries { history, summary } for chat memory.
+        ask: (prompt, opts) => ipcRenderer.invoke('ai:ask', { prompt, ...(opts || {}) }),
         // Run a tool action the AI proposed, after the user approved it.
         confirmAction: (action) => ipcRenderer.invoke('ai:confirm-action', action),
+        // Phase 15b — persistent chats: load/save the whole conversation store.
+        chats: {
+            load: () => ipcRenderer.invoke('ai:chats:load'),
+            save: (store) => ipcRenderer.invoke('ai:chats:save', store),
+        },
+        // Phase 15b (slice 2) — fold older turns into a running summary.
+        summarize: (payload) => ipcRenderer.invoke('ai:summarize', payload),
         // Phase 4: spec-aware local-model recommendation for the setup guide.
-        recommend: () => ipcRenderer.invoke('ai:recommend'),
+        // Forward opts ({purpose,tier,spill}) so the dev/desktop + tier choices apply.
+        recommend: (opts) => ipcRenderer.invoke('ai:recommend', opts),
         // Phase 4: hardware-aware plain-prose setup chat (walks the user through
         // getting a local model running). payload = { prompt, history? }.
         setupChat: (payload) => ipcRenderer.invoke('ai:setup-chat', payload),
         // Phase 13.2: pull the built-in base model if it's missing (first run).
         ensureBaseModel: () => ipcRenderer.invoke('ai:ensure-base-model'),
     },
+    // Phase 16 — Ollama model management (status / list / pull) for running a
+    // larger model through Ollama as a full LM Studio replacement.
+    ollama: {
+        status: () => ipcRenderer.invoke('ollama:status'),
+        list: () => ipcRenderer.invoke('ollama:list'),
+        pull: (model) => ipcRenderer.invoke('ollama:pull', model),
+    },
+    // QoL/accessibility — scale the whole UI (text size). Clamped for safety.
+    setZoom: (factor) => { try { webFrame.setZoomFactor(Math.max(0.7, Math.min(2, Number(factor) || 1))); } catch {} },
 
     // --- Gaming -------------------------------------------------------------
     gaming: {

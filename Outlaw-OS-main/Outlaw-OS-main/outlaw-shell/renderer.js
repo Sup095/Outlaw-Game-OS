@@ -326,6 +326,9 @@ let _appsState = {
     filter: 'all',
     search: '',
     discovered: [],   // Phase 2 — apps found on this PC (.desktop + AppImages)
+    repoResults: [],  // Phase 15c — "install anything": pacman -Ss results
+    repoQuery: '',
+    repoSearching: false,
 };
 
 function _escapeHtml(s) {
@@ -370,6 +373,44 @@ function _renderDiscoveredList(root) {
     root.innerHTML = html.join('');
 }
 
+// Phase 15c — the "install anything" section: a button to search ALL official
+// packages for the current query, and the results (with Install) once searched.
+function _repoSectionHtml() {
+    const q = (_appsState.search || '').trim();
+    if (!q) return '';
+    const parts = ['<div style="margin-top:20px;border-top:1px solid var(--line);padding-top:12px;">'];
+    const haveResults = _appsState.repoQuery === q && _appsState.repoResults.length;
+    if (!haveResults) {
+        const label = _appsState.repoSearching
+            ? 'Searching all packages…'
+            : `🔎  Search all packages for "${_escapeHtml(q)}"`;
+        parts.push(`<button data-search-all="1" ${_appsState.repoSearching ? 'disabled' : ''}>${label}</button>`);
+        parts.push('<div class="muted" style="font-size:11px;margin-top:6px;">Installs from the official Arch repositories.</div>');
+    } else {
+        parts.push(`<div class="muted" style="margin:2px 0 8px;">All packages matching "${_escapeHtml(q)}" (${_appsState.repoResults.length}):</div>`);
+        parts.push('<div class="grid cols-2">');
+        for (const p of _appsState.repoResults) {
+            const busy = _appsState.busy.has('pkg:' + p.name);
+            const action = p.installed
+                ? '<span class="muted" style="font-size:11px;">installed</span>'
+                : `<button class="primary" ${busy ? 'disabled' : ''} data-install-pkg="${_escapeHtml(p.name)}">${busy ? 'Installing…' : 'Install'}</button>`;
+            parts.push(`
+                <div class="card">
+                    <div class="row" style="align-items:flex-start;gap:10px;">
+                        <div style="flex:1;min-width:0;">
+                            <div style="font-weight:600;word-break:break-word;">${_escapeHtml(p.name)} <span class="muted" style="font-weight:400;font-size:11px;">${_escapeHtml(p.repo)}</span></div>
+                            <div class="muted" style="font-size:11px;margin-top:3px;">${_escapeHtml(p.description || '')}</div>
+                        </div>
+                        <div class="row" style="gap:6px;flex:0 0 auto;">${action}</div>
+                    </div>
+                </div>`);
+        }
+        parts.push('</div>');
+    }
+    parts.push('</div>');
+    return parts.join('');
+}
+
 function _renderAppsList() {
     const root = $('#apps-list');
     if (!root) return;
@@ -389,7 +430,7 @@ function _renderAppsList() {
     const filtered = catalog.filter(matches);
     if (!filtered.length) {
         root.innerHTML = '<div class="muted" style="padding:24px;text-align:center;">' +
-            'No matches. Try a different filter or clear the search.</div>';
+            'No matches in the curated catalog.</div>' + _repoSectionHtml();
         return;
     }
     const byCat = new Map();
@@ -432,6 +473,7 @@ function _renderAppsList() {
         }
         html.push('</div>');
     }
+    html.push(_repoSectionHtml());
     root.innerHTML = html.join('');
 }
 
@@ -499,6 +541,51 @@ async function handleAppsInstall(id) {
     }
     _appsState.busy.delete(id);
     await refreshAppsInstalledOnly();
+}
+
+// Phase 15c — search all official packages for the current Apps-panel query.
+async function searchAllPackages() {
+    const q = (_appsState.search || '').trim();
+    if (!q || _appsState.repoSearching) return;
+    _appsState.repoSearching = true;
+    _renderAppsList();
+    try {
+        const r = await api.apps.search(q);
+        _appsState.repoResults = (r && r.ok && Array.isArray(r.results)) ? r.results : [];
+        _appsState.repoQuery = q;
+        if (r && !r.ok && r.error) toast(r.error);
+        else if (!_appsState.repoResults.length) toast(`No packages found for "${q}".`);
+    } catch (e) {
+        toast('Search failed: ' + e.message);
+        _appsState.repoResults = [];
+    }
+    _appsState.repoSearching = false;
+    _renderAppsList();
+}
+
+// Phase 15c — install any official package by name (from the search results).
+async function handleAppsInstallPkg(name) {
+    if (!name) return;
+    // Installing arbitrary software is an "important" action — gate on PIN/password.
+    const ok = await requireImportantAuth();
+    if (!ok) { toast('Cancelled — not installed.'); return; }
+    _appsState.busy.add('pkg:' + name);
+    _renderAppsList();
+    toast(`Installing ${name}…`);
+    try {
+        const r = await api.apps.installPkg(name);
+        if (r.ok) {
+            toast(`${name} installed.`);
+            const hit = _appsState.repoResults.find((p) => p.name === name);
+            if (hit) hit.installed = true;
+        } else {
+            toast('Install failed: ' + ((r.error || '').split('\n')[0].slice(0, 140) || 'unknown error'));
+        }
+    } catch (e) {
+        toast('Install failed: ' + e.message);
+    }
+    _appsState.busy.delete('pkg:' + name);
+    _renderAppsList();
 }
 
 async function handleAppsUninstall(id) {
@@ -1049,20 +1136,269 @@ function addMsg(kind, text) {
     log.scrollTop = log.scrollHeight;
 }
 
+// ---------------------------------------------------------------------------
+// Phase 15b — persistent AI chats (Cr1tt3r). Named, multi-turn conversations
+// kept in userData so they survive updates. Windowed memory: the most recent
+// turns are re-sent each ask so Cr1tt3r follows context; older turns stay saved.
+// (An AI summary of the older turns lands in the next slice.)
+// ---------------------------------------------------------------------------
+let aiChats = { activeId: null, conversations: [] };
+const AI_CHAT_WINDOW = 10;     // recent messages re-sent for memory
+const AI_SUMMARY_BATCH = 6;    // summarize once this many turns age past the window
+let _aiChatsSaveTimer = null;
+let _deleteArmed = false;      // two-click delete guard (Electron has no confirm())
+let _summarizing = false;      // at most one summary request in flight
+
+function aiActiveConvo() {
+    return aiChats.conversations.find((c) => c.id === aiChats.activeId) || null;
+}
+
+function persistAiChats() {
+    clearTimeout(_aiChatsSaveTimer);
+    _aiChatsSaveTimer = setTimeout(() => {
+        if (api.ai && api.ai.chats) api.ai.chats.save(aiChats).catch(() => {});
+    }, 250);
+}
+
+function newConvoObject(title) {
+    return {
+        id: 'c' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+        title: title || 'New chat',
+        autoTitled: true,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        messages: [],
+        summary: '',
+        summaryUpTo: 0,
+    };
+}
+
+function rebuildAiChatSelect() {
+    const sel = $('#ai-chat-select');
+    if (!sel) return;
+    sel.innerHTML = '';
+    for (const c of aiChats.conversations) {
+        const opt = document.createElement('option');
+        opt.value = c.id;
+        opt.textContent = c.title || 'Untitled';
+        sel.appendChild(opt);
+    }
+    if (aiChats.activeId) sel.value = aiChats.activeId;
+    // The custom no-WM dropdown snapshots options at enhance time, so drop the
+    // old wrapper and re-enhance for the current conversation list.
+    const wrap = sel.nextElementSibling;
+    if (wrap && wrap.classList.contains('cselect')) wrap.remove();
+    delete sel.dataset.enhanced;
+    enhanceSelects(sel.parentElement);
+    rebuildRefSelect();
+}
+
+// Phase 15b (slice 3) — the "↗ Reference…" dropdown lists the OTHER chats; picking
+// one makes Cr1tt3r draw on it in this conversation. Referenced chats show a ✓.
+function rebuildRefSelect() {
+    const sel = $('#ai-ref-select');
+    if (!sel) return;
+    const c = aiActiveConvo();
+    sel.innerHTML = '';
+    const ph = document.createElement('option');
+    ph.value = ''; ph.textContent = '↗ Reference…';
+    sel.appendChild(ph);
+    for (const conv of aiChats.conversations) {
+        if (!c || conv.id === c.id) continue;
+        const opt = document.createElement('option');
+        opt.value = conv.id;
+        const on = !!(c.refs && c.refs.some((r) => r.id === conv.id));
+        opt.textContent = (on ? '✓ ' : '') + (conv.title || 'Untitled');
+        sel.appendChild(opt);
+    }
+    sel.value = '';
+    const wrap = sel.nextElementSibling;
+    if (wrap && wrap.classList.contains('cselect')) wrap.remove();
+    delete sel.dataset.enhanced;
+    enhanceSelects(sel.parentElement);
+}
+
+// A compact recap of a chat to feed as cross-chat context: its running summary if
+// it has one, else its most recent turns.
+function recapOf(convo) {
+    if (!convo) return '';
+    if (convo.summary) return convo.summary;
+    const msgs = (convo.messages || []).slice(-8)
+        .map((m) => (m.role === 'user' ? 'User: ' : 'Cr1tt3r: ') + String(m.content || ''));
+    return msgs.join('\n').slice(0, 1500) || '(empty chat)';
+}
+
+// Toggle a reference to another chat on/off for the active conversation.
+function referenceChat(id) {
+    const c = aiActiveConvo();
+    const src = aiChats.conversations.find((x) => x.id === id);
+    if (!c || !src || src.id === c.id) return;
+    if (!Array.isArray(c.refs)) c.refs = [];
+    const i = c.refs.findIndex((r) => r.id === id);
+    if (i >= 0) {
+        c.refs.splice(i, 1);
+        addMsg('sys', '↗ Stopped referencing "' + (src.title || 'Untitled') + '".');
+    } else {
+        c.refs.push({ id, title: src.title || 'Untitled' });
+        addMsg('sys', '↗ Now referencing "' + (src.title || 'Untitled') + '" — Cr1tt3r can draw on that chat.');
+    }
+    persistAiChats();
+    rebuildRefSelect();
+}
+
+function loadConvoIntoLog() {
+    const log = $('#ai-log');
+    if (log) log.innerHTML = '';
+    const c = aiActiveConvo();
+    if (!c) return;
+    if (!c.messages.length) {
+        addMsg('ai', 'Cr1tt3r here. Ask me anything, or tell me to do things — "install krita", '
+            + '"tune my settings", "use less power", "switch to the gold theme", "open settings".');
+        return;
+    }
+    for (const m of c.messages) addMsg(m.role === 'user' ? 'user' : 'ai', m.content);
+}
+
+async function initAiChats() {
+    try {
+        if (api.ai && api.ai.chats) aiChats = await api.ai.chats.load();
+    } catch { aiChats = { activeId: null, conversations: [] }; }
+    if (!aiChats || !Array.isArray(aiChats.conversations)) aiChats = { activeId: null, conversations: [] };
+    if (!aiChats.conversations.length) {
+        const c = newConvoObject('Chat 1');
+        aiChats.conversations.push(c);
+        aiChats.activeId = c.id;
+        persistAiChats();
+    }
+    if (!aiActiveConvo()) aiChats.activeId = aiChats.conversations[0].id;
+    rebuildAiChatSelect();
+    loadConvoIntoLog();
+}
+
+function switchAiChat(id) {
+    if (!id || id === aiChats.activeId) return;
+    aiChats.activeId = id;
+    _deleteArmed = false;
+    persistAiChats();
+    rebuildAiChatSelect();
+    loadConvoIntoLog();
+}
+
+function newAiChat() {
+    const c = newConvoObject('Chat ' + (aiChats.conversations.length + 1));
+    aiChats.conversations.push(c);
+    aiChats.activeId = c.id;
+    _deleteArmed = false;
+    persistAiChats();
+    rebuildAiChatSelect();
+    loadConvoIntoLog();
+    const inp = $('#ai-in'); if (inp) inp.focus();
+}
+
+function deleteAiChat() {
+    const c = aiActiveConvo();
+    if (!c) return;
+    const btn = $('#ai-chat-delete');
+    // Two-click confirm (Electron has no window.confirm): first click arms it.
+    if (!_deleteArmed) {
+        _deleteArmed = true;
+        if (btn) btn.textContent = 'Delete?';
+        setTimeout(() => { _deleteArmed = false; if (btn) btn.textContent = 'Delete'; }, 3000);
+        return;
+    }
+    _deleteArmed = false;
+    if (btn) btn.textContent = 'Delete';
+    aiChats.conversations = aiChats.conversations.filter((x) => x.id !== c.id);
+    if (!aiChats.conversations.length) aiChats.conversations.push(newConvoObject('Chat 1'));
+    aiChats.activeId = aiChats.conversations[0].id;
+    persistAiChats();
+    rebuildAiChatSelect();
+    loadConvoIntoLog();
+}
+
+// Record a turn in the active conversation + persist. role: 'user' | 'assistant'.
+function recordAiTurn(role, content) {
+    const c = aiActiveConvo();
+    if (!c || !content) return;
+    c.messages.push({ role, content, ts: Date.now() });
+    c.updatedAt = Date.now();
+    // Auto-title from the first user message (so chats get meaningful names).
+    if (role === 'user' && c.autoTitled && c.messages.filter((m) => m.role === 'user').length === 1) {
+        c.title = content.slice(0, 40) + (content.length > 40 ? '…' : '');
+        rebuildAiChatSelect();
+    }
+    persistAiChats();
+    // After a reply lands, fold any aged-out turns into the running summary.
+    if (role === 'assistant') maybeSummarize();
+}
+
+// Turns since the last summary (excludes the just-added user prompt, sent as the
+// new prompt) + the running summary of everything before that. A safety cap keeps
+// a long un-summarized burst from overflowing a small model.
+function aiHistoryWindow() {
+    const c = aiActiveConvo();
+    if (!c) return { history: [], summary: '' };
+    const start = c.summaryUpTo || 0;
+    const prior = c.messages.slice(start, -1);
+    const capped = prior.slice(-(AI_CHAT_WINDOW + AI_SUMMARY_BATCH + 2));
+    let summary = c.summary || '';
+    // Phase 15b (slice 3) — fold any referenced chats' recaps in as context, live
+    // (so they stay current). Skip refs whose source chat was deleted.
+    if (Array.isArray(c.refs) && c.refs.length) {
+        const parts = [];
+        for (const ref of c.refs) {
+            const src = aiChats.conversations.find((x) => x.id === ref.id);
+            if (src) parts.push('From your chat "' + (src.title || ref.title || 'Untitled') + '":\n' + recapOf(src));
+        }
+        if (parts.length) {
+            summary = (parts.join('\n\n') + (summary ? '\n\n— This chat —\n' + summary : '')).slice(0, 3000);
+        }
+    }
+    return { history: capped, summary };
+}
+
+// When enough turns have aged past the window, fold them into the running summary
+// (Cr1tt3r's long-term memory). Best-effort + non-blocking; one at a time.
+async function maybeSummarize() {
+    if (_summarizing) return;
+    const c = aiActiveConvo();
+    if (!c || !api.ai || !api.ai.summarize) return;
+    const upTo = c.messages.length - AI_CHAT_WINDOW;        // summarize everything older than the window
+    const start = c.summaryUpTo || 0;
+    if (upTo - start < AI_SUMMARY_BATCH) return;            // not enough aged out yet
+    const slice = c.messages.slice(start, upTo);
+    if (!slice.length) return;
+    _summarizing = true;
+    try {
+        const r = await api.ai.summarize({ messages: slice, priorSummary: c.summary || '' });
+        // The user may have switched/deleted chats while we awaited — re-fetch by id.
+        const cur = aiChats.conversations.find((x) => x.id === c.id);
+        if (cur && r && typeof r.summary === 'string' && r.summary) {
+            cur.summary = r.summary;
+            cur.summaryUpTo = upTo;
+            persistAiChats();
+        }
+    } catch { /* best-effort — keep the prior summary */ }
+    finally { _summarizing = false; }
+}
+
 async function sendAI() {
     const input = $('#ai-in');
     const text = input.value.trim();
     if (!text) return;
     input.value = '';
     addMsg('user', text);
+    recordAiTurn('user', text);
+    const { history, summary } = aiHistoryWindow();
     const thinking = document.createElement('div');
     thinking.className = 'msg ai'; thinking.textContent = '…';
     $('#ai-log').appendChild(thinking);
-    const res = await api.ai.ask(text);
+    const res = await api.ai.ask(text, { history, summary });
     thinking.remove();
     if (res.error) { addMsg('sys', res.error); return; }
     if (res.needsConfirm) {
         addMsg('ai', res.text);
+        recordAiTurn('assistant', res.text);
         const act = res.action || {};
         // Phase 13: AI-proposed app install — confirm, then run it on the loading screen.
         if (act.tool === 'install_app') {
@@ -1076,7 +1412,8 @@ async function sendAI() {
             try {
                 const r = await api.ai.confirmAction(act);
                 loadingScreen.done(!!(r && r.ok));
-                addMsg('ai', (r && r.text) || '(done)');
+                const t = (r && r.text) || '(done)';
+                addMsg('ai', t); recordAiTurn('assistant', t);
             } catch (e) { loadingScreen.done(false); addMsg('sys', 'Error: ' + e.message); }
             return;
         }
@@ -1088,10 +1425,111 @@ async function sendAI() {
         });
         if (!ok) { addMsg('sys', 'Cancelled.'); return; }
         const r = await api.ai.confirmAction(res.action);
-        addMsg('ai', r.text || '(done)');
+        const t = r.text || '(done)';
+        addMsg('ai', t); recordAiTurn('assistant', t);
         return;
     }
-    addMsg('ai', res.text || '(no answer)');
+    // QoL — the assistant changed a setting for the user; apply it through the
+    // normal settings path (full side-effects) and refresh the UI.
+    if (res.settingsPatch) {
+        try { await setSetting(res.settingsPatch); await loadSettings(); refreshAiStatus(); } catch {}
+    }
+    // QoL — the assistant navigated somewhere for the user.
+    if (res.openScreen) { try { showScreen(res.openScreen); } catch {} }
+    const t = res.text || '(no answer)';
+    addMsg('ai', t);
+    recordAiTurn('assistant', t);
+}
+
+// Phase 16 — show the Ollama model row only when the Ollama engine is selected.
+function syncOllamaRow(engine) {
+    const row = $('#ollama-model-row');
+    if (row) row.style.display = (engine === 'ollama') ? '' : 'none';
+}
+
+// Phase 16 — pull a larger Ollama model and switch the engine to it.
+async function handleOllamaPull() {
+    const inp = $('#ollama-model');
+    const model = (inp ? inp.value : '').trim();
+    if (!model) { toast('Type a model tag first (e.g. qwen2.5-coder:7b).'); return; }
+    if (!api.ollama) { toast('Ollama support is unavailable.'); return; }
+    try {
+        const st = await api.ollama.status();
+        if (!st.installed) { toast('Ollama isn\'t installed on this system.'); return; }
+    } catch {}
+    // Select it first, so even a slow pull leaves Ollama configured as the engine.
+    await setSetting({ aiEngine: 'ollama', baseAiEnabled: false, ollamaModel: model });
+    loadingScreen.open('Pulling ' + model);
+    try {
+        const r = await api.ollama.pull(model);
+        loadingScreen.done(!!(r && r.ok));
+        toast(r && r.ok
+            ? (model + ' is ready — Ollama is now your AI engine.')
+            : ('Pull failed: ' + ((r && r.error) || 'unknown error')));
+    } catch (e) {
+        loadingScreen.done(false);
+        toast('Pull failed: ' + e.message);
+    }
+    await refreshAiStatus();
+}
+
+// QoL — Cr1tt3r tunes the system: hardware + a couple of answers -> the best
+// settings, applied for you. Pure mapping over existing, reversible settings.
+function recommendSettings(specs, status, answers) {
+    const ramGb = Number(specs && specs.ramGb) || 0;
+    const vramGb = Number(specs && specs.vramGb) || 0;
+    const lmOk = !status || status.lmStudioOk !== false;
+    const priority = (answers && answers.priority) || 'balanced';
+    const multitask = (answers && answers.multitask) === 'yes';
+    const patch = {};
+    // VRAM-saver tier.
+    if (priority === 'lowpower' || (vramGb && vramGb < 4) || multitask) patch.vramSaverMode = 'lean';
+    else if (priority === 'performance' && vramGb >= 8) patch.vramSaverMode = 'off';
+    else patch.vramSaverMode = 'auto';
+    // Visual effects — only when visuals matter AND the GPU can spare it.
+    const fancy = priority === 'visuals' && (!vramGb || vramGb >= 4);
+    patch.crtFx = fancy;
+    patch.glow = fancy;
+    // Reduce motion when going for low-power or running heavy apps alongside.
+    patch.reduceMotion = priority === 'lowpower' || multitask;
+    // CPU governor + background update checks.
+    patch.performanceMode = priority === 'performance';
+    patch.autoCheck = priority !== 'lowpower';
+    // AI engine — respect AVX2 + resources; otherwise leave the user's choice.
+    if (!lmOk) patch.aiEngine = vramGb >= 4 ? 'ollama' : 'base';
+    else if (priority === 'lowpower' || (ramGb && ramGb < 8)) patch.aiEngine = 'base';
+    return patch;
+}
+
+async function tuneSettings() {
+    const btn = $('#tune-apply');
+    const out = $('#tune-result');
+    if (btn) btn.disabled = true;
+    if (out) out.textContent = 'Reading your hardware…';
+    let specs = {};
+    let status = {};
+    try { specs = await api.ai.recommend(); } catch {}
+    try { status = await api.ai.status(); } catch {}
+    const answers = {
+        priority: (($('#tune-priority') || {}).value) || 'balanced',
+        multitask: (($('#tune-multitask') || {}).value) || 'no',
+    };
+    const patch = recommendSettings(specs, status, answers);
+    if (patch.aiEngine) patch.baseAiEnabled = (patch.aiEngine === 'base');
+    try { await setSetting(patch); } catch {}
+    await loadSettings();        // reflect the new toggles + effects in the UI
+    await refreshAiStatus();
+    const bits = [
+        'VRAM saver ' + patch.vramSaverMode,
+        'effects ' + (patch.crtFx ? 'on' : 'off'),
+        'reduce motion ' + (patch.reduceMotion ? 'on' : 'off'),
+        'performance ' + (patch.performanceMode ? 'on' : 'off'),
+        patch.aiEngine ? ('AI engine ' + patch.aiEngine) : null,
+        'update checks ' + (patch.autoCheck ? 'on' : 'off'),
+    ].filter(Boolean).join(' · ');
+    if (out) out.textContent = '✓ Applied — ' + bits;
+    toast('Cr1tt3r tuned your settings.');
+    if (btn) btn.disabled = false;
 }
 
 async function refreshAiStatus() {
@@ -1108,26 +1546,38 @@ async function refreshAiStatus() {
     if (toggle) toggle.checked = !!s.enabled;
     const baseToggle = $('#base-ai-toggle');
     if (baseToggle) baseToggle.checked = (s.baseAiEnabled !== false);
-    const builtIn = s.backend === 'base';
-    const where = builtIn ? 'the built-in AI' : 'LM Studio';
+    const backend = s.backend;   // 'base' | 'ollama' | 'lmstudio'
+    const where = backend === 'base' ? 'the built-in AI'
+        : backend === 'ollama' ? 'Ollama'
+        : 'LM Studio';
+    const waiting = backend === 'base'
+        ? 'Starting — the built-in model may still be downloading.'
+        : backend === 'ollama'
+            ? 'Waiting for Ollama — make sure it\'s running and the model is pulled.'
+            : 'Waiting for LM Studio — open it, load a model, click Start Server (port 1234).';
     const sub = $('#ai-sub');
     if (sub) sub.textContent = s.enabled
-        ? (s.available
-            ? 'Active · using ' + where
-            : (builtIn
-                ? 'Starting — the built-in model may still be downloading.'
-                : 'Waiting for LM Studio — open it, load a model, click Start Server (port 1234).'))
+        ? (s.available ? 'Active · using ' + where : waiting)
         : 'Off · the System Core + AI Assistant run locally on this machine';
     const modelSub = $('#ai-model-sub');
     if (modelSub) {
-        if (builtIn) {
+        if (backend === 'base') {
             modelSub.textContent = 'Built-in model: ' + (s.model || 'bundled') + ' — runs on this machine, no setup.';
+        } else if (backend === 'ollama') {
+            modelSub.textContent = 'Ollama model: ' + (s.model || '(none chosen)') + ' — pull a different one in AI engine settings.';
         } else if (s.enabled && s.available) {
             const loaded = (s.models && s.models[0]) || s.model || '(no model loaded)';
             modelSub.textContent = 'Loaded in LM Studio: ' + loaded + ' — swap models there.';
         } else {
-            modelSub.textContent = 'Turn off the built-in AI to use LM Studio — change the model there.';
+            modelSub.textContent = 'Switch the AI engine to LM Studio to use a model you load there.';
         }
+    }
+    // Phase 16 — warn AVX1-only CPUs (LM Studio needs AVX2) and point them at Ollama.
+    const engSub = $('#ai-engine-sub');
+    if (engSub) {
+        engSub.textContent = (s.lmStudioOk === false)
+            ? '⚠ Your CPU lacks AVX2 — LM Studio won\'t run here. Use the Ollama engine.'
+            : 'What runs the model on this PC.';
     }
 }
 
@@ -1539,13 +1989,27 @@ async function loadSettings() {
     try { s = await api.settings.get(); } catch {}
     document.body.classList.toggle('crt', !!s.crtFx);
     document.body.classList.toggle('glow', !!s.glow);
+    document.body.classList.toggle('reduce-motion', !!s.reduceMotion);
     $('#crt-toggle').checked = !!s.crtFx;
     $('#glow-toggle').checked = !!s.glow;
+    const rmToggle = $('#reduce-motion-toggle');
+    if (rmToggle) rmToggle.checked = !!s.reduceMotion;
+    // QoL/accessibility — whole-UI zoom (text size).
+    if (api.setZoom) api.setZoom(Number(s.uiScale) || 1);
+    const scaleSel = $('#ui-scale');
+    if (scaleSel) scaleSel.value = String(s.uiScale || 1);
     // P1 — theme. 'gold' adds body.theme-gold which re-points the CSS palette
     // variables to the gold-on-gunmetal scheme. Default 'green' = no class.
     applyTheme(s.theme || 'green');
     const themeSel = $('#theme-select');
     if (themeSel) themeSel.value = s.theme || 'green';
+    // Phase 16 — AI engine + Ollama model. Set here (before enhanceSelects) so the
+    // custom dropdown renders the right value.
+    const engineSel = $('#ai-engine');
+    if (engineSel) engineSel.value = s.aiEngine || (s.baseAiEnabled !== false ? 'base' : 'lmstudio');
+    syncOllamaRow(engineSel ? engineSel.value : 'base');
+    const ollModelInput = $('#ollama-model');
+    if (ollModelInput) ollModelInput.value = s.ollamaModel || '';
     // LM Studio handles model selection itself — no dropdown to seed.
     $('#perf-toggle').checked = !!s.performanceMode;
     $('#update-repo').value = s.updateRepo || '';
@@ -1553,6 +2017,9 @@ async function loadSettings() {
     if (chanEl) chanEl.value = s.updateChannel || 'stable';
     $('#auto-check').checked = !!s.autoCheck;
     $('#sponsor-url').value = s.sponsorUrl || '';
+    // Surface the support card on the dashboard only when a URL is configured.
+    const dashSupport = $('#dash-support');
+    if (dashSupport) dashSupport.hidden = !((s.sponsorUrl || '').trim());
     // P2 — stability reporting: label the current version + reflect any
     // prior local vote. The community tally is fetched lazily (button /
     // first Settings open) so there's zero network cost otherwise.
@@ -1644,12 +2111,14 @@ function escapeHtml(s) {
 function renderAiRecommendation(r) {
     const out = $('#ai-setup-result');
     if (!out) return;
+    r = r || {};
     const gpuTxt = r.vramGb > 0
         ? `${escapeHtml(r.gpuName || 'GPU')} · ${r.vramGb} GB VRAM`
         : (r.gpuName ? `${escapeHtml(r.gpuName)} · no dedicated VRAM` : 'no discrete GPU');
     const rec = r.recommended || {};
-    const starterLine = r.sameAsStarter ? '' :
-        `<p class="muted" style="margin:6px 0 0;">Weak PC or not sure? Start with <b>${escapeHtml(r.starter.model)}</b> (${escapeHtml(r.starter.size)}) — ${escapeHtml(r.starter.note)} Once it's running you can ask <em>it</em> how to set up the bigger one.</p>`;
+    const starter = r.starter || {};
+    const starterLine = (r.sameAsStarter || !starter.model) ? '' :
+        `<p class="muted" style="margin:6px 0 0;">Weak PC or not sure? Start with <b>${escapeHtml(starter.model)}</b> (${escapeHtml(starter.size || '')}) — ${escapeHtml(starter.note || '')} Once it's running you can ask <em>it</em> how to set up the bigger one.</p>`;
     out.innerHTML = `
         <div style="border-top:1px solid var(--line,#2a2f29);padding-top:10px;">
             <div class="mono muted" style="font-size:12px;">
@@ -1694,6 +2163,10 @@ function wire() {
         if (installBtn) { handleAppsInstall(installBtn.dataset.installId); return; }
         const uninstallBtn = e.target.closest('[data-uninstall-id]');
         if (uninstallBtn) { handleAppsUninstall(uninstallBtn.dataset.uninstallId); return; }
+        const searchAllBtn = e.target.closest('[data-search-all]');
+        if (searchAllBtn) { searchAllPackages(); return; }
+        const installPkgBtn = e.target.closest('[data-install-pkg]');
+        if (installPkgBtn) { handleAppsInstallPkg(installPkgBtn.dataset.installPkg); return; }
         const filterChip = e.target.closest('[data-apps-filter]');
         if (filterChip) { setAppsFilter(filterChip.dataset.appsFilter); return; }
         if (e.target.id === 'apps-refresh-db') {
@@ -1791,6 +2264,29 @@ function wire() {
     // AI input
     $('#ai-in').addEventListener('keydown', (e) => { if (e.key === 'Enter') sendAI(); });
 
+    // Phase 15b — persistent-chat controls (switch / new / delete).
+    const chatSel = $('#ai-chat-select');
+    if (chatSel) chatSel.addEventListener('change', (e) => switchAiChat(e.target.value));
+    const chatNew = $('#ai-chat-new');
+    if (chatNew) chatNew.addEventListener('click', newAiChat);
+    const chatDel = $('#ai-chat-delete');
+    if (chatDel) chatDel.addEventListener('click', deleteAiChat);
+    const refSel = $('#ai-ref-select');
+    if (refSel) refSel.addEventListener('change', (e) => { const v = e.target.value; if (v) referenceChat(v); });
+
+    // Phase 16 — AI engine selector + Ollama model pull.
+    const engineSel = $('#ai-engine');
+    if (engineSel) engineSel.addEventListener('change', async (e) => {
+        const eng = e.target.value;
+        await setSetting({ aiEngine: eng, baseAiEnabled: eng === 'base' });
+        syncOllamaRow(eng);
+        refreshAiStatus();
+    });
+    const ollPull = $('#ollama-pull');
+    if (ollPull) ollPull.addEventListener('click', handleOllamaPull);
+    const tuneBtn = $('#tune-apply');
+    if (tuneBtn) tuneBtn.addEventListener('click', tuneSettings);
+
     // Apps panel search — type-as-you-go, no debounce needed (catalog is tiny).
     const appsSearchEl = $('#apps-search');
     if (appsSearchEl) {
@@ -1814,6 +2310,8 @@ function wire() {
     // Settings toggles
     $('#crt-toggle').addEventListener('change', (e) => { document.body.classList.toggle('crt', e.target.checked); setSetting({ crtFx: e.target.checked }); });
     $('#glow-toggle').addEventListener('change', (e) => { document.body.classList.toggle('glow', e.target.checked); setSetting({ glow: e.target.checked }); });
+    { const rm = $('#reduce-motion-toggle'); if (rm) rm.addEventListener('change', (e) => { document.body.classList.toggle('reduce-motion', e.target.checked); setSetting({ reduceMotion: e.target.checked }); }); }
+    { const us = $('#ui-scale'); if (us) us.addEventListener('change', (e) => { const f = parseFloat(e.target.value) || 1; if (api.setZoom) api.setZoom(f); setSetting({ uiScale: f }); }); }
     const _themeSel = $('#theme-select');
     if (_themeSel) _themeSel.addEventListener('change', (e) => {
         const t = e.target.value === 'gold' ? 'gold' : 'green';
@@ -2228,6 +2726,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     wire();
     await loadSettings();
     enhanceSelects();   // replace native <select> popups (broken with no WM)
+    initAiChats().catch(() => {});   // Phase 15b — load persistent Cr1tt3r chats
     await renderTiles();
     await loadSysInfo();
     // Probe whether a previous shell version exists on disk so the Rollback

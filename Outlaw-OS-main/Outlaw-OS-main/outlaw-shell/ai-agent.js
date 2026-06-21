@@ -20,12 +20,13 @@ const DEFAULT_MODEL = 'local-model';
 // Tools the model is allowed to propose. Keep the surface tiny so small models
 // stay reliable. `run_command` is intentionally marked dangerous so the main
 // process always routes it through user confirmation.
-const TOOLS = ['answer', 'open_app', 'search_web', 'list_files', 'open_file', 'system_info', 'install_app', 'run_command'];
+const TOOLS = ['answer', 'open_app', 'search_web', 'list_files', 'open_file', 'system_info', 'install_app', 'set_setting', 'open_screen', 'run_command'];
 
 function systemPrompt(appIds, machine) {
     return [
-        'You are OUTLAW, the on-device assistant for Outlaw OS, a Linux for AI-driven Godot game development.',
-        'You are concise, practical, and privacy-respecting. Everything runs locally via LM Studio.',
+        'You are Cr1tt3r, the on-device assistant for Outlaw OS — a Linux for AI-driven Godot game development.',
+        'Persona: a sharp, friendly cyber-outlaw sidekick — concise, practical, a little wry, never showy. If asked your name, you are Cr1tt3r.',
+        'You are privacy-respecting: everything runs locally on this machine, so no data ever leaves it.',
         ...(machine ? ['', 'This computer: ' + machine] : []),
         '',
         'Reply with EXACTLY ONE line of minified JSON and nothing else. Schema:',
@@ -38,7 +39,9 @@ function systemPrompt(appIds, machine) {
         '- list_files: show a directory. arg = absolute path (default home if empty).',
         '- open_file: open a file/folder with its default app. arg = path.',
         '- system_info: report CPU/RAM/host info (arg empty).',
-        '- install_app: install an app the user asks for. arg = the app name (e.g. "krita", "blender"). Only known sources (the Apps catalog / official repos) are allowed, and the user must confirm before anything installs.',
+        '- install_app: install software the user names OR describes. arg = the most likely PACKAGE name (e.g. "something to edit audio" -> "audacity"; "a photo editor" -> "gimp"). Any official package works, not just famous ones — give your single best package-name guess. Known sources only (Apps catalog / official repos); the user confirms before anything installs.',
+        '- open_screen: take the user to a section of Outlaw OS. arg = one of: dashboard, syscore, files, tasks, terminal, gaming, gamedev, apps, ai, calc, settings, help. e.g. "take me to settings" -> {"tool":"open_screen","arg":"settings","text":"Here\'s Settings."}.',
+        '- set_setting: change a system setting for the user. arg = "key=value". Keys/values: theme=green|gold|broken, crtFx=on|off, glow=on|off, reduceMotion=on|off, uiScale=0.9|1|1.15|1.3 (text size — bigger number = bigger text), performanceMode=on|off, vramSaverMode=auto|off|lean|minimal, aiEngine=base|lmstudio|ollama, autoCheck=on|off, coreVoiceEnabled=on|off. e.g. "use less power" -> {"tool":"set_setting","arg":"vramSaverMode=lean","text":"Easing off VRAM use."}; "make the text bigger" -> {"tool":"set_setting","arg":"uiScale=1.15","text":"Bumping up the text size."}. For a broad "set everything best for me", tell them to click the "Tune my settings" button.',
         '- run_command: ONLY when the user explicitly asks to run a shell command. arg = the command. This always asks the user to confirm first.',
         '',
         'Rules: pick the single best tool. Prefer "answer" for anything conversational.',
@@ -113,7 +116,25 @@ function parseIntent(raw) {
 
 // Ask the model. Returns a parsed intent { tool, arg, text }.
 // Uses the OpenAI-compatible /v1/chat/completions endpoint.
-async function ask(prompt, { model, appIds, machine, baseUrl } = {}) {
+async function ask(prompt, { model, appIds, machine, baseUrl, history, summary, sysSettings } = {}) {
+    const messages = [{ role: 'system', content: systemPrompt(appIds || [], machine) }];
+    // QoL — current settings snapshot so the assistant is state-aware (answers
+    // "what theme am I on?" and won't redundantly re-set things).
+    if (sysSettings) messages.push({ role: 'system', content: String(sysSettings).slice(0, 600) });
+    // Phase 15b — persistent-chat memory: an optional summary of older turns plus
+    // the recent window, so Cr1tt3r can follow context across a conversation
+    // (e.g. "open it" after naming an app). Caller supplies both; both optional.
+    if (summary) {
+        messages.push({ role: 'system', content: 'Summary of earlier conversation: ' + String(summary).slice(0, 1500) });
+    }
+    if (Array.isArray(history)) {
+        for (const m of history) {
+            if (m && (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string' && m.content) {
+                messages.push({ role: m.role, content: m.content.slice(0, 2000) });
+            }
+        }
+    }
+    messages.push({ role: 'user', content: String(prompt || '').slice(0, 4000) });
     const body = {
         model: model || DEFAULT_MODEL,
         stream: false,
@@ -121,10 +142,7 @@ async function ask(prompt, { model, appIds, machine, baseUrl } = {}) {
         // Keep responses short — we only need a single JSON line. This also caps
         // VRAM cost on small machines.
         max_tokens: 256,
-        messages: [
-            { role: 'system', content: systemPrompt(appIds || [], machine) },
-            { role: 'user', content: String(prompt || '').slice(0, 4000) },
-        ],
+        messages,
     };
     const res = await timeoutFetch(`${baseUrl || LM_STUDIO_BASE}/chat/completions`, {
         method: 'POST',

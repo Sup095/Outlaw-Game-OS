@@ -150,9 +150,14 @@ class ProjectPicker(QDialog):
         setup_hint.setWordWrap(True)
         setup_hint.setStyleSheet(f"color: {COLORS['accent']}; font-size: 9pt;")
         godot_btn = QPushButton("🎮  Open Godot")
+        godot_btn.setToolTip("Launch Godot — or download & install it first if it's missing.")
         godot_btn.clicked.connect(self._open_godot)
         lm_btn = QPushButton("✦  Open LM Studio")
+        lm_btn.setToolTip("Launch LM Studio — or open its download page if it isn't installed yet.")
         lm_btn.clicked.connect(self._open_lmstudio)
+        ask_btn = QPushButton("💬  Ask V4rm1nt")
+        ask_btn.setToolTip("Chat with the bundled base AI for setup help — no LM Studio needed.")
+        ask_btn.clicked.connect(self._ask_v4rmint)
         to_desktop_btn = QPushButton("⌂  Switch to Desktop")
         to_desktop_btn.clicked.connect(self._switch_to_desktop)
         quit_btn = QPushButton("Quit")
@@ -160,6 +165,7 @@ class ProjectPicker(QDialog):
         setup_row = QHBoxLayout()
         setup_row.addWidget(godot_btn)
         setup_row.addWidget(lm_btn)
+        setup_row.addWidget(ask_btn)
         setup_row.addStretch(1)
         setup_row.addWidget(to_desktop_btn)
         setup_row.addWidget(quit_btn)
@@ -316,7 +322,25 @@ class ProjectPicker(QDialog):
         )
 
     def _open_godot(self) -> None:
-        self._launch([["godot"], ["godot4"], ["Godot"]], "Godot")
+        import shutil
+        if shutil.which("godot") or shutil.which("godot4") or shutil.which("Godot"):
+            self._launch([["godot"], ["godot4"], ["Godot"]], "Godot")
+            return
+        # Not installed yet — offer to download + install it (the 'godot' Arch
+        # package) right here, then launch it. One-click, no password (the
+        # 49-outlaw polkit rule covers the installer helper).
+        reply = QMessageBox.question(
+            self, "Install Godot",
+            "Godot isn't installed yet.\n\nDownload and install it now? "
+            "It's a one-click install and takes a few minutes.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.Yes,
+        )
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+        from .pkg_install import install_package
+        if install_package("godot", "Godot", self):
+            self._launch([["godot"], ["godot4"], ["Godot"]], "Godot")
 
     def _open_lmstudio(self) -> None:
         # outlaw-lm-studio launches LM Studio (or opens its download page).
@@ -325,6 +349,18 @@ class ProjectPicker(QDialog):
              ["lm-studio"], ["lmstudio"]],
             "LM Studio",
         )
+
+    def _ask_v4rmint(self) -> None:
+        # The base AI (V4rm1nt) is reachable right here, pre-session, for setup
+        # help — no project + no LM Studio model required. Lazy import so a
+        # missing openai/base-AI dep can't break the picker itself.
+        try:
+            from .ask_v4rmint import AskV4rmintDialog
+        except Exception as exc:  # noqa: BLE001
+            QMessageBox.information(self, "V4rm1nt",
+                                    f"The base-AI assistant isn't available here ({exc}).")
+            return
+        AskV4rmintDialog(parent=self).exec()
 
     def _switch_to_desktop(self) -> None:
         reply = QMessageBox.question(

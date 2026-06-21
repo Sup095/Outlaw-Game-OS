@@ -95,8 +95,17 @@ const DEFAULT_SETTINGS = {
     // = fall back to LM Studio if it's installed + running. "Start without AI"
     // at boot flips the master aiEnabled off so nothing loads at all.
     baseAiEnabled: true,
+    // Phase 16 — which engine runs the AI. 'base' = the tiny bundled Ollama model
+    // (default, runs on anything); 'lmstudio' = a model you load in LM Studio;
+    // 'ollama' = a LARGER model you pull through Ollama (a full LM Studio
+    // replacement for CPUs that can't run LM Studio, e.g. AVX1-only). Empty = derive
+    // from baseAiEnabled for backward compatibility. `ollamaModel` is the chosen tag.
+    aiEngine: '',
+    ollamaModel: '',
     crtFx: false,            // CRT scanline/flicker effect OFF by default (crisp + readable)
     glow: false,             // text glow OFF by default (no discoloration)
+    reduceMotion: false,     // QoL — off decorative animations/transitions (a11y + low-end perf)
+    uiScale: 1,              // QoL/accessibility — whole-UI zoom (text size). 0.9–1.3.
     // P1 — visual theme. 'green' = classic green-phosphor terminal (default,
     // unchanged for existing users). 'gold' = retro gold-on-gunmetal "sci-fi
     // fortress" look that matches Outlaw CodeMaker. Pure CSS-variable swap, so
@@ -141,6 +150,18 @@ function loadSettings() {
     }
 }
 
+// Phase 14h — mirror the chosen theme to a plain $HOME dotfile so the boot-time
+// greeter (a SEPARATE Electron app that can't reach this app's userData) can
+// match its palette to the desktop's. Best-effort and non-fatal: if it never
+// lands, the greeter just falls back to the green default. Mirrors the existing
+// ~/.outlaw-session* convention the greeter already reads.
+function mirrorThemeToHome(theme) {
+    try {
+        const t = (typeof theme === 'string' && theme) ? theme : 'green';
+        fs.writeFileSync(path.join(app.getPath('home'), '.outlaw-theme'), t + '\n', { mode: 0o600 });
+    } catch { /* non-fatal — greeter falls back to green */ }
+}
+
 function saveSettings(s) {
     try {
         fs.mkdirSync(path.dirname(SETTINGS_PATH), { recursive: true });
@@ -148,7 +169,36 @@ function saveSettings(s) {
     } catch (e) {
         console.error('Could not persist settings:', e.message);
     }
+    mirrorThemeToHome(s && s.theme);
     return s;
+}
+
+// ---------------------------------------------------------------------------
+// Phase 15b — persistent AI chats (Cr1tt3r). Named, multi-turn conversations
+// stored in userData so they SURVIVE app updates (the app code in /usr/share is
+// replaced on update; userData is not). The renderer owns the conversation
+// logic; these helpers just load/save the whole (small) store as one JSON blob.
+// ---------------------------------------------------------------------------
+const AI_CHATS_PATH = path.join(app.getPath('userData'), 'ai-chats.json');
+
+function loadAiChats() {
+    try {
+        const store = JSON.parse(fs.readFileSync(AI_CHATS_PATH, 'utf8'));
+        if (store && Array.isArray(store.conversations)) return store;
+    } catch { /* absent or corrupt — start fresh */ }
+    return { activeId: null, conversations: [] };
+}
+
+function saveAiChats(store) {
+    try {
+        fs.mkdirSync(path.dirname(AI_CHATS_PATH), { recursive: true });
+        const safe = (store && Array.isArray(store.conversations)) ? store : { activeId: null, conversations: [] };
+        fs.writeFileSync(AI_CHATS_PATH, JSON.stringify(safe, null, 2));
+        return true;
+    } catch (e) {
+        console.error('Could not persist AI chats:', e.message);
+        return false;
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -680,28 +730,43 @@ function recommendModel(ramGb, vramGb, opts = {}) {
 let _specsCache = null;
 async function gatherSpecs() {
     if (_specsCache) return _specsCache;
-    const mem = memInfo();
-    const ramGb = Math.round((mem.totalKb / 1024 / 1024) * 10) / 10;
-    let vramGb = 0, gpuName = '';
-    if (IS_LINUX) {
-        const nv = await runShell(
-            'nvidia-smi --query-gpu=name,memory.total --format=csv,noheader,nounits 2>/dev/null | head -n 1',
-            { timeout: 3000 });
-        if (nv.code === 0 && nv.stdout) {
-            const p = nv.stdout.split(',').map((s) => s.trim());
-            gpuName = p[0] || 'NVIDIA GPU';
-            vramGb = Math.round((Number(p[1]) || 0) / 1024 * 10) / 10;
-        } else {
-            const lspci = await runShell(
-                "lspci 2>/dev/null | grep -Ei 'vga|3d|display' | sed 's/^.*: //' | head -n 1",
-                { timeout: 2000 });
-            gpuName = (lspci.stdout || '').trim();
+    // The probe must NEVER hard-fail — the AI Setup card AND the settings tuner
+    // depend on it, and an early throw shows up to the user as the whole thing
+    // "failing immediately". Any unexpected error falls back to Node's own readings.
+    try {
+        const mem = memInfo();
+        const ramGb = Math.round((mem.totalKb / 1024 / 1024) * 10) / 10;
+        let vramGb = 0, gpuName = '';
+        if (IS_LINUX) {
+            const nv = await runShell(
+                'nvidia-smi --query-gpu=name,memory.total --format=csv,noheader,nounits 2>/dev/null | head -n 1',
+                { timeout: 3000 }).catch(() => ({ code: 1, stdout: '' }));
+            if (nv.code === 0 && nv.stdout) {
+                const p = nv.stdout.split(',').map((s) => s.trim());
+                gpuName = p[0] || 'NVIDIA GPU';
+                vramGb = Math.round((Number(p[1]) || 0) / 1024 * 10) / 10;
+            } else {
+                const lspci = await runShell(
+                    "lspci 2>/dev/null | grep -Ei 'vga|3d|display' | sed 's/^.*: //' | head -n 1",
+                    { timeout: 2000 }).catch(() => ({ stdout: '' }));
+                gpuName = (lspci.stdout || '').trim();
+            }
         }
+        const cores = os.cpus().length;
+        const cpu = (os.cpus()[0] || {}).model || 'CPU';
+        _specsCache = { ramGb, vramGb, gpuName, cores, cpu, ...recommendModel(ramGb, vramGb) };
+        return _specsCache;
+    } catch (e) {
+        const ramGb = Math.round((os.totalmem() / (1024 ** 3)) * 10) / 10;
+        _specsCache = {
+            ramGb, vramGb: 0, gpuName: '',
+            cores: os.cpus().length || 1,
+            cpu: (os.cpus()[0] || {}).model || 'CPU',
+            probeNote: 'limited probe (' + ((e && e.message) || 'unknown') + ')',
+            ...recommendModel(ramGb, 0),
+        };
+        return _specsCache;
     }
-    const cores = os.cpus().length;
-    const cpu = (os.cpus()[0] || {}).model || 'CPU';
-    _specsCache = { ramGb, vramGb, gpuName, cores, cpu, ...recommendModel(ramGb, vramGb) };
-    return _specsCache;
 }
 
 // Compact one-liner used to make the local AI hardware-aware in its prompt.
@@ -715,14 +780,67 @@ function machineSummary(s) {
         + `Starter model that runs on anything: ${s.starter.model}.`;
 }
 
-// Phase 13.2 — which local AI backend the desktop uses right now. Default = the
-// built-in bundled Ollama model; when the user turns the built-in AI off, fall
-// back to LM Studio (status() will report it unavailable if it isn't running).
+// QoL — a one-line snapshot of the user's current settings so Cr1tt3r is aware of
+// the system state (can answer "what theme am I on?" and avoid redundant changes).
+function settingsSummary() {
+    const onoff = (v) => (v ? 'on' : 'off');
+    return 'Current settings — '
+        + `AI engine: ${aiEngine()}; `
+        + (aiEngine() === 'ollama' ? `Ollama model: ${settings.ollamaModel || '(none)'}; ` : '')
+        + `theme: ${settings.theme || 'system'}; `
+        + `CRT: ${onoff(settings.crtFx)}; glow: ${onoff(settings.glow)}; `
+        + `reduce motion: ${onoff(settings.reduceMotion)}; text size: ${settings.uiScale || 1}; `
+        + `VRAM saver: ${settings.vramSaverMode || 'auto'}; performance mode: ${onoff(settings.performanceMode)}; `
+        + `update checks: ${onoff(settings.autoCheck)}; voice: ${onoff(settings.coreVoiceEnabled)}.`;
+}
+
+// Phase 13.2 / 16 — which local AI backend the desktop uses right now. Three
+// engines: 'base' (tiny bundled Ollama model, default — runs on anything),
+// 'lmstudio' (a model loaded in LM Studio), or 'ollama' (a LARGER model pulled
+// through Ollama — a full LM Studio replacement for AVX1-only CPUs). aiEngine is
+// authoritative; when empty we derive it from the legacy baseAiEnabled toggle.
+function aiEngine() {
+    if (settings.aiEngine === 'base' || settings.aiEngine === 'lmstudio' || settings.aiEngine === 'ollama') {
+        return settings.aiEngine;
+    }
+    return settings.baseAiEnabled !== false ? 'base' : 'lmstudio';
+}
 function aiBackend() {
-    if (settings.baseAiEnabled !== false) {
+    const engine = aiEngine();
+    if (engine === 'ollama') {
+        return { baseUrl: OLLAMA_V1, model: settings.ollamaModel || BASE_AI_MODEL, kind: 'ollama' };
+    }
+    if (engine === 'base') {
         return { baseUrl: OLLAMA_V1, model: BASE_AI_MODEL, kind: 'base' };
     }
     return { baseUrl: LM_STUDIO_V1, model: settings.aiModel || 'local-model', kind: 'lmstudio' };
+}
+
+// Phase 16 — a "the AI isn't reachable yet" message tailored to the active engine.
+function aiUnavailableMsg(be) {
+    if (be.kind === 'base') {
+        return 'The built-in AI isn\'t ready yet — it may still be downloading its model. Try again shortly (or check that Ollama is running).';
+    }
+    if (be.kind === 'ollama') {
+        return `Ollama isn't reachable, or "${be.model}" isn't pulled yet. Make sure Ollama is running and pull the model from AI setup.`;
+    }
+    return 'LM Studio isn\'t reachable. Open LM Studio, load a model, then click "Start Server" (port 1234).';
+}
+
+// Phase 16 — CPU AVX support, read once. LM Studio needs AVX2; CPUs with only
+// AVX1 (or neither) can't run it, so we steer those users to the Ollama engine.
+let _avxCaps = null;
+function cpuAvxCaps() {
+    if (_avxCaps) return _avxCaps;
+    let avx = true, avx2 = true;   // assume capable off-Linux / when unreadable
+    try {
+        const info = fs.readFileSync('/proc/cpuinfo', 'utf8');
+        const flagsLine = info.split('\n').find((l) => l.startsWith('flags'));
+        const flags = flagsLine ? (flagsLine.split(':')[1] || '') : '';
+        if (flags) { avx = /\bavx\b/.test(flags); avx2 = /\bavx2\b/.test(flags); }
+    } catch { /* keep the capable default */ }
+    _avxCaps = { avx, avx2 };
+    return _avxCaps;
 }
 
 // Pull the bundled base model if it isn't present yet (first desktop run). Runs
@@ -781,13 +899,60 @@ async function resolveInstallable(name) {
         a.id === q || a.pkg === q || (a.label || '').toLowerCase() === q
         || a.id.includes(q) || (a.label || '').toLowerCase().includes(q));
     if (hit) return { pkg: hit.pkg, extra: hit.extra || [], label: hit.label, source: 'the Apps catalog' };
-    // Official repos — EXACT package name only (validated, no shell metacharacters).
+    // Official repos — EXACT package name first (validated, no shell metacharacters).
     if (IS_LINUX && /^[a-z0-9][a-z0-9._+-]*$/.test(q)) {
         const r = await runShell(`pacman -Si ${q}`, { timeout: 8000 });
         if (r.code === 0) return { pkg: q, extra: [], label: q, source: 'the official repositories' };
     }
+    // Phase 15c — fuzzy fallback: search the repos for the best match so a DESCRIBED
+    // need ("something to edit audio") or a slightly-off name still resolves to a
+    // real, installable package. The user still confirms before anything installs.
+    if (IS_LINUX && /^[a-z0-9][a-z0-9 ._+-]{0,39}$/i.test(q)) {
+        const terms = q.split(/\s+/).filter(Boolean).map((w) => `'${w}'`).join(' ');
+        const r = await runShell(`pacman -Ss ${terms}`, { timeout: 12000 });
+        const line = (r.stdout || '').split('\n').find((l) => /^\w[\w-]*\/\S+\s+/.test(l));
+        const m = line && line.match(/^\w[\w-]*\/(\S+)\s+/);
+        if (m) return { pkg: m[1], extra: [], label: m[1], source: 'the official repositories', fuzzy: true };
+    }
     return null;
 }
+
+// QoL — settings the AI is allowed to change on the user's behalf. Safe, reversible
+// ones only (no auth / updater / sensitive keys). Booleans accept on/off synonyms;
+// the rest are value allowlists. The renderer applies the patch via settings:set so
+// all the usual side-effects (vram apply, theme mirror, auto-check restart) still run.
+const AI_SETTABLE = {
+    theme: { values: ['green', 'gold', 'broken'] },
+    crtFx: { bool: true },
+    glow: { bool: true },
+    reduceMotion: { bool: true },
+    performanceMode: { bool: true },
+    vramSaverMode: { values: ['auto', 'off', 'lean', 'minimal'] },
+    aiEngine: { values: ['base', 'lmstudio', 'ollama'] },
+    autoCheck: { bool: true },
+    coreVoiceEnabled: { bool: true },
+    uiScale: { values: ['0.9', '1', '1.15', '1.3'] },
+};
+
+function parseSettingChange(arg) {
+    const m = String(arg || '').match(/^\s*([a-zA-Z]+)\s*[:=\s]\s*([a-zA-Z0-9]+)\s*$/);
+    if (!m) return null;
+    const key = m[1];
+    const val = m[2].toLowerCase();
+    const spec = AI_SETTABLE[key];
+    if (!spec) return null;
+    if (spec.bool) {
+        if (['on', 'true', 'yes', '1', 'enable', 'enabled'].includes(val)) return { [key]: true };
+        if (['off', 'false', 'no', '0', 'disable', 'disabled'].includes(val)) return { [key]: false };
+        return null;
+    }
+    if (spec.values && spec.values.includes(val)) return { [key]: val };
+    return null;
+}
+
+// QoL — screens the AI may navigate to for the user (matches the sidebar).
+const AI_SCREENS = ['dashboard', 'syscore', 'files', 'tasks', 'terminal',
+    'gaming', 'gamedev', 'apps', 'ai', 'calc', 'settings', 'help'];
 
 async function executeIntent(intent) {
     switch (intent.tool) {
@@ -823,6 +988,26 @@ async function executeIntent(intent) {
             const r = await openPath(intent.arg || '');
             return { text: r.ok ? `Opened ${intent.arg}.` : r.error, did: r.ok ? 'open_file' : 'none' };
         }
+        case 'open_screen': {
+            // QoL — let the assistant take the user to a section of the shell.
+            const name = String(intent.arg || '').toLowerCase().trim();
+            if (!AI_SCREENS.includes(name)) {
+                return { text: 'I can open: ' + AI_SCREENS.join(', ') + '. There\'s no "' + (intent.arg || '') + '" screen.', did: 'none' };
+            }
+            return { did: 'open_screen', openScreen: name, text: intent.text || ('Opening ' + name + '.') };
+        }
+        case 'set_setting': {
+            // QoL — let the assistant adjust a safe, reversible setting for the user.
+            const patch = parseSettingChange(intent.arg || '');
+            if (!patch) {
+                return { text: 'I can change: theme, crtFx, glow, performanceMode, vramSaverMode, aiEngine, '
+                    + 'autoCheck, coreVoiceEnabled — e.g. "vramSaverMode=lean". I couldn\'t apply "'
+                    + (intent.arg || '') + '".', did: 'none' };
+            }
+            const key = Object.keys(patch)[0];
+            // The renderer applies this through settings:set (full side-effects).
+            return { did: 'set_setting', settingsPatch: patch, text: intent.text || ('Set ' + key + ' to ' + patch[key] + '.') };
+        }
         case 'install_app': {
             // Phase 13: only ever install from a KNOWN source, and only after the
             // user confirms. Hand a proposal back to the UI (same rail as run_command).
@@ -830,10 +1015,13 @@ async function executeIntent(intent) {
             if (!resolved) {
                 return { text: `I can only install from known sources (the Apps catalog or the official repositories), and I couldn't find "${intent.arg}" there. You can browse the Apps page instead.`, did: 'none' };
             }
+            const proposal = resolved.fuzzy
+                ? `Closest match I found is "${resolved.label}" in ${resolved.source}. Confirm to install it (or browse the Apps page for more).`
+                : (intent.text || `I can install ${resolved.label} from ${resolved.source}. Confirm to proceed.`);
             return {
                 needsConfirm: true,
                 action: { tool: 'install_app', pkg: resolved.pkg, extra: resolved.extra || [], label: resolved.label, source: resolved.source },
-                text: intent.text || `I can install ${resolved.label} from ${resolved.source}. Confirm to proceed.`,
+                text: proposal,
             };
         }
         case 'run_command':
@@ -1599,6 +1787,51 @@ function registerIpc() {
         return APP_CATALOG.map((a) => ({ id: a.id, installed: installed.has(a.pkg) }));
     });
 
+    // Phase 15c — search ALL official packages (not just the curated catalog), so
+    // the user can install anything. Read-only `pacman -Ss`; the query is strictly
+    // validated (must start alphanumeric, safe charset) and each term single-quoted
+    // so it can never be a shell injection or a stray pacman flag.
+    ipcMain.handle('apps:search', async (_e, query) => {
+        if (!IS_LINUX) return { ok: false, error: 'Search runs on Outlaw OS.', results: [] };
+        const q = String(query || '').trim();
+        if (q.length < 2) return { ok: true, results: [] };
+        if (!/^[a-z0-9][a-z0-9 ._+-]{0,39}$/i.test(q)) {
+            return { ok: false, error: 'Search with letters, numbers, spaces or . _ + - only.', results: [] };
+        }
+        const terms = q.split(/\s+/).filter(Boolean).map((w) => `'${w}'`).join(' ');
+        const r = await runShell(`pacman -Ss ${terms}`, { timeout: 12000 });
+        const lines = (r.stdout || '').split('\n');
+        const results = [];
+        for (let i = 0; i < lines.length && results.length < 30; i++) {
+            const m = lines[i].match(/^(\w[\w-]*)\/(\S+)\s+(\S+)(.*)$/);
+            if (m) {
+                results.push({
+                    repo: m[1],
+                    name: m[2],
+                    version: m[3],
+                    installed: /\[installed/.test(m[4] || ''),
+                    description: (lines[i + 1] || '').trim(),
+                });
+            }
+        }
+        return { ok: true, results };
+    });
+
+    // Phase 15c — install any official package by name (the "install anything" path
+    // behind the search results above). Name is strictly validated, then verified
+    // to be a real repo package before we hand it to the privileged installer.
+    ipcMain.handle('apps:install-pkg', async (_e, pkg) => {
+        if (!IS_LINUX) return { ok: false, error: 'Install runs on Outlaw OS.' };
+        const name = String(pkg || '').trim();
+        if (!/^[a-z0-9][a-z0-9@._+-]{0,79}$/i.test(name)) return { ok: false, error: 'Invalid package name.' };
+        const info = await runShell(`pacman -Si '${name}'`, { timeout: 8000 });
+        if (info.code !== 0) return { ok: false, error: `"${name}" isn't an available package.` };
+        const r = await privInstall(name, 1000 * 60 * 20);
+        const tail = (r.stdout || r.stderr || `exit ${r.code}`).slice(-3000);
+        if (r.code !== 0) return { ok: false, error: tail };
+        return { ok: true, text: `${name} installed.` };
+    });
+
     ipcMain.handle('apps:install', async (_e, id) => {
         if (!IS_LINUX) return { ok: false, error: 'Install runs on Outlaw OS.' };
         const app = APP_CATALOG.find((a) => a.id === id);
@@ -1701,7 +1934,11 @@ function registerIpc() {
             updateRepo: settings.updateRepo,
             vramSaverMode: settings.vramSaverMode,
         };
-        settings = saveSettings({ ...settings, ...(patch || {}) });
+        const merged = { ...settings, ...(patch || {}) };
+        // Phase 16 — keep the legacy baseAiEnabled flag in step with the chosen
+        // engine so the (many) existing `baseAiEnabled` checks stay correct.
+        if (patch && patch.aiEngine) merged.baseAiEnabled = (patch.aiEngine === 'base');
+        settings = saveSettings(merged);
         // If updater config changed, restart the background timer accordingly.
         if (before.autoCheck !== settings.autoCheck || before.updateRepo !== settings.updateRepo) {
             startAutoCheck();
@@ -1721,7 +1958,9 @@ function registerIpc() {
         const be = aiBackend();
         const s = await aiAgent.status(be);
         return { ...s, enabled: settings.aiEnabled, model: be.model, backend: be.kind,
-                 baseAiEnabled: settings.baseAiEnabled !== false };
+                 baseAiEnabled: settings.baseAiEnabled !== false,
+                 aiEngine: aiEngine(), ollamaModel: settings.ollamaModel || '',
+                 lmStudioOk: cpuAvxCaps().avx2 };
     });
 
     ipcMain.handle('ai:enable', async () => {
@@ -1789,35 +2028,94 @@ function registerIpc() {
             const text = await aiAgent.chat(messages, { ...aiBackend(), maxTokens: 420 });
             return { ok: true, text: text || 'No reply.' };
         } catch (e) {
-            return {
-                ok: false,
-                error: settings.baseAiEnabled !== false
-                    ? 'The built-in AI isn\'t ready yet — it may still be downloading its model. Try again shortly.'
-                    : 'LM Studio isn\'t answering yet. Install it, load the starter model ('
-                        + s.starter.model + '), click "Start Server", then ask again.',
-            };
+            return { ok: false, error: aiUnavailableMsg(aiBackend()) };
         }
     });
 
-    ipcMain.handle('ai:ask', async (_e, prompt) => {
+    ipcMain.handle('ai:ask', async (_e, payload) => {
         if (!settings.aiEnabled) return { error: 'AI is disabled. Enable it in Settings.' };
+        // payload is a plain string (legacy) or { prompt, history, summary } so a
+        // persistent chat can give Cr1tt3r conversation memory (Phase 15b).
+        const prompt = typeof payload === 'string' ? payload : ((payload && payload.prompt) || '');
+        const history = (payload && Array.isArray(payload.history)) ? payload.history : [];
+        const summary = (payload && typeof payload.summary === 'string') ? payload.summary : '';
         const be = aiBackend();
         const s = await aiAgent.status(be);
         if (!s.available) {
-            return {
-                error: be.kind === 'base'
-                    ? 'The built-in AI isn\'t ready yet — it may still be downloading its model. Try again shortly (or check that Ollama is running).'
-                    : 'LM Studio isn\'t reachable. Open LM Studio, load a model, then click "Start Server" (port 1234).',
-            };
+            return { error: aiUnavailableMsg(be) };
         }
         try {
             const appIds = Object.keys(APP_REGISTRY);
             const machine = machineSummary(await gatherSpecs());
-            const intent = await aiAgent.ask(prompt, { ...be, appIds, machine });
+            const intent = await aiAgent.ask(prompt, { ...be, appIds, machine, history, summary, sysSettings: settingsSummary() });
             return await executeIntent(intent);
         } catch (e) {
             return { error: e.message };
         }
+    });
+
+    // Phase 15b — persistent AI chats: load/save the whole store (small JSON).
+    ipcMain.handle('ai:chats:load', () => loadAiChats());
+    ipcMain.handle('ai:chats:save', (_e, store) => ({ ok: saveAiChats(store) }));
+
+    // Phase 15b (slice 2) — fold older turns into a running summary so long chats
+    // keep memory without resending everything. Best-effort: on any failure the
+    // caller keeps its prior summary. payload = { messages:[{role,content}], priorSummary }.
+    ipcMain.handle('ai:summarize', async (_e, payload) => {
+        const prior = (payload && typeof payload.priorSummary === 'string') ? payload.priorSummary : '';
+        if (!settings.aiEnabled) return { summary: prior };
+        const msgs = (payload && Array.isArray(payload.messages)) ? payload.messages : [];
+        if (!msgs.length) return { summary: prior };
+        const be = aiBackend();
+        const s = await aiAgent.status(be);
+        if (!s.available) return { summary: prior };
+        try {
+            const convo = msgs
+                .map((m) => (m.role === 'user' ? 'User: ' : 'Cr1tt3r: ') + String(m.content || ''))
+                .join('\n');
+            const prompt = [
+                { role: 'system', content: 'You keep a terse running summary of a chat. Preserve names, decisions, facts, and any unfinished threads. Reply with 4–8 short bullet points only — no preamble.' },
+                { role: 'user', content: (prior ? 'Current summary:\n' + prior + '\n\n' : '') + 'New turns to fold in:\n' + convo + '\n\nReturn the updated summary as bullets.' },
+            ];
+            const summary = await aiAgent.chat(prompt, { ...be, maxTokens: 320 });
+            return { summary: String(summary || prior || '').slice(0, 2000) };
+        } catch {
+            return { summary: prior };
+        }
+    });
+
+    // Phase 16 — Ollama model management (status / list / pull) so the user can run
+    // a LARGER model through Ollama as a full LM Studio replacement.
+    ipcMain.handle('ollama:status', async () => {
+        if (!IS_LINUX) return { installed: false, running: false };
+        const installed = (await runShell('command -v ollama', { timeout: 4000 })).code === 0;
+        let running = false;
+        if (installed) {
+            const r = await runShell('curl -sf -m 3 http://127.0.0.1:11434/api/tags', { timeout: 5000 });
+            running = r.code === 0;
+        }
+        return { installed, running };
+    });
+
+    ipcMain.handle('ollama:list', async () => {
+        if (!IS_LINUX) return { models: [] };
+        const r = await runShell('ollama list 2>/dev/null', { timeout: 8000 });
+        // Skip the header row; first column is the model tag.
+        const models = (r.stdout || '').split('\n').slice(1)
+            .map((l) => l.trim().split(/\s+/)[0]).filter(Boolean);
+        return { models };
+    });
+
+    ipcMain.handle('ollama:pull', async (_e, model) => {
+        if (!IS_LINUX) return { ok: false, error: 'Ollama runs on Outlaw OS.' };
+        const name = String(model || '').trim();
+        // Ollama tags look like "qwen2.5-coder:7b" — strict charset, passed as an
+        // argv entry (no shell) so it can't be an injection.
+        if (!/^[a-z0-9][a-z0-9._:/-]{0,60}$/i.test(name)) return { ok: false, error: 'Invalid model name.' };
+        const labels = ['Preparing', 'Downloading model', 'Verifying', 'Finishing'];
+        const matchers = [null, /pulling|downloading|manifest/i, /verifying|writing/i, /success/i];
+        const r = await runStreamingJob('ollama', ['pull', name], labels, matchers);
+        return { ok: r.ok, error: r.ok ? '' : 'Pull failed. Check the model name and your connection.' };
     });
 
     ipcMain.handle('ai:confirm-action', async (_e, action) => {
@@ -2287,6 +2585,10 @@ function startAutoCheck() {
 
 app.whenReady().then(() => {
     registerIpc();
+    // Phase 14h — make sure the greeter can already see the current theme on the
+    // very next boot, even for users who set it before this feature existed (they
+    // wouldn't have re-saved settings). Cheap one-shot write.
+    mirrorThemeToHome(settings && settings.theme);
     createWindow();
     startAutoCheck();
     // SC7 — start the VRAM tier background poll now that a renderer exists.

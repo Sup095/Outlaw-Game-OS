@@ -330,9 +330,11 @@ class MainWindow(QMainWindow):
         self._conn_timer.timeout.connect(self.orch.refresh_connection_async)
         self._conn_timer.start()
 
-        # Hardware (VRAM/RAM) readout, polled every 2s.
+        # Hardware (VRAM/RAM) readout. Phase QoL: 3s (was 2s) is plenty for a status
+        # badge and trims a third of the NVML/psutil polling; it also pauses while the
+        # window is minimized (see changeEvent) to honour the lightweight invariant.
         self._hw_timer = QTimer(self)
-        self._hw_timer.setInterval(2_000)
+        self._hw_timer.setInterval(3_000)
         self._hw_timer.timeout.connect(self._refresh_hardware)
         self._hw_timer.start()
         QTimer.singleShot(400, self._refresh_hardware)
@@ -410,7 +412,13 @@ class MainWindow(QMainWindow):
         input_row.setSpacing(8)
         self.input = QLineEdit()
         self.input.setPlaceholderText("Describe what you want — e.g. 'add a state machine to Player.gd'")
+        self.input.setToolTip("↑ / ↓ recalls your previous prompts")
         self.input.returnPressed.connect(self._on_send)
+        # Phase 14e — shell-style prompt history: Up/Down recalls prior prompts.
+        self._prompt_history: list[str] = []
+        self._history_pos: int | None = None   # None = editing a fresh line
+        self._history_draft: str = ""           # unsent line, stashed on first Up
+        self.input.installEventFilter(self)
 
         self.send_btn = QPushButton("Send  ➤")
         self.send_btn.setObjectName("PrimaryButton")
@@ -542,6 +550,10 @@ class MainWindow(QMainWindow):
         sess_menu.addAction(act_quit)
 
         tools_menu = bar.addMenu("&Tools")
+        act_v4rmint = QAction("Ask V4rm1nt (base AI)…", self)
+        act_v4rmint.triggered.connect(self._ask_v4rmint)
+        tools_menu.addAction(act_v4rmint)
+        tools_menu.addSeparator()
         act_grab = QAction("Capture Godot window", self)
         act_grab.triggered.connect(self._capture_godot)
         tools_menu.addAction(act_grab)
@@ -756,6 +768,11 @@ class MainWindow(QMainWindow):
         text = self.input.text().strip()
         if not text:
             return
+        # Record for Up/Down recall (skip consecutive duplicates), reset browse.
+        if not self._prompt_history or self._prompt_history[-1] != text:
+            self._prompt_history.append(text)
+        self._history_pos = None
+        self._history_draft = ""
         self.input.clear()
         self.chat_panel.add_user(text)
         self.thought_chamber.reset()
@@ -763,6 +780,54 @@ class MainWindow(QMainWindow):
         # Stash for the live "WORKING ON" headline.
         self._current_task_summary = text
         self.orch.submit_task(text)
+
+    def eventFilter(self, obj, event):
+        # Phase 14e — Up/Down on the prompt box walk the prompt history (Up/Down
+        # are inert in a single-line QLineEdit otherwise, so this is safe).
+        from PyQt6.QtCore import QEvent
+        if obj is self.input and event.type() == QEvent.Type.KeyPress:
+            key = event.key()
+            if key == Qt.Key.Key_Up:
+                self._history_recall(-1)
+                return True
+            if key == Qt.Key.Key_Down:
+                self._history_recall(1)
+                return True
+        return super().eventFilter(obj, event)
+
+    def changeEvent(self, event):
+        # Phase QoL — pause the hardware poll while minimized (resume + refresh on
+        # restore) so an idle, minimized window costs nothing.
+        from PyQt6.QtCore import QEvent
+        if event.type() == QEvent.Type.WindowStateChange and hasattr(self, "_hw_timer"):
+            if self.windowState() & Qt.WindowState.WindowMinimized:
+                self._hw_timer.stop()
+            elif not self._hw_timer.isActive():
+                self._hw_timer.start()
+                self._refresh_hardware()
+        super().changeEvent(event)
+
+    def _history_recall(self, direction: int) -> None:
+        hist = self._prompt_history
+        if not hist:
+            return
+        if self._history_pos is None:
+            if direction > 0:
+                return  # Down with nothing being browsed — leave the draft alone
+            self._history_draft = self.input.text()  # stash the unsent line
+            self._history_pos = len(hist) - 1
+        else:
+            self._history_pos += direction
+            if self._history_pos < 0:
+                self._history_pos = 0
+            elif self._history_pos >= len(hist):
+                # Stepped past the newest entry → restore the stashed draft.
+                self._history_pos = None
+                self.input.setText(self._history_draft)
+                self.input.end(False)
+                return
+        self.input.setText(hist[self._history_pos])
+        self.input.end(False)  # cursor to end of recalled text
 
     @pyqtSlot(bool)
     def _on_busy_changed(self, busy: bool) -> None:
@@ -952,6 +1017,21 @@ class MainWindow(QMainWindow):
         # Quitting ends the dev X-session; the greeter, seeing honor-once, goes
         # straight to the Desktop on the restart.
         QApplication.quit()
+
+    def _ask_v4rmint(self) -> None:
+        """Open the base-AI (V4rm1nt) setup-help chat.
+
+        Backed by the bundled Ollama model, independent of LM Studio — so it
+        works even before a coding model is loaded. Available any time from the
+        Tools menu, and pre-session from the project picker.
+        """
+        try:
+            from .ask_v4rmint import AskV4rmintDialog
+        except Exception as exc:  # noqa: BLE001
+            QMessageBox.information(self, "V4rm1nt",
+                                    f"The base-AI assistant isn't available ({exc}).")
+            return
+        AskV4rmintDialog(config=getattr(self, "config", None), parent=self).exec()
 
     # ------------------------------------------------------------------
     # Settings / workspace
