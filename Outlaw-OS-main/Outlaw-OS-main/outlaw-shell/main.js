@@ -796,6 +796,22 @@ function aiUnavailableMsg(be) {
     return 'LM Studio isn\'t reachable. Open LM Studio, load a model, then click "Start Server" (port 1234).';
 }
 
+// Phase 16 — CPU AVX support, read once. LM Studio needs AVX2; CPUs with only
+// AVX1 (or neither) can't run it, so we steer those users to the Ollama engine.
+let _avxCaps = null;
+function cpuAvxCaps() {
+    if (_avxCaps) return _avxCaps;
+    let avx = true, avx2 = true;   // assume capable off-Linux / when unreadable
+    try {
+        const info = fs.readFileSync('/proc/cpuinfo', 'utf8');
+        const flagsLine = info.split('\n').find((l) => l.startsWith('flags'));
+        const flags = flagsLine ? (flagsLine.split(':')[1] || '') : '';
+        if (flags) { avx = /\bavx\b/.test(flags); avx2 = /\bavx2\b/.test(flags); }
+    } catch { /* keep the capable default */ }
+    _avxCaps = { avx, avx2 };
+    return _avxCaps;
+}
+
 // Pull the bundled base model if it isn't present yet (first desktop run). Runs
 // only when the built-in AI is on; streams to the loading screen. Ollama must be
 // installed + its service running (the installer enables it).
@@ -1855,7 +1871,8 @@ function registerIpc() {
         const s = await aiAgent.status(be);
         return { ...s, enabled: settings.aiEnabled, model: be.model, backend: be.kind,
                  baseAiEnabled: settings.baseAiEnabled !== false,
-                 aiEngine: aiEngine(), ollamaModel: settings.ollamaModel || '' };
+                 aiEngine: aiEngine(), ollamaModel: settings.ollamaModel || '',
+                 lmStudioOk: cpuAvxCaps().avx2 };
     });
 
     ipcMain.handle('ai:enable', async () => {

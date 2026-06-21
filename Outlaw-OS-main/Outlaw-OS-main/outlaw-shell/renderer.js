@@ -1505,6 +1505,13 @@ async function refreshAiStatus() {
             modelSub.textContent = 'Switch the AI engine to LM Studio to use a model you load there.';
         }
     }
+    // Phase 16 — warn AVX1-only CPUs (LM Studio needs AVX2) and point them at Ollama.
+    const engSub = $('#ai-engine-sub');
+    if (engSub) {
+        engSub.textContent = (s.lmStudioOk === false)
+            ? '⚠ Your CPU lacks AVX2 — LM Studio won\'t run here. Use the Ollama engine.'
+            : 'What runs the model on this PC.';
+    }
 }
 
 // ---------------------------------------------------------------------------
