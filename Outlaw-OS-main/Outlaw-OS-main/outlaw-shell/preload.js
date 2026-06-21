@@ -6,7 +6,7 @@
 // `ipcRenderer`, or raw shell access. Everything is funnelled through named IPC
 // channels that are validated in the main process.
 // ============================================================================
-const { contextBridge, ipcRenderer } = require('electron');
+const { contextBridge, ipcRenderer, webFrame } = require('electron');
 
 // Whitelisted one-way event channels the renderer may subscribe to.
 const EVENT_CHANNELS = ['ai-stream', 'system-tick', 'toast',
@@ -114,6 +114,8 @@ contextBridge.exposeInMainWorld('outlaw', {
         list: () => ipcRenderer.invoke('ollama:list'),
         pull: (model) => ipcRenderer.invoke('ollama:pull', model),
     },
+    // QoL/accessibility — scale the whole UI (text size). Clamped for safety.
+    setZoom: (factor) => { try { webFrame.setZoomFactor(Math.max(0.7, Math.min(2, Number(factor) || 1))); } catch {} },
 
     // --- Gaming -------------------------------------------------------------
     gaming: {

@@ -105,6 +105,7 @@ const DEFAULT_SETTINGS = {
     crtFx: false,            // CRT scanline/flicker effect OFF by default (crisp + readable)
     glow: false,             // text glow OFF by default (no discoloration)
     reduceMotion: false,     // QoL — off decorative animations/transitions (a11y + low-end perf)
+    uiScale: 1,              // QoL/accessibility — whole-UI zoom (text size). 0.9–1.3.
     // P1 — visual theme. 'green' = classic green-phosphor terminal (default,
     // unchanged for existing users). 'gold' = retro gold-on-gunmetal "sci-fi
     // fortress" look that matches Outlaw CodeMaker. Pure CSS-variable swap, so
@@ -916,6 +917,7 @@ const AI_SETTABLE = {
     aiEngine: { values: ['base', 'lmstudio', 'ollama'] },
     autoCheck: { bool: true },
     coreVoiceEnabled: { bool: true },
+    uiScale: { values: ['0.9', '1', '1.15', '1.3'] },
 };
 
 function parseSettingChange(arg) {

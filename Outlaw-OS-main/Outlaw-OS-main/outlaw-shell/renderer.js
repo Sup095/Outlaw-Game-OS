@@ -1994,6 +1994,10 @@ async function loadSettings() {
     $('#glow-toggle').checked = !!s.glow;
     const rmToggle = $('#reduce-motion-toggle');
     if (rmToggle) rmToggle.checked = !!s.reduceMotion;
+    // QoL/accessibility — whole-UI zoom (text size).
+    if (api.setZoom) api.setZoom(Number(s.uiScale) || 1);
+    const scaleSel = $('#ui-scale');
+    if (scaleSel) scaleSel.value = String(s.uiScale || 1);
     // P1 — theme. 'gold' adds body.theme-gold which re-points the CSS palette
     // variables to the gold-on-gunmetal scheme. Default 'green' = no class.
     applyTheme(s.theme || 'green');
@@ -2307,6 +2311,7 @@ function wire() {
     $('#crt-toggle').addEventListener('change', (e) => { document.body.classList.toggle('crt', e.target.checked); setSetting({ crtFx: e.target.checked }); });
     $('#glow-toggle').addEventListener('change', (e) => { document.body.classList.toggle('glow', e.target.checked); setSetting({ glow: e.target.checked }); });
     { const rm = $('#reduce-motion-toggle'); if (rm) rm.addEventListener('change', (e) => { document.body.classList.toggle('reduce-motion', e.target.checked); setSetting({ reduceMotion: e.target.checked }); }); }
+    { const us = $('#ui-scale'); if (us) us.addEventListener('change', (e) => { const f = parseFloat(e.target.value) || 1; if (api.setZoom) api.setZoom(f); setSetting({ uiScale: f }); }); }
     const _themeSel = $('#theme-select');
     if (_themeSel) _themeSel.addEventListener('change', (e) => {
         const t = e.target.value === 'gold' ? 'gold' : 'green';
