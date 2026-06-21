@@ -1465,6 +1465,62 @@ async function handleOllamaPull() {
     await refreshAiStatus();
 }
 
+// QoL — Cr1tt3r tunes the system: hardware + a couple of answers -> the best
+// settings, applied for you. Pure mapping over existing, reversible settings.
+function recommendSettings(specs, status, answers) {
+    const ramGb = Number(specs && specs.ramGb) || 0;
+    const vramGb = Number(specs && specs.vramGb) || 0;
+    const lmOk = !status || status.lmStudioOk !== false;
+    const priority = (answers && answers.priority) || 'balanced';
+    const multitask = (answers && answers.multitask) === 'yes';
+    const patch = {};
+    // VRAM-saver tier.
+    if (priority === 'lowpower' || (vramGb && vramGb < 4) || multitask) patch.vramSaverMode = 'lean';
+    else if (priority === 'performance' && vramGb >= 8) patch.vramSaverMode = 'off';
+    else patch.vramSaverMode = 'auto';
+    // Visual effects — only when visuals matter AND the GPU can spare it.
+    const fancy = priority === 'visuals' && (!vramGb || vramGb >= 4);
+    patch.crtFx = fancy;
+    patch.glow = fancy;
+    // CPU governor + background update checks.
+    patch.performanceMode = priority === 'performance';
+    patch.autoCheck = priority !== 'lowpower';
+    // AI engine — respect AVX2 + resources; otherwise leave the user's choice.
+    if (!lmOk) patch.aiEngine = vramGb >= 4 ? 'ollama' : 'base';
+    else if (priority === 'lowpower' || (ramGb && ramGb < 8)) patch.aiEngine = 'base';
+    return patch;
+}
+
+async function tuneSettings() {
+    const btn = $('#tune-apply');
+    const out = $('#tune-result');
+    if (btn) btn.disabled = true;
+    if (out) out.textContent = 'Reading your hardware…';
+    let specs = {};
+    let status = {};
+    try { specs = await api.ai.recommend(); } catch {}
+    try { status = await api.ai.status(); } catch {}
+    const answers = {
+        priority: (($('#tune-priority') || {}).value) || 'balanced',
+        multitask: (($('#tune-multitask') || {}).value) || 'no',
+    };
+    const patch = recommendSettings(specs, status, answers);
+    if (patch.aiEngine) patch.baseAiEnabled = (patch.aiEngine === 'base');
+    try { await setSetting(patch); } catch {}
+    await loadSettings();        // reflect the new toggles + effects in the UI
+    await refreshAiStatus();
+    const bits = [
+        'VRAM saver ' + patch.vramSaverMode,
+        'effects ' + (patch.crtFx ? 'on' : 'off'),
+        'performance ' + (patch.performanceMode ? 'on' : 'off'),
+        patch.aiEngine ? ('AI engine ' + patch.aiEngine) : null,
+        'update checks ' + (patch.autoCheck ? 'on' : 'off'),
+    ].filter(Boolean).join(' · ');
+    if (out) out.textContent = '✓ Applied — ' + bits;
+    toast('Cr1tt3r tuned your settings.');
+    if (btn) btn.disabled = false;
+}
+
 async function refreshAiStatus() {
     let s = { enabled: false, available: false };
     try { s = await api.ai.status(); } catch {}
@@ -2205,6 +2261,8 @@ function wire() {
     });
     const ollPull = $('#ollama-pull');
     if (ollPull) ollPull.addEventListener('click', handleOllamaPull);
+    const tuneBtn = $('#tune-apply');
+    if (tuneBtn) tuneBtn.addEventListener('click', tuneSettings);
 
     // Apps panel search — type-as-you-go, no debounce needed (catalog is tiny).
     const appsSearchEl = $('#apps-search');
