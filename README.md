@@ -35,7 +35,7 @@ Outlaw Game OS is built in the open, one phase at a time. Each **completed** roa
 
 ```
 Foundations   ▰▰▰▰▰▰▰▰▰▰  done — 4 roadmaps, all shipped & tested
-This cycle    ▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▱▱▱  Completeness & Polish — phase 16 (Ollama as a full LM Studio replacement) underway → v2.1.0
+This cycle    ▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▱▱  Completeness & Polish — release-readiness stretch (phases 17–18) → v2.1.0
 ```
 
 > **Legend:** ✅ shipped & in your hands · 🚧 building now · 🔭 on the horizon
@@ -71,7 +71,7 @@ The foundations boot and run; this cycle makes the desktop feel *finished* and r
 | ✅ | **13 · AI that runs your system (experimental)** | Tell the on-device AI *"install Krita"* and it does it — resolving to a **known source** (the Apps catalog or official repos), proposing the action, and installing on your **one-click confirm**, shown live on the loading screen. Ships with a **small built-in model** so the System Core + AI Assistant work **out of the box, no setup** — toggle it off to use LM Studio instead. Desktop-only. |
 | ✅ | **14 · Dev session rebuild** | A ground-up rework of the Dev session (Outlaw CodeMaker), built in subphases: **14a** shell basics (fill-screen, session switching, LM Studio / Godot launchers, settings) · **14b** the project "brain" — a game **description sheet** + a living **roadmap** + an auto-updating **file tree** · **14c** conversation compaction · **14d** a dev-vs-desktop model picker + base-AI assist · **14e** more low-resource features · **14g** a real dev-session shell (a UI *before* you pick a project — Godot + LM Studio setup, the base AI, settings, exit — so you can actually get a game going) · **14h** consistent theming everywhere (greeter + CodeMaker match your chosen look) · **14f** polish + testing. Question-driven. |
 | ✅ | **15 · AI Assistant overhaul** | Two named AI personas — **Cr1tt3r** on the desktop, **V4rm1nt** in the dev session — plus **persistent chats** you can keep, delete and reference from one another (surviving updates) in both the Desktop assistant and CodeMaker, and an **installer that installs what you choose**: pick from described packages, or describe what you want and it says whether it's viable and installs it. *(Expanding.)* |
-| 🚧 | **16 · Ollama as a full LM Studio replacement** | For PCs that **can't run LM Studio** (e.g. CPUs with only AVX1), let **Ollama** stand in as a full local-model backend for the desktop *and* dev session — not just the built-in base AI. |
+| ✅ | **16 · Ollama as a full LM Studio replacement** | For PCs that **can't run LM Studio** (e.g. CPUs with only AVX1), let **Ollama** stand in as a full local-model backend for the desktop *and* dev session — not just the built-in base AI. |
 | 🔭 | **17 · Self-update service (feasibility)** | An experiment in letting Outlaw keep itself — and its dependencies — current automatically, and quietly roll in fixes. We're testing whether it can be made reliable and safe; it may or may not stay. |
 | 🔭 | **18 · Release readiness → v2.1.0** | A final fixing + **comprehensive testing** pass — including outstanding bugs like the installer's **automatic partition resizing** — to put the constant bugs to rest, leading to **v2.1.0 — the first fully-released version.** Updates continue after, but the rough-edges era ends here. |
 
