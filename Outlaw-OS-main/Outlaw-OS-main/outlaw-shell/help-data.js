@@ -231,8 +231,52 @@ window.OUTLAW_HELP = [
         keywords: 'install installer partition disk erase free space windows shrink wifi',
         body: '<p>Connect to the internet <b>before</b> installing (the installer needs to '
             + 'download packages). Choose <b>erase a disk</b> or <b>use free space</b>. '
-            + '<i>Known issue:</i> automatic Windows-partition shrinking can fail right now — if it '
-            + 'does, make free space first (e.g. shrink the partition from Windows), then pick '
-            + '<b>use free space</b>.</p>',
+            + 'Automatic Windows-partition shrinking had a bug that a recent update fixed; if it '
+            + 'still fails for you, make free space first (e.g. shrink the partition from Windows), '
+            + 'then pick <b>use free space</b>.</p>',
+    },
+
+    // ---- New in the 2.0.x hardening + QOL stream ----------------------------
+    {
+        id: 'airplane-offline', cat: 'Settings & updates', title: 'Airplane mode & offline mode',
+        keywords: 'airplane offline wifi radio network disconnect plane flight internet bluetooth',
+        body: '<p><b>Airplane mode</b> (<b>Settings → Network &amp; Wi-Fi</b>) turns your Wi-Fi '
+            + '(and Bluetooth) off in one tap — handy on a plane or to save power. <b>Offline mode</b> '
+            + 'is automatic: whenever there is no internet, a badge appears and Outlaw stops attempting '
+            + 'web actions (update checks, model downloads, web search) so nothing hangs. Either way, '
+            + 'everything local — your AI, files, apps and projects — keeps working normally.</p>',
+    },
+    {
+        id: 'storage-as-ram', cat: 'Settings & updates', title: 'Use storage as extra memory',
+        keywords: 'ram memory swap swapfile storage low-end oom out of memory slow pagefile',
+        body: '<p>On a machine short on RAM, turn on <b>Use storage as extra memory</b> '
+            + '(<b>Settings → AI &amp; VRAM</b>). It adds a 4&nbsp;GB swapfile so the system can keep '
+            + 'an AI model and the desktop running instead of running out of memory. It is slower than '
+            + 'real RAM and uses 4&nbsp;GB of disk, and you can turn it off any time.</p>',
+    },
+    {
+        id: 'ai-personalities', cat: 'AI', title: 'AI names & personalities',
+        keywords: 'personality name cr1tt3r varmint persona model character rename',
+        body: '<p>On the desktop your assistant is <b>Cr1tt3r</b>; in the Dev session it is '
+            + '<b>V4rm1nt</b>. If you switch the desktop assistant to a different model you loaded '
+            + 'yourself, you can invite it to <b>pick its own name and personality</b> — just ask. '
+            + 'The bundled base model always stays Cr1tt3r.</p>',
+    },
+    {
+        id: 'system-core-hub', cat: 'System tools', title: 'System Core (command center)',
+        keywords: 'system core hub command center telemetry diagnostics control ai health rings',
+        body: '<p>The <b>System Core</b> is your command center: live CPU / RAM / VRAM rings, '
+            + 'diagnostics, and one-tap actions — <b>Ask Cr1tt3r</b>, <b>Report a Problem</b>, '
+            + '<b>Tune My Settings</b>, update, and performance mode. The Report button even shows '
+            + 'how many issues are in the error log.</p>',
+    },
+    {
+        id: 'report-problem', cat: 'Troubleshooting', title: 'Report a problem (send the error log)',
+        keywords: 'error log report problem crash bug github send download diagnostics issue picker',
+        body: '<p>If something failed, crashed, or bounced you to the session picker, open '
+            + '<b>Settings → Report a problem</b> (or <b>System Core → Report a Problem</b>). '
+            + 'Click <b>Collect errors</b> to gather a deduplicated log from the desktop, the Dev '
+            + 'session, Xorg and the system journal, then <b>Send to GitHub</b> (opens a pre-filled '
+            + 'issue) or <b>Download .log</b>. This is the best way to get boot crash-loops fixed.</p>',
     },
 ];
