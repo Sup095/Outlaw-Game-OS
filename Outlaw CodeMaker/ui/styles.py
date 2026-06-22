@@ -97,7 +97,9 @@ COLORS_BROKEN = {
     "code_border": "#6b1b1b",
 }
 
-_PALETTES = {"gold": COLORS, "green": COLORS_GREEN, "broken": COLORS_BROKEN}
+# Snapshot gold (dict copy) so mutating the shared COLORS in apply_dark_theme
+# never pollutes the source palette used to resolve "gold" again later.
+_PALETTES = {"gold": dict(COLORS), "green": COLORS_GREEN, "broken": COLORS_BROKEN}
 
 
 def _read_system_theme() -> str:
@@ -382,6 +384,14 @@ def apply_dark_theme(app: QApplication, ui_config: dict) -> None:
     mono_family = ui_config.get("mono_family", font_family)
     font_size = int(ui_config.get("font_size", 11))
     colors = _palette_for(ui_config)
+
+    # C15 — make the shared COLORS dict reflect the ACTIVE theme. ~120 inline
+    # widget styles across the UI do `from .styles import COLORS; COLORS['x']`
+    # and share THIS exact dict object, so updating it in place here (before any
+    # window is built) themes all of them at once — fixing labels, borders and
+    # accents that were previously hardcoded to gold regardless of theme.
+    COLORS.clear()
+    COLORS.update(colors)
 
     app.setStyle("Fusion")
 

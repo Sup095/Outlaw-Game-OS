@@ -356,8 +356,8 @@ class MainWindow(QMainWindow):
     def _build_ui(self) -> None:
         central = QWidget()
         outer = QVBoxLayout(central)
-        outer.setContentsMargins(8, 8, 8, 8)
-        outer.setSpacing(8)
+        outer.setContentsMargins(12, 12, 12, 12)   # C15 — breathing room from the window edges
+        outer.setSpacing(10)
 
         outer.addWidget(self._build_header())
 

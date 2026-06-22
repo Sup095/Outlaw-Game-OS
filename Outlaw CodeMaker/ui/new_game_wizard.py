@@ -148,8 +148,8 @@ class _ChoiceTile(QFrame):
         sub_lbl.setStyleSheet(f"color: {COLORS['muted']};")
 
         col = QVBoxLayout(self)
-        col.setContentsMargins(18, 16, 18, 16)
-        col.setSpacing(6)
+        col.setContentsMargins(22, 20, 22, 20)   # C15 — breathing room on wizard pages
+        col.setSpacing(10)
         col.addWidget(title_lbl)
         col.addWidget(sub_lbl)
         col.addWidget(self.radio)
