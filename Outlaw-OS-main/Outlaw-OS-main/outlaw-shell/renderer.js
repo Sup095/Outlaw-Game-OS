@@ -46,6 +46,17 @@ function notifyUser(msg, screen) {
     }
 }
 
+// C11 — offline mode. navigator.onLine flips body.offline (shows the indicator)
+// and a transition toast fires so the user knows. Everything local — AI, files,
+// apps, projects — keeps working; only internet-dependent actions are gated.
+function updateOnlineStatus() {
+    try { if (document.body) document.body.classList.toggle('offline', !navigator.onLine); } catch {}
+}
+function isOnline() { return navigator.onLine !== false; }
+window.addEventListener('online', () => { updateOnlineStatus(); toast('Back online.'); });
+window.addEventListener('offline', () => { updateOnlineStatus(); toast('You\'re offline — local features still work.'); });
+try { updateOnlineStatus(); } catch {}
+
 // ---------------------------------------------------------------------------
 // Boot sequence
 // ---------------------------------------------------------------------------
@@ -771,6 +782,7 @@ async function loadSysInfo() {
 async function checkShellUpdate() {
     const status = $('#shell-update-status');
     const btn = $('#install-shell-btn');
+    if (!isOnline()) { status.textContent = 'You\'re offline — connect to the internet to check for updates.'; return; }
     status.textContent = 'checking GitHub…';
     btn.disabled = true;
     const r = await api.updates.checkShell();
