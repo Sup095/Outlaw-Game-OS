@@ -2961,6 +2961,10 @@ function wire() {
     // QoL — Esc and click-outside close the power menu (expected desktop behavior).
     document.addEventListener('keydown', (e) => {
         if (e.key !== 'Escape') return;
+        // Close a FINISHED loading screen (never mid-operation — the X stays
+        // disabled until the job is done, so we mirror that).
+        const ls = $('#loadscreen'), lsClose = $('#ls-close');
+        if (ls && ls.classList.contains('show') && lsClose && !lsClose.disabled) { loadingScreen.hide(); return; }
         const pm = $('#power-modal');
         if (pm && pm.classList.contains('show')) closePower();
     });
