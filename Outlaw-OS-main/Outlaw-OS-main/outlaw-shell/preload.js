@@ -82,6 +82,9 @@ contextBridge.exposeInMainWorld('outlaw', {
         set: (patch) => ipcRenderer.invoke('settings:set', patch),
     },
 
+    // QoL — current shell version (for the "Updated to vX.Y.Z" note).
+    appVersion: () => ipcRenderer.invoke('app:version'),
+
     // --- Local AI assistant -------------------------------------------------
     ai: {
         status: () => ipcRenderer.invoke('ai:status'),

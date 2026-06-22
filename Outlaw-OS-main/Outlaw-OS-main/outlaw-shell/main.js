@@ -110,6 +110,7 @@ const DEFAULT_SETTINGS = {
     ollamaModel: '',
     aiPersonaName: '',       // C6 — self-chosen AI name on a user-loaded (non-base) model; base stays Cr1tt3r
     aiPersonaDesc: '',       // C6 — its self-chosen personality blurb
+    lastSeenVersion: '',     // QoL — for the "Updated to vX.Y.Z" first-launch-after-update note
     crtFx: false,            // CRT scanline/flicker effect OFF by default (crisp + readable)
     glow: false,             // text glow OFF by default (no discoloration)
     reduceMotion: false,     // QoL — off decorative animations/transitions (a11y + low-end perf)
@@ -2191,6 +2192,9 @@ function registerIpc() {
         const r = await runStreamingJob('ollama', ['pull', name], labels, matchers);
         return { ok: r.ok, error: r.ok ? '' : 'Pull failed. Check the model name and your connection.' };
     });
+
+    // QoL — current shell version, for the "Updated to vX.Y.Z" first-launch note.
+    ipcMain.handle('app:version', () => APP_VERSION);
 
     // F1 — combined error/warning log (desktop + dev + xorg + journal).
     ipcMain.handle('errorlog:read', () => errorlog.read());

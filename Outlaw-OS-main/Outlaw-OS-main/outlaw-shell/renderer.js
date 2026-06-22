@@ -3009,6 +3009,18 @@ function wire() {
 // ---------------------------------------------------------------------------
 // Init
 // ---------------------------------------------------------------------------
+// QoL — after an update applies, tell the user once which version they're on.
+async function checkVersionBump() {
+    try {
+        const ver = await api.appVersion();
+        if (!ver) return;
+        const s = await api.settings.get();
+        const last = s && s.lastSeenVersion;
+        if (last && last !== ver) setTimeout(() => toast('✓ Updated to v' + ver), 1800);
+        if (last !== ver) await setSetting({ lastSeenVersion: ver });
+    } catch {}
+}
+
 window.addEventListener('DOMContentLoaded', async () => {
     wire();
     await loadSettings();
@@ -3027,6 +3039,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     // (Being offline silently was the root cause of several failed installs.)
     wireNetworkUI();
     refreshNetStatus().catch(() => {});
+    checkVersionBump().catch(() => {});   // QoL — "Updated to vX" note after an update
     wireAuth();
     calcRender();
     // Sign-in gate (Phase 3c): the lock screen first (if enabled), then boot.
