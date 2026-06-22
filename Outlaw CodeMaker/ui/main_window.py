@@ -289,6 +289,7 @@ class MainWindow(QMainWindow):
         # the busy_changed handler. Default is the static tagline shown when idle.
         self._idle_tagline = "autonomous Godot agent · plan → review → execute"
         self._current_task_summary: str = ""
+        self._agent_busy: bool = False   # C2 — V4rm1nt rests while the main agent runs
 
         self._build_ui()
         self._wire_signals()
@@ -831,6 +832,7 @@ class MainWindow(QMainWindow):
 
     @pyqtSlot(bool)
     def _on_busy_changed(self, busy: bool) -> None:
+        self._agent_busy = busy   # C2 — so V4rm1nt can rest while the main agent works
         self.send_btn.setEnabled(not busy)
         self.stop_btn.setEnabled(busy)
         self.input.setDisabled(busy)
@@ -1031,7 +1033,10 @@ class MainWindow(QMainWindow):
             QMessageBox.information(self, "V4rm1nt",
                                     f"The base-AI assistant isn't available ({exc}).")
             return
-        AskV4rmintDialog(config=getattr(self, "config", None), parent=self).exec()
+        # C2 — give V4rm1nt a way to know the main agent is working, so it can
+        # rest (free resources for the build) instead of running a second model.
+        AskV4rmintDialog(config=getattr(self, "config", None), parent=self,
+                         busy_check=lambda: getattr(self, "_agent_busy", False)).exec()
 
     # ------------------------------------------------------------------
     # Settings / workspace

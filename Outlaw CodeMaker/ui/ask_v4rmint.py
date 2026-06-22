@@ -66,8 +66,11 @@ class _ChatWorker(QThread):
 class AskV4rmintDialog(QDialog):
     """A minimal multi-turn chat with the bundled base AI, themed to match."""
 
-    def __init__(self, config: dict | None = None, parent=None):
+    def __init__(self, config: dict | None = None, parent=None, busy_check=None):
         super().__init__(parent)
+        # C2 — optional callable; returns True when the main coding agent is working,
+        # so V4rm1nt rests (frees resources) instead of running a second model.
+        self._busy_check = busy_check
         self.setWindowTitle("Ask V4rm1nt — setup help")
         self.resize(560, 540)
 
@@ -290,6 +293,14 @@ class AskV4rmintDialog(QDialog):
             return
         text = self.input.text().strip()
         if not text:
+            return
+        # C2 — rest while the main agent is building: don't spin up a second model.
+        if callable(self._busy_check) and self._busy_check():
+            self.input.clear()
+            self._add_line("You", text)
+            self._add_line("V4rm1nt", "💤 Resting — the main AI is building right now, so I'm "
+                           "staying out of the way to leave it the memory and compute. Ask me "
+                           "again once it's finished.")
             return
         self.input.clear()
         self._add_line("You", text)
