@@ -48,29 +48,33 @@ def _guide_html(model: str) -> str:
       <li>Click back into the <b>Godot editor</b> — it auto-reloads the changed file. Press Play to test.</li>
     </ol>
 
-    <h3 style="color:{a};">1 · Launch</h3>
+    <h3 style="color:{a};">1 · Launch (on Outlaw OS)</h3>
     <ul>
-      <li>Double-click <b>run.bat</b> (first run builds the venv automatically).</li>
-      <li>The header dot turns <span style="color:{ok};">green</span> when LM Studio is reachable.</li>
+      <li>At the boot <b>greeter</b>, choose the <b>Dev session</b> — that's Outlaw CodeMaker.</li>
+      <li>Before you open a project you get a <b>launcher</b>: open <b>Godot</b> or <b>LM Studio</b>
+          (install either if it's missing), ask <b>V4rm1nt</b> for setup help, switch to the Desktop,
+          or quit.</li>
+      <li>The header dot turns <span style="color:{ok};">green</span> when your AI engine is reachable.</li>
     </ul>
 
-    <h3 style="color:{a};">2 · LM Studio (Qwen3-30B-A3B)</h3>
+    <h3 style="color:{a};">2 · Your AI engine</h3>
     <ul>
-      <li>Load the model → <b>Start Server</b> on port <b>1234</b>. The model ID is auto-detected.</li>
-      <li><b>VRAM:</b> Outlaw runs entirely on CPU/RAM — the Vault (RAG) uses zero VRAM, so give
-          all the GPU to Qwen3. Set GPU offload as high as fits; overflow goes to system RAM.</li>
-      <li><b>Thinking:</b> leave it ON or OFF — Outlaw does its own Plan→Review→Execute and strips
-          <code>&lt;think&gt;</code> blocks automatically. OFF is a bit faster.</li>
-      <li>Context: 8k+ helps the Vault inject relevant code.</li>
+      <li><b>V4rm1nt (built-in):</b> a small bundled model that works out of the box — great on
+          low-end PCs and for setup help. Ask it from the launcher or the <b>Tools</b> menu anytime.</li>
+      <li><b>LM Studio:</b> load a bigger model → <b>Start Server</b> on port <b>1234</b> (the model ID
+          is auto-detected) for stronger coding. Choose your engine in <b>Settings</b>.</li>
+      <li><b>Ollama:</b> an alternative backend for PCs that can't run LM Studio (e.g. AVX1-only CPUs).</li>
+      <li><b>Resources:</b> the Vault (RAG) is CPU-only (zero VRAM), and the VRAM/RAM saver shrinks
+          context automatically when memory is tight — so it keeps working on modest hardware.</li>
     </ul>
 
-    <h3 style="color:{a};">3 · Connect a Godot project</h3>
+    <h3 style="color:{a};">3 · Pick or start a Godot project</h3>
     <ul>
-      <li>Point <code>agent.workspace_root</code> in <b>config.json</b> at your project folder
-          (or drop files into the <b>workspace/</b> folder), then restart.</li>
-      <li>Press <b>Ctrl+R</b> to index the project into the Vault.</li>
+      <li>The <b>Project Picker</b> (when CodeMaker opens) creates a new game or reopens a recent
+          one — no config files to edit by hand.</li>
+      <li>Press <b>Ctrl+R</b> to index the project into the Vault so the AI can see your code.</li>
       <li>Open the Godot editor — the app auto-detects its window for screenshots/OCR.</li>
-      <li><i>Optional self-heal log:</i> set <code>godot.log_path</code> in config.json to your
+      <li><i>Optional self-heal log:</i> point <code>godot.log_path</code> in config.json at your
           project's <code>godot.log</code> for precise error capture (OCR works without it).</li>
     </ul>
 
