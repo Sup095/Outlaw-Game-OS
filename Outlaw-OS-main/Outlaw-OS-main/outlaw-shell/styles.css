@@ -403,10 +403,20 @@ h3 { font-size: 13px; text-transform: uppercase; color: var(--term-dim); }
     display: flex; align-items: center; gap: 10px; width: 100%; text-align: left;
     text-transform: none; letter-spacing: 0; border: 1px solid transparent; background: transparent;
     color: var(--text); padding: 9px 10px; margin-bottom: 2px; border-radius: var(--radius);
+    position: relative;   /* C7 — anchor the unread-notification dot */
 }
 .nav-item:hover { background: rgba(var(--term-rgb),0.06); color: var(--term); }
 .nav-item.active { background: rgba(var(--term-rgb),0.10); border-color: var(--term-dim); color: var(--term); }
 .nav-item .ico { width: 18px; text-align: center; }
+/* C7 — pulsing dot when a background event (AI reply, etc.) needs attention. */
+.nav-item.has-unread::after {
+    content: ""; position: absolute; top: 7px; right: 8px;
+    width: 7px; height: 7px; border-radius: 50%;
+    background: var(--warn); box-shadow: 0 0 6px var(--warn);
+    animation: unread-pulse 1.6s ease-in-out infinite;
+}
+.reduce-motion .nav-item.has-unread::after { animation: none; }
+@keyframes unread-pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.35; } }
 
 .content { overflow: auto; padding: 18px 22px; }
 .screen { display: none; }

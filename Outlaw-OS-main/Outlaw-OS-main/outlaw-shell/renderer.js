@@ -34,6 +34,18 @@ function toast(msg) {
     toastTimer = setTimeout(() => t.classList.remove('show'), 2600);
 }
 
+// C7 — background notifications. Track the visible screen so an event that
+// finishes while the user has moved elsewhere (an AI reply, a found update)
+// can surface a toast + a persistent "unread" dot on the relevant nav item.
+let currentScreen = '';
+function notifyUser(msg, screen) {
+    toast(msg);
+    if (screen && currentScreen !== screen) {
+        const nav = document.querySelector('.nav-item[data-screen="' + screen + '"]');
+        if (nav) nav.classList.add('has-unread');
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Boot sequence
 // ---------------------------------------------------------------------------
@@ -259,9 +271,13 @@ async function checkSafeMode() {
 // Navigation
 // ---------------------------------------------------------------------------
 function showScreen(name) {
+    currentScreen = name;   // C7 — so background events know if the user is elsewhere
     $$('.screen').forEach((s) => s.classList.remove('active'));
     const el = $('#screen-' + name);
     if (el) el.classList.add('active');
+    // C7 — arriving on a screen clears its unread dot.
+    const navHere = document.querySelector('.nav-item[data-screen="' + name + '"]');
+    if (navHere) navHere.classList.remove('has-unread');
     $$('.nav-item[data-screen]').forEach((n) => n.classList.toggle('active', n.dataset.screen === name));
     // C13 — a freshly-shown tab starts at the top; the AI chat jumps to its latest.
     if (name === 'ai') {
@@ -1454,6 +1470,12 @@ async function sendAI() {
     const t = res.text || '(no answer)';
     addMsg('ai', t);
     recordAiTurn('assistant', t);
+    // C7 — if the user wandered off while the AI was thinking, let them know
+    // its reply landed (toast + an unread dot on the assistant nav).
+    if (currentScreen !== 'ai') {
+        const who = (document.querySelector('#ai-name') || {}).textContent || 'Cr1tt3r';
+        notifyUser('💬 ' + who + ' replied', 'ai');
+    }
 }
 
 // Phase 16 — show the Ollama model row only when the Ollama engine is selected.
