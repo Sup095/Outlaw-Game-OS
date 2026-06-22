@@ -208,6 +208,10 @@ class VRAMSaver:
     # the Hardware.suggest_max_tokens ladder so the two don't fight each other.
     _MINIMAL_BELOW_MB = 600
     _LEAN_BELOW_MB = 1500
+    # C5 — when there's no measurable VRAM (no NVIDIA/NVML, an iGPU, or a RAM-only
+    # box), protect system RAM instead. Thresholds = available system RAM (MiB).
+    _MINIMAL_RAM_BELOW_MB = 1024
+    _LEAN_RAM_BELOW_MB = 2560
 
     def __init__(self, hardware: HardwareMonitor, mode_pref: str = "auto"):
         self.hardware = hardware
@@ -241,8 +245,17 @@ class VRAMSaver:
         snap = self.hardware.snapshot()
         free = snap.get("vram_free_mb")
         if free is None:
-            # No NVIDIA card (or NVML missing). Assume plenty of headroom — the
-            # user can manually pick a mode if their CPU/iGPU box needs it.
+            # C5 — no measurable VRAM (no NVIDIA/NVML, an iGPU, or a RAM-only box).
+            # Instead of assuming endless headroom, protect system RAM: shrink the
+            # per-turn context when AVAILABLE RAM gets tight.
+            ram_total = snap.get("ram_total_mb") or 0
+            ram_used = snap.get("ram_used_mb") or 0
+            ram_avail = ram_total - ram_used
+            if ram_total:
+                if ram_avail < self._MINIMAL_RAM_BELOW_MB:
+                    return VRAMMode.MINIMAL
+                if ram_avail < self._LEAN_RAM_BELOW_MB:
+                    return VRAMMode.LEAN
             return VRAMMode.FULL
         if free < self._MINIMAL_BELOW_MB:
             return VRAMMode.MINIMAL
