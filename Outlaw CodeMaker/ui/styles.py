@@ -297,6 +297,83 @@ QScrollBar::handle:horizontal {{ background: {border_hi}; border-radius: 5px; mi
 QScrollBar::handle:horizontal:hover {{ background: {accent_dim}; }}
 QScrollBar::add-line, QScrollBar::sub-line {{ height: 0; width: 0; }}
 QScrollBar::add-page, QScrollBar::sub-page {{ background: none; }}
+
+/* ---- Combo boxes (C15 — were unstyled Fusion grey before) ---- */
+QComboBox {{
+    background-color: {panel};
+    border: 1px solid {border};
+    border-radius: 8px;
+    padding: 8px 12px;
+    color: {text};
+    min-height: 18px;
+}}
+QComboBox:hover {{ border-color: {border_hi}; }}
+QComboBox:focus {{ border: 1px solid {accent}; }}
+QComboBox:disabled {{ color: {muted}; background-color: {bg_alt}; }}
+QComboBox::drop-down {{ border: none; width: 22px; }}
+QComboBox::down-arrow {{
+    image: none;
+    border-left: 4px solid transparent;
+    border-right: 4px solid transparent;
+    border-top: 5px solid {muted};
+    margin-right: 9px;
+}}
+QComboBox QAbstractItemView {{
+    background-color: {panel};
+    color: {text};
+    border: 1px solid {border};
+    border-radius: 8px;
+    selection-background-color: {accent_dim};
+    selection-color: {text};
+    padding: 4px;
+    outline: none;
+}}
+
+/* ---- Check boxes / radio buttons (C15) ---- */
+QCheckBox, QRadioButton {{ color: {text}; spacing: 8px; padding: 3px 0; }}
+QCheckBox::indicator, QRadioButton::indicator {{
+    width: 16px; height: 16px;
+    border: 1px solid {border_hi};
+    background-color: {panel};
+}}
+QCheckBox::indicator {{ border-radius: 4px; }}
+QRadioButton::indicator {{ border-radius: 9px; }}
+QCheckBox::indicator:hover, QRadioButton::indicator:hover {{ border-color: {accent}; }}
+QCheckBox::indicator:checked, QRadioButton::indicator:checked {{
+    background-color: {accent}; border-color: {accent};
+}}
+QCheckBox:disabled, QRadioButton:disabled {{ color: {muted}; }}
+
+/* ---- Spin boxes (C15) ---- */
+QSpinBox, QDoubleSpinBox {{
+    background-color: {panel};
+    border: 1px solid {border};
+    border-radius: 8px;
+    padding: 7px 10px;
+    color: {text};
+}}
+QSpinBox:focus, QDoubleSpinBox:focus {{ border: 1px solid {accent}; }}
+QSpinBox:disabled, QDoubleSpinBox:disabled {{ color: {muted}; background-color: {bg_alt}; }}
+
+/* ---- Group boxes (C15 — titled, with breathing room) ---- */
+QGroupBox {{
+    border: 1px solid {border};
+    border-radius: 10px;
+    margin-top: 16px;
+    padding: 16px 14px 12px 14px;
+}}
+QGroupBox::title {{
+    subcontrol-origin: margin;
+    subcontrol-position: top left;
+    left: 12px;
+    padding: 0 6px;
+    color: {accent};
+    font-weight: 700;
+    letter-spacing: 1px;
+}}
+
+/* ---- Scroll areas: no stray panel box, inherit the window (C15) ---- */
+QScrollArea {{ border: none; background: transparent; }}
 """
 
 
