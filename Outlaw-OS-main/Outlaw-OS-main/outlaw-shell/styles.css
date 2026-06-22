@@ -1132,6 +1132,15 @@ table.proc td { padding: 5px 8px; border-bottom: 1px solid rgba(20,61,13,0.4); }
 .msg.user { align-self: flex-end; background: rgba(var(--term-rgb),0.12); border: 1px solid var(--term-dim); }
 .msg.ai { align-self: flex-start; background: var(--panel-2); border: 1px solid var(--line); }
 .msg.sys { align-self: center; font-size: 12px; opacity: .7; }
+/* C10 — animated "typing" dots while the AI is thinking. */
+.msg.ai.thinking { display: inline-flex; gap: 5px; align-items: center; }
+.msg.ai.thinking .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--term);
+    opacity: 0.35; animation: think-bounce 1.2s infinite ease-in-out; }
+.msg.ai.thinking .dot:nth-child(2) { animation-delay: 0.18s; }
+.msg.ai.thinking .dot:nth-child(3) { animation-delay: 0.36s; }
+@keyframes think-bounce { 0%, 80%, 100% { opacity: 0.35; transform: translateY(0); }
+    40% { opacity: 1; transform: translateY(-3px); } }
+.reduce-motion .msg.ai.thinking .dot { animation: none; opacity: 0.6; }
 
 /* ---- Calculator ---- */
 .calc { max-width: 360px; }

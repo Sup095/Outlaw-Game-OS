@@ -1483,8 +1483,11 @@ async function sendAI() {
     recordAiTurn('user', text);
     const { history, summary } = aiHistoryWindow();
     const thinking = document.createElement('div');
-    thinking.className = 'msg ai'; thinking.textContent = '…';
-    $('#ai-log').appendChild(thinking);
+    thinking.className = 'msg ai thinking';   // C10 — animated typing dots, not a static …
+    thinking.innerHTML = '<span class="dot"></span><span class="dot"></span><span class="dot"></span>';
+    const log = $('#ai-log');
+    log.appendChild(thinking);
+    log.scrollTop = log.scrollHeight;
     const res = await api.ai.ask(text, { history, summary });
     thinking.remove();
     if (res.error) { addMsg('sys', res.error); return; }
