@@ -46,15 +46,48 @@ function notifyUser(msg, screen) {
     }
 }
 
-// C11 — offline mode. navigator.onLine flips body.offline (shows the indicator)
-// and a transition toast fires so the user knows. Everything local — AI, files,
-// apps, projects — keeps working; only internet-dependent actions are gated.
+// C11 — offline mode + airplane mode. Offline mode REACTS to no connection;
+// airplane mode ACTIVELY turns the radios off (and engages offline mode too).
+// Either way: everything local — AI, files, apps, projects — keeps working; only
+// internet-dependent actions are gated.
+let airplaneMode = false;
 function updateOnlineStatus() {
-    try { if (document.body) document.body.classList.toggle('offline', !navigator.onLine); } catch {}
+    try {
+        const offline = airplaneMode || navigator.onLine === false;
+        if (document.body) document.body.classList.toggle('offline', offline);
+        const badge = document.querySelector('#offline-badge');
+        if (badge) badge.textContent = airplaneMode
+            ? '✈ Airplane mode — radios off'
+            : '⚠ Offline · local features still work';
+    } catch {}
 }
-function isOnline() { return navigator.onLine !== false; }
-window.addEventListener('online', () => { updateOnlineStatus(); toast('Back online.'); });
-window.addEventListener('offline', () => { updateOnlineStatus(); toast('You\'re offline — local features still work.'); });
+function isOnline() { return !airplaneMode && navigator.onLine !== false; }
+window.addEventListener('online', () => { updateOnlineStatus(); if (!airplaneMode) toast('Back online.'); });
+window.addEventListener('offline', () => { updateOnlineStatus(); if (!airplaneMode) toast('You\'re offline — local features still work.'); });
+async function refreshAirplane() {
+    const tog = document.querySelector('#airplane-toggle');
+    try {
+        const r = await api.network.airplaneStatus();
+        if (r) { airplaneMode = !!r.airplane; if (tog) tog.checked = airplaneMode; updateOnlineStatus(); }
+    } catch {}
+}
+async function onAirplaneToggle(e) {
+    const on = e.target.checked;
+    e.target.disabled = true;
+    try {
+        const r = await api.network.setAirplane(on);
+        if (!r || !r.ok) {
+            toast('Couldn\'t change airplane mode' + (r && r.error ? ': ' + r.error.slice(0, 80) : '.'));
+            e.target.checked = !on;
+        } else {
+            airplaneMode = on;
+            updateOnlineStatus();
+            toast(on ? '✈ Airplane mode on — radios off.' : 'Airplane mode off — reconnecting…');
+            if (!on) setTimeout(() => { try { refreshNetStatus(); } catch {} }, 1500);
+        }
+    } catch (err) { toast('Airplane mode failed: ' + err.message); e.target.checked = !on; }
+    finally { e.target.disabled = false; }
+}
 try { updateOnlineStatus(); } catch {}
 
 // ---------------------------------------------------------------------------
@@ -303,7 +336,7 @@ function showScreen(name) {
     if (name === 'gaming') refreshGaming();
     if (name === 'apps') loadAppsCatalog();
     if (name === 'help') renderHelp(($('#help-search') || {}).value || '');
-    if (name === 'settings') { refreshNetStatus(); refreshDriversUi(); refreshSwapStatus(); if (window._refreshSecurityUi) window._refreshSecurityUi(); }
+    if (name === 'settings') { refreshNetStatus(); refreshDriversUi(); refreshSwapStatus(); refreshAirplane(); if (window._refreshSecurityUi) window._refreshSecurityUi(); }
     if (name === 'ai') $('#ai-in').focus();
     if (name === 'terminal') $('#term-in').focus();
     // System Core lifecycle — init when navigating to it, teardown otherwise.
@@ -2894,6 +2927,10 @@ function wire() {
     // C8 — storage-as-memory (swapfile) toggle.
     const swapTog = $('#swap-toggle');
     if (swapTog) swapTog.addEventListener('change', onSwapToggle);
+    // QoL — airplane mode toggle (+ reflect actual radio state at startup).
+    const airTog = $('#airplane-toggle');
+    if (airTog) airTog.addEventListener('change', onAirplaneToggle);
+    refreshAirplane();
     // QoL — Esc and click-outside close the power menu (expected desktop behavior).
     document.addEventListener('keydown', (e) => {
         if (e.key !== 'Escape') return;

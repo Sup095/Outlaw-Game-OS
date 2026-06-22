@@ -1691,6 +1691,26 @@ function registerIpc() {
         };
     });
 
+    // Airplane mode — actively turn the radios OFF (vs offline mode, which just
+    // reacts to no connection). nmcli radio = wifi + wwan, no root needed via NM's
+    // polkit; Bluetooth is best-effort via rfkill (needs root, ignored if it can't).
+    ipcMain.handle('net:airplane-status', async () => {
+        if (!IS_LINUX) return { airplane: false };
+        const r = await runShell('nmcli radio wifi 2>/dev/null', { timeout: 5000 });
+        return { airplane: /disabled/i.test(r.stdout || '') };
+    });
+    ipcMain.handle('net:airplane-set', async (_e, on) => {
+        if (!IS_LINUX) return { ok: false, error: 'Airplane mode runs on Outlaw OS.' };
+        const enable = !!on;
+        const r = await runShell(`nmcli radio all ${enable ? 'off' : 'on'} 2>/dev/null`, { timeout: 8000 });
+        await runShell(`rfkill ${enable ? 'block' : 'unblock'} bluetooth 2>/dev/null`, { timeout: 5000 });
+        if (r.code !== 0 && r.code !== undefined) {
+            try { errorlog.append('error', 'network', 'Airplane mode toggle failed: ' + (r.stderr || r.stdout || `exit ${r.code}`).slice(-300)); } catch {}
+            return { ok: false, error: (r.stderr || r.stdout || 'failed').slice(-300) };
+        }
+        return { ok: true };
+    });
+
     ipcMain.handle('net:wifi-list', async () => {
         if (!IS_LINUX) return { ok: false, networks: [], error: 'Wi-Fi scan runs on Outlaw OS.' };
         await runShell('nmcli radio wifi on 2>/dev/null', { timeout: 5000 });

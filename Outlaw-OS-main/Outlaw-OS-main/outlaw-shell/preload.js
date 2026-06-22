@@ -205,6 +205,9 @@ contextBridge.exposeInMainWorld('outlaw', {
         wifiList: () => ipcRenderer.invoke('net:wifi-list'),
         // Connect to an SSID; password optional for open networks.
         wifiConnect: (ssid, password) => ipcRenderer.invoke('net:wifi-connect', { ssid, password }),
+        // Airplane mode — read + toggle all radios off/on.
+        airplaneStatus: () => ipcRenderer.invoke('net:airplane-status'),
+        setAirplane: (on) => ipcRenderer.invoke('net:airplane-set', on),
     },
     session: {
         // Mark the next X session as Dev (Outlaw CodeMaker), bypassing the
