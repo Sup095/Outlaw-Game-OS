@@ -1554,6 +1554,7 @@ async function handleOllamaPull() {
     const model = (inp ? inp.value : '').trim();
     if (!model) { toast('Type a model tag first (e.g. qwen2.5-coder:7b).'); return; }
     if (!api.ollama) { toast('Ollama support is unavailable.'); return; }
+    if (!isOnline()) { toast('You\'re offline — connect to the internet to download a model.'); return; }
     try {
         const st = await api.ollama.status();
         if (!st.installed) { toast('Ollama isn\'t installed on this system.'); return; }
@@ -2893,6 +2894,14 @@ function wire() {
     // C8 — storage-as-memory (swapfile) toggle.
     const swapTog = $('#swap-toggle');
     if (swapTog) swapTog.addEventListener('change', onSwapToggle);
+    // QoL — Esc and click-outside close the power menu (expected desktop behavior).
+    document.addEventListener('keydown', (e) => {
+        if (e.key !== 'Escape') return;
+        const pm = $('#power-modal');
+        if (pm && pm.classList.contains('show')) closePower();
+    });
+    const powerModal = $('#power-modal');
+    if (powerModal) powerModal.addEventListener('click', (e) => { if (e.target === powerModal) closePower(); });
     const channelEl = $('#update-channel');
     if (channelEl) {
         channelEl.addEventListener('change', (e) => {
