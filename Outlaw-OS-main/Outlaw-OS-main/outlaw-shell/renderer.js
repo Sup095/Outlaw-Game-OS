@@ -187,6 +187,17 @@ async function requireImportantAuth() {
     return await openSignin({ reauth: true, user: st.user, hasPin: st.hasPin });
 }
 
+// QoL — lock the screen on demand (from the power menu). Reuses the startup
+// sign-in path: it's non-cancellable and only unlocks with the correct PIN.
+async function lockNow() {
+    let st;
+    try { st = await api.auth.status(); } catch { st = {}; }
+    if (st && st.live) { toast('Lock isn\'t available on the live demo.'); return; }
+    if (!st || !st.hasPin) { toast('Set a PIN first (Settings → Security) to lock the screen.'); return; }
+    closePower();
+    openSignin({ reauth: false, user: st.user, hasPin: st.hasPin });
+}
+
 function wireAuth() {
     const pad = $('#pin-pad');
     if (pad) pad.addEventListener('click', (e) => {
@@ -2507,6 +2518,7 @@ function wire() {
             case 'hotswap': hotswap(); break;
             case 'power-menu': openPower(); break;
             case 'power-cancel': closePower(); break;
+            case 'lock': lockNow(); break;
             case 'reboot': closePower(); api.power.reboot(); break;
             case 'shutdown': closePower(); api.power.shutdown(); break;
             case 'stability-works':  setStabilityVote('works'); break;
