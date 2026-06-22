@@ -1128,6 +1128,8 @@ table.proc td { padding: 5px 8px; border-bottom: 1px solid rgba(20,61,13,0.4); }
 
 /* ---- AI ---- */
 #ai-log { height: 56vh; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding-right: 6px; }
+/* QoL — friendly empty state (pure CSS, vanishes the moment a message arrives). */
+#ai-log:empty::before { content: "Ask me anything — or try \201Cinstall krita\201D, \201Ctune my settings\201D, or \201Copen apps\201D."; margin: auto; max-width: 420px; text-align: center; color: var(--term-dim); font-style: italic; line-height: 1.6; }
 .msg { max-width: 80%; padding: 10px 12px; border-radius: 10px; white-space: pre-wrap; }
 .msg.user { align-self: flex-end; background: rgba(var(--term-rgb),0.12); border: 1px solid var(--term-dim); }
 .msg.ai { align-self: flex-start; background: var(--panel-2); border: 1px solid var(--line); }
