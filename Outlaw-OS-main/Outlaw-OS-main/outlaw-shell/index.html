@@ -137,7 +137,7 @@
             </div>
             <details class="page-help">
                 <summary>What is the System Core?</summary>
-                <p>The System Core is your machine's status centre and assistant. The rings show live <b>CPU, RAM and VRAM</b> use. The badge shows the current <b>VRAM-saver tier</b> (change it in Settings → AI / VRAM).</p>
+                <p>The System Core is your machine's <b>command center</b> — live status, the Core assistant, diagnostics, and one-tap actions (talk to Cr1tt3r, report a problem, tune your settings, update). The rings show live <b>CPU, RAM and VRAM</b> use. The badge shows the current <b>VRAM-saver tier</b> (change it in Settings → AI / VRAM).</p>
                 <p><b>Cold mode</b> (default) uses built-in dialogue and sends <i>zero</i> AI traffic — fully offline and free. <b>Go Live</b> connects to your local LM Studio so the Core can answer questions and run safe actions for you (open an app, run a diagnostic, search files). Live mode only works when LM Studio is running with a model loaded.</p>
                 <p>Use the controls here to run a <b>system diagnostic</b>, watch temperatures, toggle <b>performance mode</b>, and talk to the Core. Nothing leaves your machine.</p>
             </details>
@@ -321,6 +321,18 @@
                     <button class="sc-control-btn" data-sc-control="settings">
                         <span class="sc-ctl-ico">⚙</span><span class="sc-ctl-label">All Settings</span>
                         <span class="sc-ctl-sub">channel, updates, voice, more</span>
+                    </button>
+                    <button class="sc-control-btn" data-sc-control="ask-ai">
+                        <span class="sc-ctl-ico">💬</span><span class="sc-ctl-label">Ask Cr1tt3r</span>
+                        <span class="sc-ctl-sub">your AI assistant</span>
+                    </button>
+                    <button class="sc-control-btn" data-sc-control="report">
+                        <span class="sc-ctl-ico">⚑</span><span class="sc-ctl-label">Report a Problem</span>
+                        <span class="sc-ctl-sub">collect &amp; send the error log</span>
+                    </button>
+                    <button class="sc-control-btn" data-sc-control="tune">
+                        <span class="sc-ctl-ico">🎚</span><span class="sc-ctl-label">Tune My Settings</span>
+                        <span class="sc-ctl-sub">best settings for your hardware</span>
                     </button>
                 </div>
             </div>
@@ -824,7 +836,7 @@
                 <div class="muted" style="margin-top:8px;">Hotswap sets the next boot to another installed OS (or opens the boot menu). The installer can set up or remove Outlaw OS — your other OS and data stay untouched unless you explicitly choose to wipe.</div>
             </div>
 
-            <div class="card">
+            <div class="card" id="report-card">
                 <h3>Report a problem</h3>
                 <p class="muted" style="margin:0 0 10px;">If something failed, crashed, or bounced you to the session picker, collect the log and send it. It gathers errors + warnings from the desktop, the dev session, Xorg and the system journal — deduplicated, no repeats.</p>
                 <div class="row" style="gap:8px;flex-wrap:wrap;margin-bottom:10px;">
