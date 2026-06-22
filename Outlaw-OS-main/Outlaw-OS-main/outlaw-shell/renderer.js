@@ -2005,6 +2005,14 @@ async function loadSettings() {
     document.body.classList.toggle('crt', !!s.crtFx);
     document.body.classList.toggle('glow', !!s.glow);
     document.body.classList.toggle('reduce-motion', !!s.reduceMotion);
+    // C6 — show the AI's self-chosen name on a user-loaded model; base stays Cr1tt3r.
+    try {
+        const nameEl = document.querySelector('#ai-name');
+        if (nameEl) {
+            const eng = s.aiEngine || '';
+            nameEl.textContent = (eng && eng !== 'base' && s.aiPersonaName) ? s.aiPersonaName : 'Cr1tt3r';
+        }
+    } catch {}
     $('#crt-toggle').checked = !!s.crtFx;
     $('#glow-toggle').checked = !!s.glow;
     const rmToggle = $('#reduce-motion-toggle');

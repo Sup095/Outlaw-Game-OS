@@ -108,6 +108,8 @@ const DEFAULT_SETTINGS = {
     // from baseAiEnabled for backward compatibility. `ollamaModel` is the chosen tag.
     aiEngine: '',
     ollamaModel: '',
+    aiPersonaName: '',       // C6 — self-chosen AI name on a user-loaded (non-base) model; base stays Cr1tt3r
+    aiPersonaDesc: '',       // C6 — its self-chosen personality blurb
     crtFx: false,            // CRT scanline/flicker effect OFF by default (crisp + readable)
     glow: false,             // text glow OFF by default (no discoloration)
     reduceMotion: false,     // QoL — off decorative animations/transitions (a11y + low-end perf)
@@ -1038,6 +1040,19 @@ async function executeIntent(intent) {
             const key = Object.keys(patch)[0];
             // The renderer applies this through settings:set (full side-effects).
             return { did: 'set_setting', settingsPatch: patch, text: intent.text || ('Set ' + key + ' to ' + patch[key] + '.') };
+        }
+        case 'set_persona': {
+            // C6 — the AI (on a user-loaded model) names itself. arg = "Name | description".
+            const raw = String(intent.arg || '').trim();
+            const parts = raw.split('|');
+            const name = (parts[0] || '').trim().slice(0, 40);
+            const desc = (parts[1] || '').trim().slice(0, 240);
+            if (!name) return { text: intent.text || 'I need a name to go by.', did: 'none' };
+            return {
+                did: 'set_persona',
+                settingsPatch: { aiPersonaName: name, aiPersonaDesc: desc },
+                text: intent.text || ('Alright — call me ' + name + ' from now on.'),
+            };
         }
         case 'install_app': {
             // Phase 13: only ever install from a KNOWN source, and only after the
@@ -2078,7 +2093,13 @@ function registerIpc() {
         try {
             const appIds = Object.keys(APP_REGISTRY);
             const machine = machineSummary(await gatherSpecs());
-            const intent = await aiAgent.ask(prompt, { ...be, appIds, machine, history, summary, sysSettings: settingsSummary() });
+            // C6 — on the bundled base model the identity is fixed (Cr1tt3r).
+            // On a model the user loaded themselves, hand the AI its self-chosen
+            // persona (if any) and let it pick one (set_persona). undefined = base.
+            const persona = (aiEngine() !== 'base')
+                ? { name: settings.aiPersonaName || '', personality: settings.aiPersonaDesc || '' }
+                : undefined;
+            const intent = await aiAgent.ask(prompt, { ...be, appIds, machine, history, summary, sysSettings: settingsSummary(), persona });
             return await executeIntent(intent);
         } catch (e) {
             return { error: e.message };

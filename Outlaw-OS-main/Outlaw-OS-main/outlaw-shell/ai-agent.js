@@ -20,13 +20,37 @@ const DEFAULT_MODEL = 'local-model';
 // Tools the model is allowed to propose. Keep the surface tiny so small models
 // stay reliable. `run_command` is intentionally marked dangerous so the main
 // process always routes it through user confirmation.
-const TOOLS = ['answer', 'open_app', 'search_web', 'list_files', 'open_file', 'read_file', 'system_info', 'install_app', 'set_setting', 'open_screen', 'run_command'];
+const TOOLS = ['answer', 'open_app', 'search_web', 'list_files', 'open_file', 'read_file', 'system_info', 'install_app', 'set_setting', 'set_persona', 'open_screen', 'run_command'];
 
-function systemPrompt(appIds, machine) {
+function systemPrompt(appIds, machine, persona) {
+    // C6 — persona. On the bundled base model the identity is fixed (Cr1tt3r).
+    // On a *different* model the user loaded, the AI may have given itself a name
+    // + personality (set_persona); use it when present.
+    let idLines;
+    if (persona && persona.name) {
+        // non-base model the AI has named itself on
+        idLines = [
+            'You are ' + persona.name + ', an on-device assistant for Outlaw OS — a Linux for AI-driven Godot game development.',
+            'Persona: ' + (persona.personality || 'a capable, friendly local AI — concise and practical.') + ' If asked your name, you are ' + persona.name + '.',
+            'You are privacy-respecting: everything runs locally on this machine, so no data ever leaves it.',
+        ];
+    } else if (persona) {
+        // non-base model, not named yet — neutral, may pick a name if invited
+        idLines = [
+            'You are an on-device assistant for Outlaw OS — a Linux for AI-driven Godot game development.',
+            'Persona: capable, friendly, concise. You run on a model the user loaded themselves, so you have no fixed name yet — if the user invites you, you may choose your own name + personality (set_persona).',
+            'You are privacy-respecting: everything runs locally on this machine, so no data ever leaves it.',
+        ];
+    } else {
+        // bundled base model — fixed identity
+        idLines = [
+            'You are Cr1tt3r, the on-device assistant for Outlaw OS — a Linux for AI-driven Godot game development.',
+            'Persona: a sharp, friendly cyber-outlaw sidekick — concise, practical, a little wry, never showy. If asked your name, you are Cr1tt3r.',
+            'You are privacy-respecting: everything runs locally on this machine, so no data ever leaves it.',
+        ];
+    }
     return [
-        'You are Cr1tt3r, the on-device assistant for Outlaw OS — a Linux for AI-driven Godot game development.',
-        'Persona: a sharp, friendly cyber-outlaw sidekick — concise, practical, a little wry, never showy. If asked your name, you are Cr1tt3r.',
-        'You are privacy-respecting: everything runs locally on this machine, so no data ever leaves it.',
+        ...idLines,
         ...(machine ? ['', 'This computer: ' + machine] : []),
         '',
         'Reply with EXACTLY ONE line of minified JSON and nothing else. Schema:',
@@ -43,6 +67,9 @@ function systemPrompt(appIds, machine) {
         '- install_app: install software the user names OR describes. arg = the most likely PACKAGE name (e.g. "something to edit audio" -> "audacity"; "a photo editor" -> "gimp"). Any official package works, not just famous ones — give your single best package-name guess. Known sources only (Apps catalog / official repos); the user confirms before anything installs.',
         '- open_screen: take the user to a section of Outlaw OS. arg = one of: dashboard, syscore, files, tasks, terminal, gaming, gamedev, apps, ai, calc, settings, help. e.g. "take me to settings" -> {"tool":"open_screen","arg":"settings","text":"Here\'s Settings."}.',
         '- set_setting: change a system setting for the user. arg = "key=value". Keys/values: theme=green|gold|broken, crtFx=on|off, glow=on|off, reduceMotion=on|off, uiScale=0.9|1|1.15|1.3 (text size — bigger number = bigger text), performanceMode=on|off, vramSaverMode=auto|off|lean|minimal, aiEngine=base|lmstudio|ollama, autoCheck=on|off, coreVoiceEnabled=on|off. e.g. "use less power" -> {"tool":"set_setting","arg":"vramSaverMode=lean","text":"Easing off VRAM use."}; "make the text bigger" -> {"tool":"set_setting","arg":"uiScale=1.15","text":"Bumping up the text size."}. For a broad "set everything best for me", tell them to click the "Tune my settings" button.',
+        ...(persona !== undefined ? [
+            '- set_persona: ONLY on a non-default model, and ONLY if the user invites you to pick your own name/personality. arg = "Name | a short personality description". e.g. user says "give yourself a name" -> {"tool":"set_persona","arg":"Spectre | a calm, precise hacker-poet","text":"Call me Spectre."}. On the built-in base model your name is fixed (Cr1tt3r) — do not use this there.',
+        ] : []),
         '- run_command: ONLY when the user explicitly asks to run a shell command. arg = the command. This always asks the user to confirm first.',
         '',
         'Rules: pick the single best tool. Prefer "answer" for anything conversational.',
@@ -117,8 +144,8 @@ function parseIntent(raw) {
 
 // Ask the model. Returns a parsed intent { tool, arg, text }.
 // Uses the OpenAI-compatible /v1/chat/completions endpoint.
-async function ask(prompt, { model, appIds, machine, baseUrl, history, summary, sysSettings } = {}) {
-    const messages = [{ role: 'system', content: systemPrompt(appIds || [], machine) }];
+async function ask(prompt, { model, appIds, machine, baseUrl, history, summary, sysSettings, persona } = {}) {
+    const messages = [{ role: 'system', content: systemPrompt(appIds || [], machine, persona) }];
     // QoL — current settings snapshot so the assistant is state-aware (answers
     // "what theme am I on?" and won't redundantly re-set things).
     if (sysSettings) messages.push({ role: 'system', content: String(sysSettings).slice(0, 600) });
