@@ -90,6 +90,21 @@ async function onAirplaneToggle(e) {
 }
 try { updateOnlineStatus(); } catch {}
 
+// QoL — live filter for the (now long) Settings screen: hide cards that don't
+// match the query. Pure show/hide, no logic touched.
+function filterSettings(q) {
+    const query = (q || '').trim().toLowerCase();
+    const cards = document.querySelectorAll('#screen-settings > .card');
+    let anyVisible = false;
+    cards.forEach((c) => {
+        const match = !query || (c.textContent || '').toLowerCase().includes(query);
+        c.style.display = match ? '' : 'none';
+        if (match) anyVisible = true;
+    });
+    const none = document.querySelector('#settings-no-match');
+    if (none) none.style.display = (query && !anyVisible) ? 'block' : 'none';
+}
+
 // ---------------------------------------------------------------------------
 // Boot sequence
 // ---------------------------------------------------------------------------
@@ -336,7 +351,7 @@ function showScreen(name) {
     if (name === 'gaming') refreshGaming();
     if (name === 'apps') loadAppsCatalog();
     if (name === 'help') renderHelp(($('#help-search') || {}).value || '');
-    if (name === 'settings') { refreshNetStatus(); refreshDriversUi(); refreshSwapStatus(); refreshAirplane(); if (window._refreshSecurityUi) window._refreshSecurityUi(); }
+    if (name === 'settings') { const ss = $('#settings-search'); if (ss) ss.value = ''; filterSettings(''); refreshNetStatus(); refreshDriversUi(); refreshSwapStatus(); refreshAirplane(); if (window._refreshSecurityUi) window._refreshSecurityUi(); }
     if (name === 'ai') $('#ai-in').focus();
     if (name === 'terminal') $('#term-in').focus();
     // System Core lifecycle — init when navigating to it, teardown otherwise.
@@ -2931,6 +2946,9 @@ function wire() {
     const airTog = $('#airplane-toggle');
     if (airTog) airTog.addEventListener('change', onAirplaneToggle);
     refreshAirplane();
+    // QoL — Settings search/filter.
+    const setSearch = $('#settings-search');
+    if (setSearch) setSearch.addEventListener('input', (e) => filterSettings(e.target.value));
     // QoL — Esc and click-outside close the power menu (expected desktop behavior).
     document.addEventListener('keydown', (e) => {
         if (e.key !== 'Escape') return;

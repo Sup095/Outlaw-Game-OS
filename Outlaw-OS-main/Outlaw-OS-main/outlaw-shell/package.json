@@ -1,6 +1,6 @@
 {
   "name": "outlaw-os",
-  "version": "2.0.111",
+  "version": "2.0.112",
   "description": "Outlaw OS - lightweight, secure Linux desktop for AI-driven Godot game development with LM Studio + Steam",
   "main": "main.js",
   "author": "Outlaw OS",
