@@ -55,10 +55,19 @@ function updateOnlineStatus() {
     try {
         const offline = airplaneMode || navigator.onLine === false;
         if (document.body) document.body.classList.toggle('offline', offline);
-        const badge = document.querySelector('#offline-badge');
-        if (badge) badge.textContent = airplaneMode
-            ? '✈ Airplane mode — radios off'
-            : '⚠ Offline · local features still work';
+        // Single indicator: the topbar #offline-pill. Airplane mode labels it
+        // explicitly; otherwise refreshNetStatus owns visibility (real connectivity).
+        const pill = document.querySelector('#offline-pill');
+        if (!pill) return;
+        if (airplaneMode) {
+            pill.hidden = false;
+            pill.textContent = '✈ AIRPLANE MODE';
+            pill.title = 'Airplane mode is on — radios off. Turn it off in Settings → Network & Wi-Fi.';
+        } else {
+            pill.textContent = '⚠ OFFLINE — set up Wi-Fi';
+            pill.title = 'No internet connection — click to set up Wi-Fi';
+            try { refreshNetStatus(); } catch {}
+        }
     } catch {}
 }
 function isOnline() { return !airplaneMode && navigator.onLine !== false; }
