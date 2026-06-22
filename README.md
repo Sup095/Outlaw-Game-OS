@@ -36,10 +36,12 @@ Outlaw Game OS is built in the open, one phase at a time. Each **completed** roa
 ```
 Foundations   ▰▰▰▰▰▰▰▰▰▰  done — 4 roadmaps, all shipped & tested
 Completeness  ▰▰▰▰▰▰▰▰▰▰  done — 16 phases; the desktop + dev tool are feature-complete
-This cycle    ▰▰▰▰▱▱▱▱▱▱  Hardening & Capability — fixing what real testing surfaced + adding capability → v2.1.0
+Hardening     ▰▰▰▰▰▰▰▰▰▰  built — every capability item + bug-class from real testing
+Toward v2.1.0 ▰▰▰▰▰▰▰▱▱▱  stabilizing: fixes + quality-of-life only, to the first stable release
+Post-1.0      ▱▱▱▱▱▱▱▱▱▱  planned — publish your games · AI builds more · runs anywhere · smarter AI
 ```
 
-> **Legend:** ✅ shipped & in your hands · 🚧 building / diagnosing now · 🔭 planned · 🧪 experimental (post-1.0)
+> **Legend:** ✅ shipped & in your hands · 🚧 diagnosing (needs test data) · 🔭 planned (post-1.0) · 🧪 experimental (post-1.0)
 
 ### ✅ Shipped & solid — completed roadmaps
 
@@ -78,9 +80,9 @@ The cycle that made the desktop + dev tool feel **finished** — every phase bel
 
 </details>
 
-### 🚧 Hardening & Capability — current cycle *(→ v2.1.0)*
+### ✅ Hardening & Capability — built *(now stabilizing → v2.1.0)*
 
-Real-world testing has begun. This cycle squashes the bugs testers actually hit and adds capability + quality-of-life, iterating through the `2.0.x` betas until it's solid enough to drop the `-beta` and become **v2.1.0**.
+Real-world testing began, and this whole cycle is now **built** — every capability item plus fixes for the bugs testers hit. From here to the first stable release we ship **only fixes + small quality-of-life**, until it's solid enough to drop the `-beta` and become **v2.1.0**.
 
 **🔧 Fixes from testing**
 
@@ -88,27 +90,39 @@ Real-world testing has begun. This cycle squashes the bugs testers actually hit 
 |:--:|:--|:--|
 | ✅ | CodeMaker **New Game** | create-crash fixed + wizard pages scroll (no more clipped descriptions) |
 | ✅ | **Broken mode** | now actually applies (the theme selector was falling through to green) |
-| ✅ | **Report a problem** | one combined, deduped error/warning log — desktop + dev session + Xorg + journal — that you download or send as a pre-filled GitHub issue |
-| 🚧 | **Boot crash-loops** | desktop + CodeMaker bouncing to the picker — diagnosing via the new log |
-| 🚧 | Installer **"keep my other OS"** | "couldn't shrink partition" — a careful, tested fix is next |
-| 🚧 | **Hotswap** | needs a manual second reboot to take — fixing |
+| ✅ | **Report a problem** | one combined, deduped error/warning log — desktop + dev session + Xorg + journal — download it or send a pre-filled GitHub issue (also from the installer) |
+| ✅ | Installer **"keep my other OS"** | partition-shrink fix shipped (the resize prompt was aborting non-interactively) — **awaiting a re-test** |
+| 🚧 | **Boot crash-loops** | desktop + CodeMaker bouncing to the picker — the error log now captures these; **needs test data to pin down** |
+| 🚧 | **Hotswap** | needs a manual second reboot to take — firmware/bootloader-specific; **needs test data** |
 
-**🧠 Capability + quality-of-life**
+**🧠 Capability + quality-of-life — all built**
 
-- Base AIs with **near-complete control of settings + the system** (safeguarded — they may *read* system files but never alter them), and **V4rm1nt** gets the same — but **sleeps/rests** to free all resources when CodeMaker (or another model) is active.
-- **RAM-only AI** for machines without (or not using) VRAM, with **automatic fallback** when no VRAM is found, and **AMD / Intel GPU** support alongside Nvidia.
-- **AI personalities** (and naming themselves when they switch models) · assistants that **run in the background and notify you** · **storage-as-RAM** · a from-scratch **updater overhaul** that fully reinstalls while keeping all your data + settings · a **UI + loading-screens** pass · an **offline mode**.
+- ✅ Base AIs with **near-complete control of settings + the system** (safeguarded — they may *read* system files, including with a new `read_file`, but never alter them); **V4rm1nt rests** to free resources when CodeMaker (or another model) is active.
+- ✅ **RAM-only auto-fallback** + **AMD / Intel GPU** VRAM support alongside Nvidia; the context saver protects **RAM** too, not just VRAM.
+- ✅ **AI personalities** (self-naming on a model you loaded) · **background notifications** · **storage-as-RAM** (a swapfile toggle) · an **offline mode** · the **System Core** repurposed as an **AI / system command center**.
+- ✅ Updater confirmed comprehensive (full system upgrade · reinstall-keeping-your-data · rollback) **+ failure logging**; **CodeMaker theming** now applies across every screen and theme, with more breathing room; an **animated AI "thinking"** indicator.
+
+### 🔭 Post-1.0 roadmap — where it goes after the first stable
+
+Planned for after **v2.1.0** (when the updater runs regularly), in phases:
+
+1. **Publish your games** — a Steam publishing assistant (export, AI-written store copy, achievements, depot upload) and **itch.io one-click** publish, so you can actually ship — and earn from — what you make.
+2. **AI builds more of the game** — running **genre starter templates**, an **AI playtest-and-fix loop** (it launches your game, watches it, fixes what breaks), and 🧪 on-device **art / audio / voice** generation.
+3. **Runs anywhere** — **model auto-management** (pull the best model that fits your hardware), the **Lite edition**, **private backup/restore** (to your own storage — optionally your own servers later), and translations.
+4. **Smarter AI** — **bundled Godot docs** so the AI is always engine-accurate, plus 🧪 multi-agent CodeMaker and per-project style memory.
+5. **Reliability as a product** — automated **boot-regression testing** before each release, a **recovery / safe-mode** shell, and opt-in 🧪 crash reporting.
 
 ### 🧪 Experimental — post-1.0
 
 After **v2.1.0** the updater runs regularly, so these ship as ongoing experiments (more added then):
 
 - **Slow-but-light AI** — let the AI take longer / run in stages so it uses less VRAM or RAM at any one moment, letting lower-end machines run better behaviour than they otherwise could.
+- **On-device asset / audio / voice generation** — proving out local image, sound, and speech models for game content on modest hardware.
 - **Self-update service (feasibility)** — letting Outlaw keep itself + its dependencies current automatically; we're testing whether it can be made reliable and safe.
 
 ### 🌌 Beyond
 
-More project templates, deeper Godot integration, broader hardware support, a future **ultra-lightweight stripped-down edition** for older machines, and ongoing quality-of-life polish — steered by what testers report through the in-OS reporting. Ideas and bug reports are always welcome on the [Issues](../../issues) page.
+Deeper Godot integration, broader hardware support, the **ultra-lightweight stripped-down edition** for older machines, and ongoing quality-of-life polish — steered by what testers report through the in-OS reporting. Ideas and bug reports are always welcome on the [Issues](../../issues) page.
 
 ---
 

@@ -144,11 +144,15 @@ function parseIntent(raw) {
 
 // Ask the model. Returns a parsed intent { tool, arg, text }.
 // Uses the OpenAI-compatible /v1/chat/completions endpoint.
-async function ask(prompt, { model, appIds, machine, baseUrl, history, summary, sysSettings, persona } = {}) {
+async function ask(prompt, { model, appIds, machine, baseUrl, history, summary, sysSettings, persona, online } = {}) {
     const messages = [{ role: 'system', content: systemPrompt(appIds || [], machine, persona) }];
     // QoL — current settings snapshot so the assistant is state-aware (answers
     // "what theme am I on?" and won't redundantly re-set things).
     if (sysSettings) messages.push({ role: 'system', content: String(sysSettings).slice(0, 600) });
+    // QoL — offline awareness: don't send the user into a dead web search.
+    if (online === false) {
+        messages.push({ role: 'system', content: 'NETWORK: the machine is currently OFFLINE. Do NOT use search_web. If the user asks for anything that needs the internet (a web search, a download, an update check), use "answer" to tell them it needs a connection — everything local (apps, files, this chat) still works.' });
+    }
     // Phase 15b — persistent-chat memory: an optional summary of older turns plus
     // the recent window, so Cr1tt3r can follow context across a conversation
     // (e.g. "open it" after naming an app). Caller supplies both; both optional.

@@ -2085,6 +2085,8 @@ function registerIpc() {
         const prompt = typeof payload === 'string' ? payload : ((payload && payload.prompt) || '');
         const history = (payload && Array.isArray(payload.history)) ? payload.history : [];
         const summary = (payload && typeof payload.summary === 'string') ? payload.summary : '';
+        // QoL — the renderer tells us if it's offline so the AI won't web-search.
+        const online = !(payload && payload.online === false);
         const be = aiBackend();
         const s = await aiAgent.status(be);
         if (!s.available) {
@@ -2099,7 +2101,7 @@ function registerIpc() {
             const persona = (aiEngine() !== 'base')
                 ? { name: settings.aiPersonaName || '', personality: settings.aiPersonaDesc || '' }
                 : undefined;
-            const intent = await aiAgent.ask(prompt, { ...be, appIds, machine, history, summary, sysSettings: settingsSummary(), persona });
+            const intent = await aiAgent.ask(prompt, { ...be, appIds, machine, history, summary, sysSettings: settingsSummary(), persona, online });
             return await executeIntent(intent);
         } catch (e) {
             return { error: e.message };

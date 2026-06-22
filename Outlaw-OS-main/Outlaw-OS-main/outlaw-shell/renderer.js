@@ -1488,7 +1488,7 @@ async function sendAI() {
     const log = $('#ai-log');
     log.appendChild(thinking);
     log.scrollTop = log.scrollHeight;
-    const res = await api.ai.ask(text, { history, summary });
+    const res = await api.ai.ask(text, { history, summary, online: isOnline() });
     thinking.remove();
     if (res.error) { addMsg('sys', res.error); return; }
     if (res.needsConfirm) {
