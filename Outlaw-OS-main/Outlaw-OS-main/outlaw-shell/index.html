@@ -71,7 +71,7 @@
         <span class="stat pill" id="stat-ai">AI OFF</span>
         <span class="stat" id="stat-clock">--:--:--</span>
         <button class="nav-item" data-action="hotswap" title="Switch OS / boot menu" style="width:auto;padding:6px 10px;">⇄ HOTSWAP</button>
-        <button data-action="power-menu" style="padding:6px 10px;">⏻</button>
+        <button data-action="power-menu" title="Power — restart or shut down" style="padding:6px 10px;">⏻</button>
     </header>
 
     <!-- Sidebar -->
@@ -851,6 +851,7 @@
                     <button class="primary" id="errlog-refresh" type="button">Collect errors</button>
                     <button id="errlog-github" type="button">Send to GitHub</button>
                     <button id="errlog-download" type="button">Download .log</button>
+                    <button id="errlog-copy" type="button">Copy</button>
                     <button class="danger" id="errlog-clear" type="button">Clear</button>
                 </div>
                 <textarea id="errlog-view" readonly style="width:100%;height:170px;font-family:monospace;font-size:11px;background:var(--panel-2,#0d130d);color:var(--text);border:1px solid var(--line);border-radius:8px;padding:8px;" placeholder="Click “Collect errors” to gather recent errors + warnings…"></textarea>

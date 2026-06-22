@@ -2331,6 +2331,13 @@ async function errlogClear() {
     const view = $('#errlog-view'); if (view) view.value = '';
     toast('Error log cleared.');
 }
+async function errlogCopy() {
+    const view = $('#errlog-view');
+    const txt = view ? view.value : '';
+    if (!txt || !txt.trim()) { toast('Nothing to copy — click "Collect errors" first.'); return; }
+    try { await navigator.clipboard.writeText(txt); toast('Error log copied to clipboard.'); }
+    catch { toast('Couldn\'t copy to clipboard.'); }
+}
 
 // ---------------------------------------------------------------------------
 // 🗺 In-OS roadmap (Settings) — interactive + themed. Mirrors the README roadmap.
@@ -2576,6 +2583,7 @@ function wire() {
     { const b = $('#errlog-refresh'); if (b) b.addEventListener('click', errlogRefresh); }
     { const b = $('#errlog-github'); if (b) b.addEventListener('click', errlogGithub); }
     { const b = $('#errlog-download'); if (b) b.addEventListener('click', errlogDownload); }
+    { const b = $('#errlog-copy'); if (b) b.addEventListener('click', errlogCopy); }
     { const b = $('#errlog-clear'); if (b) b.addEventListener('click', errlogClear); }
     // 🗺 Roadmap — render + collapsible groups.
     renderRoadmap();
