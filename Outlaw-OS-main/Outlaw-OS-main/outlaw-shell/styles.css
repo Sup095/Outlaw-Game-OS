@@ -821,6 +821,9 @@ h3 { font-size: 13px; text-transform: uppercase; color: var(--term-dim); }
     background: var(--panel-2);
     transform: translateY(-1px);
 }
+/* C14 — flag the Report button when the error log has entries. */
+.sc-control-btn.has-issues { border-color: var(--warn); }
+.sc-control-btn.has-issues .sc-ctl-ico { color: var(--warn); }
 .sc-ctl-ico { font-size: 18px; color: var(--term); }
 .sc-ctl-label { font-weight: 700; }
 .sc-ctl-sub { font-size: 12px; color: var(--term-dim); }

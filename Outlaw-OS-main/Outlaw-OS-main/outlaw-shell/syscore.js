@@ -1245,6 +1245,22 @@
                 ? 'gaming CPU governor active — click to turn off'
                 : 'toggle the gaming CPU governor';
         } catch { /* preview / no settings bridge */ }
+        // C14 — let the hub INFORM, not just navigate: surface how many issues are
+        // in the error log on the Report button (+ flag it if there are any).
+        try {
+            const eapi = window.outlaw && window.outlaw.errorlog;
+            if (eapi && eapi.read) {
+                const raw = await eapi.read();
+                const text = typeof raw === 'string' ? raw : ((raw && (raw.text || raw.log)) || '');
+                const count = text.split('\n').filter((l) => l.trim()).length;
+                const rsub = $$('#sc-ctl-report-sub');
+                const rbtn = document.querySelector('[data-sc-control="report"]');
+                if (rsub) rsub.textContent = count > 0
+                    ? (count + ' issue' + (count === 1 ? '' : 's') + ' logged · collect & send')
+                    : 'collect & send the error log';
+                if (rbtn) rbtn.classList.toggle('has-issues', count > 0);
+            }
+        } catch { /* no error-log bridge */ }
     }
 
     function _wireControlOnce() {
