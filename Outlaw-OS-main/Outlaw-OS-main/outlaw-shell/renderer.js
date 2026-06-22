@@ -2181,6 +2181,79 @@ async function errlogClear() {
 }
 
 // ---------------------------------------------------------------------------
+// 🗺 In-OS roadmap (Settings) — interactive + themed. Mirrors the README roadmap.
+// ---------------------------------------------------------------------------
+const ROADMAP = [
+    {
+        title: 'Shipped & solid', tag: 'done', open: false,
+        blurb: 'Five completed roadmaps plus the 16-phase Completeness cycle.',
+        items: [
+            ['done', 'Product merge · Reliability · System Core · release & boot hardening · updates/channels'],
+            ['done', 'Completeness & Polish — themes, real-hardware installer + Wi-Fi + window mgmt, runnable on-device AI, task manager, help'],
+            ['done', 'Dev session rebuild (Outlaw CodeMaker)'],
+            ['done', 'AI Assistant overhaul — Cr1tt3r + V4rm1nt, persistent chats, smart installer'],
+            ['done', 'Ollama as a full LM Studio replacement (incl. AMD / Intel GPUs)'],
+        ],
+    },
+    {
+        title: 'Hardening & Capability', tag: 'now', open: true,
+        blurb: 'The current cycle — fixing what real testing surfaced + adding capability, on the road to v2.1.0.',
+        items: [
+            ['done', 'CodeMaker create-crash fixed + New Game wizard scrolls'],
+            ['done', 'Broken mode actually applies'],
+            ['done', 'Report a problem — one combined, deduped error/warning log'],
+            ['done', 'Installer “keep my other OS” shrink'],
+            ['done', 'Accessibility — text size + reduce motion'],
+            ['now', 'Boot crash-loops — diagnosing via the new log'],
+            ['now', 'Hotswap second-reboot'],
+            ['plan', 'Near-complete AI control of settings + system (safeguarded)'],
+            ['plan', 'V4rm1nt parity + sleep/rest when CodeMaker or another model runs'],
+            ['plan', 'RAM-only AI + automatic fallback when no VRAM'],
+            ['plan', 'Updater overhaul — full reinstall that keeps your data + settings'],
+            ['plan', 'AI personalities · background AI + notifications · storage-as-RAM · offline mode'],
+            ['plan', 'UI + loading-screens polish pass'],
+        ],
+    },
+    {
+        title: 'Experimental — post-1.0', tag: 'exp', open: false,
+        blurb: 'Viability experiments that ship after v2.1.0, once the updater runs regularly.',
+        items: [
+            ['exp', 'Slow-but-light AI — takes longer to use less VRAM / RAM at once'],
+            ['exp', 'Self-update service (feasibility)'],
+        ],
+    },
+];
+const _RM_ICON = { done: '✓', now: '▸', plan: '○', exp: '⚗' };
+const _RM_BADGE = { done: 'shipped', now: 'in progress', plan: 'planned', exp: 'post-1.0' };
+
+function renderRoadmap() {
+    const root = $('#roadmap-view');
+    if (!root) return;
+    const ver = $('#roadmap-version');
+    if (ver) ver.textContent = '→ v2.1.0';
+    const html = [];
+    ROADMAP.forEach((g, gi) => {
+        const total = g.items.length;
+        const done = g.items.filter((it) => it[0] === 'done').length;
+        const pct = total ? Math.round((done / total) * 100) : 0;
+        html.push(`<div class="rm-group rm-${g.tag}${g.open ? ' open' : ''}" data-rm="${gi}">`);
+        html.push(`<button class="rm-head" type="button" data-rm-toggle="${gi}">`
+            + `<span class="rm-caret">▸</span>`
+            + `<span class="rm-title">${escapeHtml(g.title)}</span>`
+            + `<span class="rm-badge rm-badge-${g.tag}">${_RM_BADGE[g.tag] || ''}</span>`
+            + `<span class="rm-bar"><span style="width:${pct}%"></span></span>`
+            + `</button>`);
+        html.push('<div class="rm-body">');
+        if (g.blurb) html.push(`<div class="rm-blurb">${escapeHtml(g.blurb)}</div>`);
+        for (const [s, t] of g.items) {
+            html.push(`<div class="rm-item rm-item-${s}"><span class="rm-ico">${_RM_ICON[s] || '·'}</span><span>${escapeHtml(t)}</span></div>`);
+        }
+        html.push('</div></div>');
+    });
+    root.innerHTML = html.join('');
+}
+
+// ---------------------------------------------------------------------------
 // Event wiring (delegation)
 // ---------------------------------------------------------------------------
 function wire() {
@@ -2352,6 +2425,12 @@ function wire() {
     { const b = $('#errlog-github'); if (b) b.addEventListener('click', errlogGithub); }
     { const b = $('#errlog-download'); if (b) b.addEventListener('click', errlogDownload); }
     { const b = $('#errlog-clear'); if (b) b.addEventListener('click', errlogClear); }
+    // 🗺 Roadmap — render + collapsible groups.
+    renderRoadmap();
+    { const rv = $('#roadmap-view'); if (rv) rv.addEventListener('click', (e) => {
+        const h = e.target.closest('[data-rm-toggle]');
+        if (h) { const grp = h.closest('.rm-group'); if (grp) grp.classList.toggle('open'); }
+    }); }
     const _themeSel = $('#theme-select');
     if (_themeSel) _themeSel.addEventListener('change', (e) => {
         const v = e.target.value;

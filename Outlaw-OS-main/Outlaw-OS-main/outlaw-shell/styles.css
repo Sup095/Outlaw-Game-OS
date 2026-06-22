@@ -193,6 +193,34 @@ body.reduce-motion *::after {
     scroll-behavior: auto !important;
 }
 
+/* 🗺 In-OS roadmap (Settings) — interactive collapsible groups + progress bars.
+   All theme-var driven so it recolors with green / gold / broken; CSS-only motion
+   (caret rotate + max-height), so reduce-motion calms it and idle cost is zero. */
+.rm-version { color: var(--term-dim); font-size: 11px; }
+.rm-group { border: 1px solid var(--line); border-radius: var(--radius); margin-bottom: 8px; overflow: hidden; background: var(--panel); }
+.rm-head { width: 100%; display: flex; align-items: center; gap: 10px; padding: 10px 12px; background: transparent; border: 0; color: var(--text); cursor: pointer; text-align: left; font: inherit; }
+.rm-head:hover { background: rgba(var(--term-rgb), 0.07); }
+.rm-caret { color: var(--term-dim); transition: transform .18s ease; flex: 0 0 auto; }
+.rm-group.open .rm-caret { transform: rotate(90deg); }
+.rm-title { font-weight: 700; color: var(--term); letter-spacing: .3px; }
+.rm-badge { font-size: 9.5px; text-transform: uppercase; letter-spacing: 1px; padding: 2px 7px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); flex: 0 0 auto; }
+.rm-badge-now { color: var(--bg); background: var(--term); border-color: var(--term); }
+.rm-badge-done { color: var(--ok); border-color: var(--ok); }
+.rm-badge-exp { color: var(--warn); border-color: var(--warn); }
+.rm-bar { flex: 1; height: 5px; border-radius: 3px; background: var(--line); overflow: hidden; min-width: 40px; }
+.rm-bar > span { display: block; height: 100%; background: linear-gradient(90deg, var(--term-dim), var(--term)); border-radius: 3px; transition: width .5s ease; }
+.rm-body { max-height: 0; overflow: hidden; transition: max-height .28s ease; }
+.rm-group.open .rm-body { max-height: 1200px; }
+.rm-blurb { color: var(--muted); font-size: 11px; padding: 2px 14px 8px; }
+.rm-item { display: flex; gap: 9px; align-items: baseline; padding: 5px 14px; font-size: 12.5px; color: var(--text); border-top: 1px solid rgba(var(--term-rgb), 0.06); }
+.rm-item:hover { background: rgba(var(--term-rgb), 0.04); }
+.rm-ico { flex: 0 0 auto; width: 14px; text-align: center; }
+.rm-item-done .rm-ico { color: var(--ok); }
+.rm-item-now { color: var(--term); }
+.rm-item-now .rm-ico { color: var(--term); }
+.rm-item-plan .rm-ico { color: var(--muted); }
+.rm-item-exp .rm-ico { color: var(--warn); }
+
 /* Live-mode ("broken mode", basic form) — the live ISO is a limited preview, so
  * flag it and let locked controls read as deliberately disabled. The full
  * glitch/fake-error aesthetic + a selectable "Broken" theme land in a later
