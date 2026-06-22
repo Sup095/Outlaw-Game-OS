@@ -151,6 +151,11 @@ contextBridge.exposeInMainWorld('outlaw', {
         checkRollback: () => ipcRenderer.invoke('updates:rollback-check'),
         rollback: () => ipcRenderer.invoke('updates:rollback'),
     },
+    // C8 — storage-as-memory (swapfile) for low-RAM machines.
+    swap: {
+        status: () => ipcRenderer.invoke('swap:status'),
+        set: (opts) => ipcRenderer.invoke('swap:set', opts),
+    },
     // Advisory community-stability signal for the installed version (read-only
     // GitHub reaction tally). The user's own vote is stored in settings.
     stability: {

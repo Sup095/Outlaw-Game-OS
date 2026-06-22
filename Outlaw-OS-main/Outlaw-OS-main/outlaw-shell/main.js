@@ -2265,6 +2265,32 @@ function registerIpc() {
         return { ok: true, log: tail };
     });
 
+    // C8 — "use storage as extra memory" (a swapfile). status reads without root;
+    // set toggles the helper via pkexec. Lets a low-RAM box avoid OOM under AI load.
+    ipcMain.handle('swap:status', async () => {
+        if (!IS_LINUX || !fs.existsSync('/usr/local/bin/outlaw-swap'))
+            return { ok: false, swapTotalMb: 0, swapfile: false };
+        const r = await runShell('/usr/local/bin/outlaw-swap status', { timeout: 8000 });
+        const out = r.stdout || '';
+        const m = out.match(/swap_total_mb=(\d+)/);
+        return { ok: true, swapTotalMb: m ? parseInt(m[1], 10) : 0, swapfile: /swapfile=present/.test(out) };
+    });
+    ipcMain.handle('swap:set', async (_e, payload) => {
+        if (!IS_LINUX) return { ok: false, error: 'Storage-as-memory runs on Outlaw OS.' };
+        const on = !!(payload && payload.on);
+        const sizeGb = Math.max(1, Math.min(64, parseInt((payload && payload.sizeGb) || 4, 10) || 4));
+        const cmd = on
+            ? `pkexec /usr/local/bin/outlaw-swap on ${sizeGb}`
+            : 'pkexec /usr/local/bin/outlaw-swap off';
+        const r = await runShell(cmd, { timeout: 1000 * 60 * 8 });
+        const tail = (r.stdout || r.stderr || `exit ${r.code}`).slice(-2000);
+        if (r.code !== 0) {
+            try { errorlog.append('error', 'swap', 'Storage-as-memory ' + (on ? 'enable' : 'disable') + ' failed: ' + tail.slice(-400)); } catch {}
+            return { ok: false, error: tail };
+        }
+        return { ok: true, log: tail };
+    });
+
     // Shell self-updater (downloads from your GitHub Releases).
     ipcMain.handle('updates:check-shell', async () => {
         try {

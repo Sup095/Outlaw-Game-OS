@@ -14,7 +14,7 @@ iso_name="outlaw-os"
 iso_label="OUTLAW_$(date +%Y%m)"
 iso_publisher="Outlaw OS"
 iso_application="Outlaw OS Live / Boot Manager"
-iso_version="2.0.98"
+iso_version="2.0.99"
 install_dir="arch"
 buildmodes=('iso')
 bootmodes=('bios.syslinux.mbr' 'bios.syslinux.eltorito'
@@ -34,4 +34,5 @@ file_permissions=(
   ["/usr/local/bin/outlaw-hotswap"]="0:0:755"
   ["/usr/local/bin/outlaw-perf"]="0:0:755"
   ["/usr/local/bin/outlaw-update-apply"]="0:0:755"
+  ["/usr/local/bin/outlaw-swap"]="0:0:755"
 )

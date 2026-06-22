@@ -292,7 +292,7 @@ function showScreen(name) {
     if (name === 'gaming') refreshGaming();
     if (name === 'apps') loadAppsCatalog();
     if (name === 'help') renderHelp(($('#help-search') || {}).value || '');
-    if (name === 'settings') { refreshNetStatus(); refreshDriversUi(); if (window._refreshSecurityUi) window._refreshSecurityUi(); }
+    if (name === 'settings') { refreshNetStatus(); refreshDriversUi(); refreshSwapStatus(); if (window._refreshSecurityUi) window._refreshSecurityUi(); }
     if (name === 'ai') $('#ai-in').focus();
     if (name === 'terminal') $('#term-in').focus();
     // System Core lifecycle — init when navigating to it, teardown otherwise.
@@ -841,6 +841,55 @@ async function refreshRollbackAvailability() {
     } catch (err) {
         btn.disabled = true;
         if (status) status.textContent = 'check failed';
+    }
+}
+
+// C8 — "use storage as extra memory" (swapfile) status + toggle.
+let _swapBusy = false;
+async function refreshSwapStatus() {
+    const tog = $('#swap-toggle');
+    if (!tog) return;
+    try {
+        const r = await api.swap.status();
+        if (r && r.ok) {
+            tog.checked = !!r.swapfile;
+            const sub = $('#swap-sub');
+            if (sub && r.swapfile && r.swapTotalMb) {
+                const amt = r.swapTotalMb >= 1024 ? (r.swapTotalMb / 1024).toFixed(1) + ' GB' : r.swapTotalMb + ' MB';
+                sub.textContent = 'On — ' + amt + ' of storage usable as memory. Slower than real RAM; turn off any time.';
+            }
+        }
+    } catch {}
+}
+async function onSwapToggle(e) {
+    const tog = e.target;
+    if (_swapBusy) return;
+    const turnOn = tog.checked;
+    if (turnOn && !window.confirm(
+        'Use storage as extra memory?\n\n' +
+        'Creates a 4 GB swapfile so the system can keep an AI model + the desktop ' +
+        'running when RAM is tight. It is slower than real RAM and uses 4 GB of disk, ' +
+        'but you can turn it off any time.')) {
+        tog.checked = false; return;
+    }
+    _swapBusy = true;
+    const sub = $('#swap-sub');
+    if (sub) sub.textContent = turnOn ? 'setting up swapfile — enter your password if prompted (can take a minute)…' : 'removing swapfile…';
+    try {
+        const r = await api.swap.set({ on: turnOn, sizeGb: 4 });
+        if (!r || !r.ok) {
+            toast('Storage-as-memory ' + (turnOn ? 'setup' : 'removal') + ' failed.');
+            tog.checked = !turnOn;
+            if (sub) sub.textContent = (r && r.error) ? r.error.slice(-180) : 'failed';
+        } else {
+            toast(turnOn ? 'Storage-as-memory enabled.' : 'Storage-as-memory disabled.');
+        }
+    } catch (err) {
+        toast('Failed: ' + err.message);
+        tog.checked = !turnOn;
+    } finally {
+        _swapBusy = false;
+        refreshSwapStatus();
     }
 }
 
@@ -2826,6 +2875,9 @@ function wire() {
         setSetting({ autoCheck: e.target.checked });
         toast('Auto-check ' + (e.target.checked ? 'enabled' : 'disabled') + '.');
     });
+    // C8 — storage-as-memory (swapfile) toggle.
+    const swapTog = $('#swap-toggle');
+    if (swapTog) swapTog.addEventListener('change', onSwapToggle);
     const channelEl = $('#update-channel');
     if (channelEl) {
         channelEl.addEventListener('change', (e) => {
