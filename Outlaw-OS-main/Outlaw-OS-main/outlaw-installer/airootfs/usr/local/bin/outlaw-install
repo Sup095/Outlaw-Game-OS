@@ -121,8 +121,19 @@ hr()   { printf '%s\n' "=================================================="; }
 # AUTO_MODE=1 → driven by the GUI: no prompts, emit @@ machine markers.
 AUTO_MODE=0
 emit()  { [[ "$AUTO_MODE" = 1 ]] && printf '@@%s\n' "$*"; return 0; }
+# F1/C16 — mirror installer errors into the shared error log so the live boot's
+# "Report a problem" can ship a failed-install report. Best-effort + deduped.
+errlog() {
+    local ts msg f home; ts="$(date -Iseconds 2>/dev/null || echo now)"; msg="$*"
+    for home in /root "${SUDO_USER:+/home/$SUDO_USER}" "$HOME"; do
+        [[ -n "$home" && -d "$home" ]] || continue
+        f="$home/.outlaw-errors.log"
+        if grep -qF "ERROR installer: $msg" "$f" 2>/dev/null; then continue; fi
+        printf '[%s] ERROR installer: %s\n' "$ts" "$msg" >>"$f" 2>/dev/null || true
+    done
+}
 stage() { emit "STAGE $1 $2"; grn "== $2"; }
-die()   { emit "ERROR $*"; red "ERROR: $*"; exit 1; }
+die()   { errlog "$*"; emit "ERROR $*"; red "ERROR: $*"; exit 1; }
 
 [[ $EUID -eq 0 ]] || exec sudo "$0" "$@"
 is_efi() { [[ -d /sys/firmware/efi/efivars ]]; }
