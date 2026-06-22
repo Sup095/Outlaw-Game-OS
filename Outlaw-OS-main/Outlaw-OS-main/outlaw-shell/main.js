@@ -1003,6 +1003,22 @@ async function executeIntent(intent) {
             const r = await openPath(intent.arg || '');
             return { text: r.ok ? `Opened ${intent.arg}.` : r.error, did: r.ok ? 'open_file' : 'none' };
         }
+        case 'read_file': {
+            // C1 — read-only file inspection. Cr1tt3r may READ files it has access
+            // to (incl. config/system files) to answer or diagnose, but NEVER
+            // alters them. Size-capped so a huge file can't blow up the prompt.
+            const p = String(intent.arg || '').trim();
+            if (!p) return { text: 'Which file? Give me a path.', did: 'none' };
+            try {
+                const st = fs.statSync(p);
+                if (st.isDirectory()) return { text: `${p} is a folder — use list_files for that.`, did: 'none' };
+                if (st.size > 256 * 1024) return { text: `${p} is ${Math.round(st.size / 1024)} KB — too big to read inline (cap ~256 KB).`, did: 'none' };
+                const content = fs.readFileSync(p, 'utf8');
+                return { text: `${p}:\n\n${content.slice(0, 8000)}${content.length > 8000 ? '\n…(truncated)' : ''}`, did: 'read_file' };
+            } catch (e) {
+                return { text: `Couldn't read ${p}: ${e.message}`, did: 'none' };
+            }
+        }
         case 'open_screen': {
             // QoL — let the assistant take the user to a section of the shell.
             const name = String(intent.arg || '').toLowerCase().trim();

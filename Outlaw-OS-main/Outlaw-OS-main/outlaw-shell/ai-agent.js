@@ -20,7 +20,7 @@ const DEFAULT_MODEL = 'local-model';
 // Tools the model is allowed to propose. Keep the surface tiny so small models
 // stay reliable. `run_command` is intentionally marked dangerous so the main
 // process always routes it through user confirmation.
-const TOOLS = ['answer', 'open_app', 'search_web', 'list_files', 'open_file', 'system_info', 'install_app', 'set_setting', 'open_screen', 'run_command'];
+const TOOLS = ['answer', 'open_app', 'search_web', 'list_files', 'open_file', 'read_file', 'system_info', 'install_app', 'set_setting', 'open_screen', 'run_command'];
 
 function systemPrompt(appIds, machine) {
     return [
@@ -38,6 +38,7 @@ function systemPrompt(appIds, machine) {
         '- search_web: open the browser on a web search. arg = the search query.',
         '- list_files: show a directory. arg = absolute path (default home if empty).',
         '- open_file: open a file/folder with its default app. arg = path.',
+        '- read_file: show a file\'s contents to help answer/diagnose. READ-ONLY — you may read anything you have access to (including config/system files) but you can NEVER modify system files. arg = absolute path. e.g. "what\'s in my .xinitrc" -> {"tool":"read_file","arg":"/home/<user>/.xinitrc"}.',
         '- system_info: report CPU/RAM/host info (arg empty).',
         '- install_app: install software the user names OR describes. arg = the most likely PACKAGE name (e.g. "something to edit audio" -> "audacity"; "a photo editor" -> "gimp"). Any official package works, not just famous ones — give your single best package-name guess. Known sources only (Apps catalog / official repos); the user confirms before anything installs.',
         '- open_screen: take the user to a section of Outlaw OS. arg = one of: dashboard, syscore, files, tasks, terminal, gaming, gamedev, apps, ai, calc, settings, help. e.g. "take me to settings" -> {"tool":"open_screen","arg":"settings","text":"Here\'s Settings."}.',
