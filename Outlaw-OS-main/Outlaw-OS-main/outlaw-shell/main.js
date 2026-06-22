@@ -2258,6 +2258,8 @@ function registerIpc() {
         if (r.code !== 0) {
             const hint = /could not|failed to synchronize|connect|network/i.test(tail)
                 ? ' (couldn\'t reach the servers — check Settings → Network & Wi-Fi)' : '';
+            // C9 — capture update failures so the user can send them from the log.
+            try { errorlog.append('error', 'updater', 'System update (pacman -Syu) failed: ' + tail.slice(-600)); } catch {}
             return { ok: false, error: tail, hint };
         }
         return { ok: true, log: tail };
@@ -2288,9 +2290,14 @@ function registerIpc() {
             // The privileged helper verifies SHA again, extracts atomically, and swaps /usr/share/outlaw-os.
             const cmd = `pkexec /usr/local/bin/outlaw-update-apply ${JSON.stringify(tarPath)} ${JSON.stringify(sha)}`;
             const r = await runShell(cmd, { timeout: 1000 * 60 * 10 });
-            if (r.code !== 0) return { ok: false, error: (r.stderr || r.stdout || `exit ${r.code}`).slice(-2000) };
+            if (r.code !== 0) {
+                const msg = (r.stderr || r.stdout || `exit ${r.code}`).slice(-2000);
+                try { errorlog.append('error', 'updater', 'Shell/component update failed: ' + msg.slice(-600)); } catch {}
+                return { ok: false, error: msg };
+            }
             return { ok: true, log: (r.stdout || '').slice(-2000), restart: true };
         } catch (e) {
+            try { errorlog.append('error', 'updater', 'Shell update failed: ' + ((e && e.message) || e)); } catch {}
             return { ok: false, error: e.message };
         }
     });
@@ -2310,7 +2317,11 @@ function registerIpc() {
     ipcMain.handle('updates:rollback', async () => {
         if (!IS_LINUX) return { ok: false, error: 'Rollback runs on Outlaw OS.' };
         const r = await runShell('pkexec /usr/local/bin/outlaw-update-rollback', { timeout: 1000 * 60 * 2 });
-        if (r.code !== 0) return { ok: false, error: (r.stderr || r.stdout || `exit ${r.code}`).slice(-2000) };
+        if (r.code !== 0) {
+            const msg = (r.stderr || r.stdout || `exit ${r.code}`).slice(-2000);
+            try { errorlog.append('error', 'updater', 'Rollback failed: ' + msg.slice(-600)); } catch {}
+            return { ok: false, error: msg };
+        }
         return { ok: true, log: (r.stdout || '').slice(-2000), restart: true };
     });
     ipcMain.handle('installer:launch', async () => {
