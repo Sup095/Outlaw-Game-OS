@@ -1055,6 +1055,20 @@ async function executeIntent(intent) {
                 text: intent.text || ('Alright — call me ' + name + ' from now on.'),
             };
         }
+        case 'system_action': {
+            // C1 extension — let the AI drive the new one-tap features. These return
+            // directives the renderer carries out (it owns the lock overlay + the
+            // wired toggles, which update the UI + show confirms where appropriate).
+            const a = String(intent.arg || '').trim().toLowerCase();
+            switch (a) {
+                case 'lock': return { did: 'system_action', lockScreen: true, text: intent.text || 'Locking the screen.' };
+                case 'airplane_on': return { did: 'system_action', airplane: true, text: intent.text || 'Airplane mode on — radios off.' };
+                case 'airplane_off': return { did: 'system_action', airplane: false, text: intent.text || 'Airplane mode off.' };
+                case 'storage_ram_on': return { did: 'system_action', swap: true, text: intent.text || 'Setting up storage as extra memory…' };
+                case 'storage_ram_off': return { did: 'system_action', swap: false, text: intent.text || 'Turning off storage-as-memory.' };
+                default: return { did: 'none', text: 'I can lock the screen, toggle airplane mode, or toggle storage-as-memory — which one?' };
+            }
+        }
         case 'install_app': {
             // Phase 13: only ever install from a KNOWN source, and only after the
             // user confirms. Hand a proposal back to the UI (same rail as run_command).

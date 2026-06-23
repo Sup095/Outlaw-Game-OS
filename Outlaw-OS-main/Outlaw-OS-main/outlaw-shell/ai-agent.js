@@ -20,7 +20,7 @@ const DEFAULT_MODEL = 'local-model';
 // Tools the model is allowed to propose. Keep the surface tiny so small models
 // stay reliable. `run_command` is intentionally marked dangerous so the main
 // process always routes it through user confirmation.
-const TOOLS = ['answer', 'open_app', 'search_web', 'list_files', 'open_file', 'read_file', 'system_info', 'install_app', 'set_setting', 'set_persona', 'open_screen', 'run_command'];
+const TOOLS = ['answer', 'open_app', 'search_web', 'list_files', 'open_file', 'read_file', 'system_info', 'install_app', 'set_setting', 'set_persona', 'system_action', 'open_screen', 'run_command'];
 
 function systemPrompt(appIds, machine, persona) {
     // C6 — persona. On the bundled base model the identity is fixed (Cr1tt3r).
@@ -70,6 +70,7 @@ function systemPrompt(appIds, machine, persona) {
         ...(persona !== undefined ? [
             '- set_persona: ONLY on a non-default model, and ONLY if the user invites you to pick your own name/personality. arg = "Name | a short personality description". e.g. user says "give yourself a name" -> {"tool":"set_persona","arg":"Spectre | a calm, precise hacker-poet","text":"Call me Spectre."}. On the built-in base model your name is fixed (Cr1tt3r) — do not use this there.',
         ] : []),
+        '- system_action: perform a one-tap system action. arg = one of: lock (lock the screen — needs a PIN set), airplane_on / airplane_off (turn Wi-Fi + Bluetooth off/on), storage_ram_on / storage_ram_off (use disk as extra memory). e.g. "lock my screen" -> {"tool":"system_action","arg":"lock"}; "turn on airplane mode" -> {"tool":"system_action","arg":"airplane_on","text":"Going dark."}.',
         '- run_command: ONLY when the user explicitly asks to run a shell command. arg = the command. This always asks the user to confirm first.',
         '',
         'Rules: pick the single best tool. Prefer "answer" for anything conversational.',

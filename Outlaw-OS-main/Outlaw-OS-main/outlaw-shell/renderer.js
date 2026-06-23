@@ -1604,6 +1604,24 @@ async function sendAI() {
     }
     // QoL — the assistant navigated somewhere for the user.
     if (res.openScreen) { try { showScreen(res.openScreen); } catch {} }
+    // C1 extension — system actions the assistant performed. The toggles are in
+    // the DOM on any screen, so these work from anywhere; we reuse the wired
+    // handlers so confirms + UI + toasts all behave as if the user clicked them.
+    if (res.lockScreen) { try { lockNow(); } catch {} }
+    if (typeof res.airplane === 'boolean') {
+        try {
+            const tog = $('#airplane-toggle');
+            if (tog) { tog.checked = res.airplane; onAirplaneToggle({ target: tog }); }
+            else { await api.network.setAirplane(res.airplane); airplaneMode = res.airplane; updateOnlineStatus(); }
+        } catch {}
+    }
+    if (typeof res.swap === 'boolean') {
+        try {
+            const tog = $('#swap-toggle');
+            if (tog) { tog.checked = res.swap; onSwapToggle({ target: tog }); }
+            else { await api.swap.set({ on: res.swap, sizeGb: 4 }); }
+        } catch {}
+    }
     const t = res.text || '(no answer)';
     addMsg('ai', t);
     recordAiTurn('assistant', t);
