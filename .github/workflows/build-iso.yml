@@ -63,6 +63,18 @@ jobs:
       - name: Refresh pacman + enable multilib
         run: |
           set -e
+          # Retry pacman through transient mirror failures (a single .sig/.pkg
+          # failing from one mirror) — refresh the DB between attempts.
+          retry() {
+            n=0
+            until "$@"; do
+              n=$((n + 1))
+              if [ "$n" -ge 5 ]; then echo "::error::'$*' failed after $n attempts"; return 1; fi
+              echo "::warning::pacman attempt $n failed — refreshing databases, retrying in 15s…"
+              sleep 15
+              pacman -Syy --noconfirm || true
+            done
+          }
           pacman-key --init
           pacman-key --populate archlinux
           # Our package set includes lib32-* packages, so the multilib repo
@@ -70,8 +82,8 @@ jobs:
           if ! grep -q '^\[multilib\]' /etc/pacman.conf; then
             printf '\n[multilib]\nInclude = /etc/pacman.d/mirrorlist\n' >> /etc/pacman.conf
           fi
-          pacman -Syu --noconfirm
-          pacman -S --noconfirm --needed git
+          retry pacman -Syu --noconfirm --disable-download-timeout
+          retry pacman -S --noconfirm --needed --disable-download-timeout git
 
       - name: Check out the repository
         uses: actions/checkout@v5
@@ -142,10 +154,24 @@ jobs:
         run: |
           # Keyring init + sync. Container images sometimes ship a stale or
           # missing keyring which makes pacman -Sy fail. This makes it robust.
+          # Transient Arch mirror hiccups (a single .sig/.pkg failing to download
+          # from one mirror) previously failed the whole build — retry with a DB
+          # refresh between attempts so a flaky mirror self-heals instead of
+          # breaking CI. (No `local` — these run under /bin/sh.)
+          retry() {
+            n=0
+            until "$@"; do
+              n=$((n + 1))
+              if [ "$n" -ge 5 ]; then echo "::error::'$*' failed after $n attempts"; return 1; fi
+              echo "::warning::pacman attempt $n failed — refreshing databases, retrying in 15s…"
+              sleep 15
+              pacman -Syy --noconfirm || true
+            done
+          }
           pacman-key --init
           pacman-key --populate archlinux
-          pacman -Syu --noconfirm
-          pacman -S --noconfirm --needed \
+          retry pacman -Syu --noconfirm --disable-download-timeout
+          retry pacman -S --noconfirm --needed --disable-download-timeout \
             archiso git base-devel \
             nodejs python python-pip rsync \
             mkinitcpio mkinitcpio-archiso squashfs-tools \
