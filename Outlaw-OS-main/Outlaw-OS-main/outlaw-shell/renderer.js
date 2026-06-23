@@ -3003,13 +3003,32 @@ function wire() {
     if (setSearch) setSearch.addEventListener('input', (e) => filterSettings(e.target.value));
     // QoL — Esc and click-outside close the power menu (expected desktop behavior).
     document.addEventListener('keydown', (e) => {
-        if (e.key !== 'Escape') return;
-        // Close a FINISHED loading screen (never mid-operation — the X stays
-        // disabled until the job is done, so we mirror that).
-        const ls = $('#loadscreen'), lsClose = $('#ls-close');
-        if (ls && ls.classList.contains('show') && lsClose && !lsClose.disabled) { loadingScreen.hide(); return; }
-        const pm = $('#power-modal');
-        if (pm && pm.classList.contains('show')) closePower();
+        // Esc — close a FINISHED loading screen (never mid-operation; the X stays
+        // disabled until done, so we mirror that), then the power menu.
+        if (e.key === 'Escape') {
+            const ls = $('#loadscreen'), lsClose = $('#ls-close');
+            if (ls && ls.classList.contains('show') && lsClose && !lsClose.disabled) { loadingScreen.hide(); return; }
+            const pm = $('#power-modal');
+            if (pm && pm.classList.contains('show')) closePower();
+            return;
+        }
+        // Don't fire navigation shortcuts while the sign-in/lock overlay is up.
+        const signin = $('#signin');
+        if (signin && signin.style.display === 'flex') return;
+        // Ctrl/Cmd+K — quick-ask the AI from anywhere.
+        if ((e.ctrlKey || e.metaKey) && (e.key === 'k' || e.key === 'K')) {
+            e.preventDefault();
+            try { showScreen('ai'); const i = $('#ai-in'); if (i) i.focus(); } catch {}
+            return;
+        }
+        // Alt+1..9 — jump to the Nth sidebar screen (not while typing in a field).
+        if (e.altKey && !e.ctrlKey && !e.metaKey && /^[1-9]$/.test(e.key)) {
+            const ae = document.activeElement;
+            if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA')) return;
+            const navs = $$('.nav-item[data-screen]');
+            const idx = parseInt(e.key, 10) - 1;
+            if (navs[idx]) { e.preventDefault(); navs[idx].click(); }
+        }
     });
     const powerModal = $('#power-modal');
     if (powerModal) powerModal.addEventListener('click', (e) => { if (e.target === powerModal) closePower(); });
