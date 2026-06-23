@@ -170,12 +170,14 @@ window.OUTLAW_HELP = [
             + 'a half-applied update without touching your files.</p>',
     },
     {
-        id: 'security', cat: 'Settings & updates', title: 'PIN & sign-in',
-        keywords: 'pin sign in lock password security authorize unlock',
+        id: 'security', cat: 'Settings & updates', title: 'PIN, lock & sign-in',
+        keywords: 'pin sign in lock password security authorize unlock picker greeter session screen power menu',
         body: '<p><b>Settings → Security</b> lets you set a <b>4-digit PIN</b> and require sign-in '
-            + 'on startup. The PIN (or your password) is also asked before important installs like '
-            + 'Essentials and security tools. Forgot the PIN? Use <b>Use password instead</b> at '
-            + 'the sign-in screen.</p>',
+            + 'on startup. With a PIN set, the <b>session picker</b> also asks for it before you can '
+            + 'choose Desktop or Dev, and you can <b>lock the screen any time</b> from the power menu '
+            + '(⏻ → 🔒 Lock). The PIN (or your password) is also asked before important installs like '
+            + 'Essentials and security tools. Forgot the PIN? Use <b>Use password instead</b> (your '
+            + 'account password) at any sign-in or the picker.</p>',
     },
 
     {

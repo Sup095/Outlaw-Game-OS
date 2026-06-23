@@ -1232,7 +1232,10 @@ function startStats() {
             const s = await api.system.stats();
             $('#stat-cpu').textContent = `CPU ${s.cpu.toFixed(0)}%`;
             $('#stat-ram').textContent = `RAM ${s.ramUsed}`;
-            $('#stat-clock').textContent = s.time;
+            const clk = $('#stat-clock');
+            clk.textContent = s.time;
+            // QoL — full date on hover.
+            try { clk.title = new Date().toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }); } catch {}
         } catch {}
     };
     tick();
