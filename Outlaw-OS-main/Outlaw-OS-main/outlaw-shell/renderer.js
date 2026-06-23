@@ -1089,6 +1089,14 @@ function _renderProcs() {
             + `<td class="right mono">${p.cpu}</td><td class="right mono">${_fmtMem(p)}</td>`;
         body.appendChild(tr);
     }
+    // QoL — empty state (filter matched nothing, or the list isn't ready yet).
+    if (!rows.length) {
+        const tr = document.createElement('tr');
+        tr.innerHTML = '<td colspan="4" class="muted" style="padding:18px;text-align:center;">'
+            + (_procFilter ? `No processes match “${escapeHtml(_procFilter)}”.` : 'Reading the process list…')
+            + '</td>';
+        body.appendChild(tr);
+    }
     if (wrap) wrap.scrollTop = keepScroll;
     $$('#screen-tasks .proc th[data-sort]').forEach((th) => {
         const on = th.dataset.sort === _procSort.key;
