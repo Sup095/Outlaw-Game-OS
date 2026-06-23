@@ -399,7 +399,7 @@
                 <summary>How does the terminal work?</summary>
                 <p>A normal shell — type a command and press Enter; output appears above. It runs in your home folder as you. <b>Destructive commands</b> (like <code>rm -rf</code>, <code>dd</code>, <code>mkfs</code>) are intercepted and need you to type <b>CONFIRM</b> first, so you can't wipe the machine by accident. Use <code>sudo</code> for admin tasks; <code>pacman</code> for packages (or just use the Apps page).</p>
             </details>
-            <textarea id="term-out" readonly></textarea>
+            <textarea id="term-out" readonly placeholder="Output appears here. Try a command like:  ls   ·   pwd   ·   neofetch"></textarea>
             <div class="term-hint" id="term-hint"></div>
             <input id="term-in" placeholder="> command…  (destructive commands require confirmation)" autocomplete="off" spellcheck="false">
         </section>
