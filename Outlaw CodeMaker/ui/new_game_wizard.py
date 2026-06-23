@@ -425,6 +425,8 @@ class NewGameWizard(QDialog):
         self.style_field = _QuestionField({
             "question": "Style and setting — describe the world, vibe, art direction.",
             "free_text": True,
+            "placeholder": "e.g. a neon cyberpunk city at night — moody, hand-painted, rain-soaked. "
+                           "Or: a cozy pastel farm, cute and relaxing. (No wrong answers — just paint a picture.)",
         })
         layout.addWidget(self.style_field)
         layout.addStretch(1)
@@ -436,6 +438,8 @@ class NewGameWizard(QDialog):
         self.mechanics_field = _QuestionField({
             "question": "Core mechanics — what do players actually DO?",
             "free_text": True,
+            "placeholder": "e.g. run, double-jump and dash past hazards to reach the exit. "
+                           "Or: grow crops, sell them at market, and befriend the townsfolk.",
         })
         layout.addWidget(self.mechanics_field)
         layout.addStretch(1)

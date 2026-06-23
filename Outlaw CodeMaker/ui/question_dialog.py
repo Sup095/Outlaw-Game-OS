@@ -39,6 +39,7 @@ class _QuestionField(QWidget):
         options = [str(o) for o in (spec.get("options") or [])]
         self._free_text = bool(spec.get("free_text")) or not options
         allow_custom = spec.get("allow_custom", True)
+        placeholder = str(spec.get("placeholder") or "")   # optional example to guide the answer
 
         prefix = f"{number}. " if number else ""
         q = QLabel(f"{prefix}{question}")
@@ -57,7 +58,7 @@ class _QuestionField(QWidget):
         self.free_edit = QPlainTextEdit()
 
         if self._free_text:
-            self.free_edit.setPlaceholderText("Type your answer…")
+            self.free_edit.setPlaceholderText(placeholder or "Type your answer…")
             self.free_edit.setFixedHeight(80)
             layout.addWidget(self.free_edit)
         else:
@@ -73,7 +74,7 @@ class _QuestionField(QWidget):
                 self._other_radio = QRadioButton("✏  Other — type my own:")
                 self._group.addButton(self._other_radio)
                 layout.addWidget(self._other_radio)
-                self.custom_edit.setPlaceholderText("Your own answer…")
+                self.custom_edit.setPlaceholderText(placeholder or "Your own answer…")
                 self.custom_edit.textEdited.connect(lambda _t: self._other_radio.setChecked(True))
                 layout.addWidget(self.custom_edit)
 
