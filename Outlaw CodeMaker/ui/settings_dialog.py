@@ -123,6 +123,19 @@ class SettingsDialog(QDialog):
                 self.theme_combo.setCurrentIndex(idx)
                 break
 
+        # QoL — per-field tooltips (the labels are necessarily terse).
+        self.url_edit.setToolTip("Where your AI engine listens — LM Studio: http://localhost:1234/v1 · "
+                                 "Ollama: http://127.0.0.1:11434/v1")
+        self.model_edit.setToolTip("Leave as 'local-model' to auto-detect LM Studio's loaded model, "
+                                   "or enter an Ollama tag like qwen2.5-coder:7b.")
+        self.temp_spin.setToolTip("Higher = more creative/varied; lower = more focused/repeatable. "
+                                  "0.7 is a good default for coding.")
+        self.title_edit.setToolTip("The window-title text Outlaw matches to find your Godot editor "
+                                   "(for screenshots / on-screen error reading).")
+        self.engine_combo.setToolTip("LM Studio or Ollama — picking one fills the Backend URL for you.")
+        self.vram_combo.setToolTip("Shrinks the per-turn context when memory is tight so it keeps "
+                                   "working on modest hardware. Auto is recommended.")
+
         form.addRow("Godot project folder", self.project_row)
         form.addRow("AI engine", self.engine_combo)
         form.addRow("Backend URL", self.url_edit)
