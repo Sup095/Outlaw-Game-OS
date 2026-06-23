@@ -452,8 +452,8 @@ class NewGameWizard(QDialog):
 
         explain = QLabel("Pick a starter template — or stay with Empty for a blank project.")
         explain.setStyleSheet(f"color: {COLORS['text']}; font-size: 12pt; font-weight: 600;")
-        sub = QLabel("Templates drop in a working Player script + a couple of helpers so the "
-                     "agent has something to iterate on instead of starting from a blank file.")
+        sub = QLabel("A template gives you a small, working starting point — so your game already "
+                     "runs and Outlaw has something real to build on, instead of a blank project.")
         sub.setWordWrap(True)
         sub.setStyleSheet(f"color: {COLORS['muted']};")
         layout.addWidget(explain)
