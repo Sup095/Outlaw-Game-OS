@@ -72,30 +72,30 @@ TEMPLATES: list[TemplateInfo] = [
     TemplateInfo(
         id="empty",
         label="Empty (just the scaffold)",
-        description="No extras. Outlaw CodeMaker drops a minimal valid Godot 4 project and you take it from there.",
+        description="A blank, ready-to-run Godot project — nothing extra. Start completely fresh and tell Outlaw what to build.",
     ),
     TemplateInfo(
         id="platformer_2d",
         label="Platformer (2D)",
-        description="Side-view CharacterBody2D with gravity, jump buffering, and coyote time. Wire input actions `move_left`, `move_right`, `jump`.",
+        description="A side-scrolling platformer starter: your character already runs and jumps with smooth, forgiving controls. You add the levels, art and enemies.",
         dimension_hint="2D",
     ),
     TemplateInfo(
         id="topdown_shooter_2d",
         label="Top-down shooter (2D)",
-        description="WASD movement + mouse aim. Stub `fire()` for the agent to wire up projectiles.",
+        description="A top-down shooter starter: move with the keyboard, aim with the mouse, and shooting is stubbed in for Outlaw to finish. You add enemies and art.",
         dimension_hint="2D",
     ),
     TemplateInfo(
         id="walker_3d",
         label="First-person walker (3D)",
-        description="CharacterBody3D with mouselook and WASD. Add a Camera3D child. Input actions `move_forward`, `move_back`, `move_left`, `move_right`.",
+        description="A first-person 3D starter: walk around and look with the mouse. Drop in your world and Outlaw fills in the rest.",
         dimension_hint="3D",
     ),
     TemplateInfo(
         id="visual_novel",
         label="Visual novel",
-        description="Minimal `DialogueRunner` autoload. Lines are dicts of {speaker, text}; advance with `ui_accept`.",
+        description="A visual-novel starter: shows dialogue line by line, click to advance. You add the characters, script and backgrounds.",
     ),
 ]
 
