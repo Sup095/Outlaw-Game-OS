@@ -1066,7 +1066,23 @@ async function executeIntent(intent) {
                 case 'airplane_off': return { did: 'system_action', airplane: false, text: intent.text || 'Airplane mode off.' };
                 case 'storage_ram_on': return { did: 'system_action', swap: true, text: intent.text || 'Setting up storage as extra memory…' };
                 case 'storage_ram_off': return { did: 'system_action', swap: false, text: intent.text || 'Turning off storage-as-memory.' };
-                default: return { did: 'none', text: 'I can lock the screen, toggle airplane mode, or toggle storage-as-memory — which one?' };
+                case 'check_updates': {
+                    // Read-only: check GitHub for a newer Outlaw OS shell release + report.
+                    try {
+                        const info = await updater.checkShellUpdate({
+                            repo: settings.updateRepo,
+                            currentVersion: APP_VERSION,
+                            channel: settings.updateChannel || 'stable',
+                        });
+                        if (!info) return { did: 'system_action', text: 'Couldn\'t check for updates right now.' };
+                        return { did: 'system_action', text: info.available
+                            ? `Update available: v${info.remoteVersion} (you have v${info.currentVersion}). Open Settings → Outlaw Shell Updates to install it.`
+                            : `You're up to date (v${info.currentVersion}).` };
+                    } catch (e) {
+                        return { did: 'system_action', text: 'Update check failed — ' + ((e && e.message) || e) + ' (are you online?)' };
+                    }
+                }
+                default: return { did: 'none', text: 'I can lock the screen, toggle airplane mode, toggle storage-as-memory, or check for updates — which one?' };
             }
         }
         case 'install_app': {
