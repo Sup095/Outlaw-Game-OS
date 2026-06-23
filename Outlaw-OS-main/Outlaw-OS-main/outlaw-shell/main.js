@@ -1769,6 +1769,18 @@ function registerIpc() {
         lockEnabled: IS_LINUX && !IS_LIVE && settings.lockEnabled !== false,
         user: (() => { try { return os.userInfo().username; } catch { return 'operator'; } })(),
     }));
+    // One-shot token the greeter writes right after it took the PIN, so the
+    // session's OWN sign-in doesn't ask again. Consume (delete) it; honor only
+    // if it's recent (< 2 min). Any error → not unlocked (fall back to asking).
+    ipcMain.handle('auth:recently-unlocked', () => {
+        try {
+            const tok = path.join(os.homedir(), '.outlaw-unlocked');
+            const raw = fs.readFileSync(tok, 'utf8').trim();
+            try { fs.unlinkSync(tok); } catch {}
+            const ts = parseInt(raw, 10) || 0;
+            return { ok: ts > 0 && (Date.now() - ts) < 120000 };
+        } catch { return { ok: false }; }
+    });
     ipcMain.handle('auth:set-pin', (_e, payload) => {
         const { pin, current } = payload || {};
         if (hasPin()) {

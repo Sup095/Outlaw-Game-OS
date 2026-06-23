@@ -130,6 +130,8 @@ async function startupGate() {
     let st;
     try { st = await api.auth.status(); } catch { st = { lockEnabled: false }; }
     if (!st || !st.lockEnabled) { runBoot(); return; }
+    // If the greeter already took the PIN moments ago, don't ask twice.
+    try { const u = await api.auth.recentlyUnlocked(); if (u && u.ok) { runBoot(); return; } } catch {}
     openSignin({ reauth: false, user: st.user, hasPin: st.hasPin });
 }
 

@@ -200,6 +200,8 @@ contextBridge.exposeInMainWorld('outlaw', {
         clearPin: (payload) => ipcRenderer.invoke('auth:clear-pin', payload),
         // Toggle the startup sign-in screen.
         setLock: (enabled) => ipcRenderer.invoke('auth:set-lock', enabled),
+        // One-shot: did the greeter already take the PIN moments ago? Consumes the token.
+        recentlyUnlocked: () => ipcRenderer.invoke('auth:recently-unlocked'),
     },
     net: {
         // Connectivity + device summary (full|limited|portal|none|unknown).

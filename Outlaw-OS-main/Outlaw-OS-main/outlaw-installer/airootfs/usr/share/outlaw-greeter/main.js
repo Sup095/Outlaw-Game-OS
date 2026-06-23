@@ -223,7 +223,13 @@ ipcMain.handle('greeter:verify', async (_e, payload) => {
     let ok = false;
     if (p.pin) ok = verifyPin(p.pin);
     if (!ok && p.password) ok = await verifyPassword(p.password);
-    if (ok) { _authFails = 0; return { ok: true }; }
+    if (ok) {
+        _authFails = 0;
+        // One-shot token so the chosen session's OWN sign-in doesn't ask again
+        // right after. Short-lived (the session consumes + deletes it).
+        try { fs.writeFileSync(path.join(os.homedir(), '.outlaw-unlocked'), String(Date.now()), { mode: 0o600 }); } catch {}
+        return { ok: true };
+    }
     _authFails++;
     if (_authFails >= 5) { _authLockUntil = now + 30000; _authFails = 0; return { ok: false, error: 'Too many tries — wait 30 seconds.' }; }
     return { ok: false, error: 'Incorrect — try again.' };
