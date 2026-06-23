@@ -16,7 +16,8 @@ const { app, BrowserWindow, ipcMain, screen } = require('electron');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { exec } = require('child_process');
+const crypto = require('crypto');
+const { exec, spawn } = require('child_process');
 
 // Tiny read-only shell helper (fixed commands, no user input → no injection).
 // Always resolves (never rejects) so a missing tool can't break the greeter.
@@ -69,6 +70,59 @@ function readTheme() {
     } catch { /* absent — default below */ }
     return 'green';
 }
+
+// ---------------------------------------------------------------------------
+// Lock gate — require the desktop shell's PIN BEFORE the session picker, so you
+// can't reach Dev (or anything) just by booting to the chooser. The shell keeps
+// a salted scrypt PIN hash in its Electron userData (auth.json) + a lockEnabled
+// flag in settings.json; we read those at their known paths and verify the same
+// way. FAIL-OPEN: any uncertainty → no gate (never lock the user out of their own
+// machine). The account password is accepted as a fallback (mirrors the shell's
+// sign-in), so a forgotten PIN / odd hash never strands them either.
+// ---------------------------------------------------------------------------
+function shellConfigDir() {
+    const base = (process.env.XDG_CONFIG_HOME && process.env.XDG_CONFIG_HOME.trim())
+        ? process.env.XDG_CONFIG_HOME : path.join(os.homedir(), '.config');
+    return path.join(base, 'outlaw-os');
+}
+const AUTH_FILE = path.join(shellConfigDir(), 'auth.json');
+const SETTINGS_FILE = path.join(shellConfigDir(), 'settings.json');
+const IS_LIVE = (() => { try { return fs.existsSync('/run/archiso'); } catch { return false; } })();
+
+function readJson(p) { try { return JSON.parse(fs.readFileSync(p, 'utf8')); } catch { return null; } }
+function lockNeeded() {
+    try {
+        if (IS_LIVE) return false;                          // live demo: never lock
+        const a = readJson(AUTH_FILE);
+        if (!a || !a.pinHash || !a.pinSalt) return false;   // no PIN set → no gate
+        const s = readJson(SETTINGS_FILE);
+        if (s && s.lockEnabled === false) return false;     // user disabled sign-in
+        return true;
+    } catch { return false; }                               // FAIL-OPEN
+}
+function verifyPin(pin) {
+    const a = readJson(AUTH_FILE);
+    if (!a || !a.pinHash || !a.pinSalt || !/^\d{4}$/.test(String(pin))) return false;
+    try {
+        const h = crypto.scryptSync(String(pin), a.pinSalt, 32).toString('hex');
+        return crypto.timingSafeEqual(Buffer.from(h, 'hex'), Buffer.from(a.pinHash, 'hex'));
+    } catch { return false; }
+}
+function verifyPassword(pw) {
+    return new Promise((resolve) => {
+        if (process.platform !== 'linux' || !pw) return resolve(false);
+        let done = false;
+        const finish = (v) => { if (!done) { done = true; resolve(v); } };
+        let p;
+        try { p = spawn('sudo', ['-S', '-p', '', '-v'], { stdio: ['pipe', 'ignore', 'ignore'] }); }
+        catch { return finish(false); }
+        const to = setTimeout(() => { try { p.kill(); } catch {} finish(false); }, 8000);
+        p.on('error', () => { clearTimeout(to); finish(false); });
+        p.on('close', (code) => { clearTimeout(to); try { spawn('sudo', ['-k'], { stdio: 'ignore' }).unref(); } catch {} finish(code === 0); });
+        try { p.stdin.write(String(pw) + '\n'); p.stdin.end(); } catch { clearTimeout(to); finish(false); }
+    });
+}
+let _authFails = 0, _authLockUntil = 0;
 
 function persistChoice(choice) {
     if (chosen) return;  // first call wins
@@ -156,6 +210,23 @@ ipcMain.handle('greeter:preflight', async () => {
     if (ramGb && ramGb < 4) warnings.push('Low RAM (under 4 GB) — pick a tiny AI model and the Desktop session.');
     if (safeGfx) warnings.push('Safe graphics is active (software rendering). Delete ~/.outlaw-safe-gfx to retry your GPU.');
     return { ok: true, cpu, cores, ramGb, gpu, vramGb, diskFree: (diskFree || '').trim(), safeGfx, warnings };
+});
+
+// Lock gate IPC — whether to require unlock before the picker, and the check.
+ipcMain.handle('greeter:auth-needed', () => {
+    try { return { needed: lockNeeded() }; } catch { return { needed: false }; }
+});
+ipcMain.handle('greeter:verify', async (_e, payload) => {
+    const now = Date.now();
+    if (now < _authLockUntil) return { ok: false, error: 'Too many tries — wait a moment.' };
+    const p = payload || {};
+    let ok = false;
+    if (p.pin) ok = verifyPin(p.pin);
+    if (!ok && p.password) ok = await verifyPassword(p.password);
+    if (ok) { _authFails = 0; return { ok: true }; }
+    _authFails++;
+    if (_authFails >= 5) { _authLockUntil = now + 30000; _authFails = 0; return { ok: false, error: 'Too many tries — wait 30 seconds.' }; }
+    return { ok: false, error: 'Incorrect — try again.' };
 });
 
 app.whenReady().then(() => {

@@ -222,6 +222,32 @@
         .preflight.show { display: block; }
         .preflight b { color: var(--accent2); }
         .preflight .warn { color: var(--accent); }
+        /* Lock gate — PIN before the picker (only shown when a PIN + lock are set). */
+        #greeter-lock {
+            position: fixed; inset: 0; z-index: 60;
+            background: linear-gradient(180deg, var(--bg-alt) 0%, var(--bg) 100%);
+            display: flex; align-items: center; justify-content: center;
+        }
+        #greeter-lock[hidden] { display: none; }
+        .lock-card { width: 280px; text-align: center; }
+        .lock-title { font-size: 13pt; font-weight: 700; color: var(--accent2); margin-bottom: 4px; }
+        .lock-sub { color: var(--muted); font-size: 10pt; margin-bottom: 16px; }
+        .pin-dots { display: flex; gap: 14px; justify-content: center; margin-bottom: 18px; }
+        .pin-dots span { width: 14px; height: 14px; border-radius: 50%; border: 1px solid var(--accent-dim); }
+        .pin-dots span.on { background: var(--accent); border-color: var(--accent); box-shadow: 0 0 8px var(--accent); }
+        .keypad { display: grid; grid-template-columns: repeat(3, 60px); gap: 10px; justify-content: center; }
+        .keypad button { height: 50px; font-size: 14pt; font-family: inherit; background: var(--panel);
+            color: var(--text); border: 1px solid var(--border); border-radius: 10px; cursor: pointer; }
+        .keypad button:hover { border-color: var(--accent); background: var(--panel-hi); }
+        .keypad button[data-d="back"], .keypad button[data-d="ok"] { color: var(--muted); }
+        .lock-err { color: var(--accent); font-size: 9.5pt; min-height: 16px; margin-top: 12px; }
+        .lock-pw { margin-top: 12px; display: none; gap: 8px; }
+        .lock-pw.show { display: flex; }
+        .lock-pw input { flex: 1; background: var(--panel); border: 1px solid var(--border);
+            border-radius: 8px; color: var(--text); padding: 8px 10px; font-family: inherit; }
+        .lock-pw button { background: var(--accent); color: #0a0a0a; border: none; border-radius: 8px;
+            padding: 8px 14px; cursor: pointer; font-family: inherit; font-weight: 700; }
+        #lock-usepw { display: inline-block; margin-top: 14px; }
     </style>
 </head>
 <body>
@@ -276,6 +302,26 @@
         <a class="muted-link" data-action="preflight">🔍 check this PC</a>
         <a class="muted-link" data-choice="tty">drop to a terminal</a>
     </footer>
+
+    <div id="greeter-lock" hidden>
+        <div class="lock-card">
+            <div class="lock-title">🔒 Enter your PIN</div>
+            <div class="lock-sub" id="lock-sub">Unlock to choose a session</div>
+            <div class="pin-dots" id="lock-dots"><span></span><span></span><span></span><span></span></div>
+            <div class="keypad" id="lock-keypad">
+                <button data-d="1">1</button><button data-d="2">2</button><button data-d="3">3</button>
+                <button data-d="4">4</button><button data-d="5">5</button><button data-d="6">6</button>
+                <button data-d="7">7</button><button data-d="8">8</button><button data-d="9">9</button>
+                <button data-d="back">⌫</button><button data-d="0">0</button><button data-d="ok">↵</button>
+            </div>
+            <div class="lock-err" id="lock-err"></div>
+            <div class="lock-pw" id="lock-pw-wrap">
+                <input type="password" id="lock-pw" placeholder="Account password" autocomplete="off">
+                <button id="lock-pw-go" type="button">Unlock</button>
+            </div>
+            <a class="muted-link" id="lock-usepw">Use account password instead</a>
+        </div>
+    </div>
 
     <script src="renderer.js"></script>
 </body>

@@ -21,16 +21,79 @@ const api = window.greeter;
 })();
 
 let introActive = !!document.getElementById('boot-intro');
+let locked = false;       // PIN gate up — block the chooser until unlocked
+let finishing = false;    // ensure the intro→gate transition runs once
+let pinBuf = '';          // entered PIN digits
+let pwMode = false;       // account-password fallback mode
 
 const _esc = (s) => String(s).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
 
-function endIntro() {
-    if (!introActive) return;
-    introActive = false;
-    const intro = document.getElementById('boot-intro');
-    if (intro) intro.classList.add('hide');
+function revealChooser() {
+    locked = false;
     const first = document.querySelector('[data-choice="dev"]');
     if (first) first.focus();
+}
+
+// Intro is over — decide whether to show the PIN gate or the chooser. Async
+// (asks main if a lock is needed); FAIL-OPEN so any hiccup just shows the chooser.
+function endIntro() {
+    if (!introActive || finishing) return;
+    finishing = true;
+    introActive = false;
+    locked = true;   // block interaction until the gate decision resolves
+    finishBoot();
+}
+async function finishBoot() {
+    let needed = false;
+    try { needed = (api && api.authNeeded) ? (await api.authNeeded()).needed : false; } catch { needed = false; }
+    const intro = document.getElementById('boot-intro');
+    if (needed) {
+        showLock();
+        if (intro) intro.classList.add('hide');
+    } else {
+        if (intro) intro.classList.add('hide');
+        revealChooser();
+    }
+}
+
+// --- PIN gate ---------------------------------------------------------------
+function renderLockDots() {
+    const dots = document.getElementById('lock-dots');
+    if (dots) [...dots.children].forEach((d, i) => d.classList.toggle('on', i < pinBuf.length));
+}
+function showLock() {
+    locked = true;
+    const ov = document.getElementById('greeter-lock');
+    if (ov) ov.hidden = false;
+    pinBuf = ''; renderLockDots();
+}
+async function submitUnlock(payload) {
+    let r = null;
+    try { r = (api && api.verifyUnlock) ? await api.verifyUnlock(payload) : null; } catch { r = null; }
+    if (r && r.ok) {
+        const ov = document.getElementById('greeter-lock'); if (ov) ov.hidden = true;
+        revealChooser();
+        return;
+    }
+    pinBuf = ''; renderLockDots();
+    const pw = document.getElementById('lock-pw'); if (pw) pw.value = '';
+    const err = document.getElementById('lock-err');
+    if (err) err.textContent = (r && r.error) || 'Incorrect — try again.';
+}
+function lockKey(d) {
+    const err = document.getElementById('lock-err'); if (err) err.textContent = '';
+    if (d === 'back') { pinBuf = pinBuf.slice(0, -1); renderLockDots(); return; }
+    if (d === 'ok') { if (pinBuf.length === 4) submitUnlock({ pin: pinBuf }); return; }
+    if (/^[0-9]$/.test(d) && pinBuf.length < 4) {
+        pinBuf += d; renderLockDots();
+        if (pinBuf.length === 4) submitUnlock({ pin: pinBuf });
+    }
+}
+function enterPwMode() {
+    pwMode = true;
+    const wrap = document.getElementById('lock-pw-wrap'); if (wrap) wrap.classList.add('show');
+    const usepw = document.getElementById('lock-usepw'); if (usepw) usepw.style.display = 'none';
+    const pw = document.getElementById('lock-pw'); if (pw) pw.focus();
 }
 
 async function runIntro() {
@@ -85,6 +148,16 @@ async function showPreflight() {
 
 document.addEventListener('click', (e) => {
     if (introActive) { endIntro(); return; }   // first click skips the intro
+    if (locked) {
+        const k = e.target.closest('[data-d]');
+        if (k) { lockKey(k.dataset.d); return; }
+        if (e.target.closest('#lock-usepw')) { enterPwMode(); return; }
+        if (e.target.closest('#lock-pw-go')) {
+            const pw = document.getElementById('lock-pw'); submitUnlock({ password: pw ? pw.value : '' });
+            return;
+        }
+        return;   // swallow other clicks while the gate is up
+    }
     if (e.target.closest('[data-action="preflight"]')) { showPreflight(); return; }
     const el = e.target.closest('[data-choice]');
     if (el) choose(el.dataset.choice);
@@ -92,6 +165,18 @@ document.addEventListener('click', (e) => {
 
 document.addEventListener('keydown', (e) => {
     if (introActive) { endIntro(); return; }   // first key skips the intro
+    if (locked) {
+        if (pwMode) {
+            if (e.key === 'Enter') {
+                const pw = document.getElementById('lock-pw'); submitUnlock({ password: pw ? pw.value : '' });
+            }
+            return;   // otherwise let the password field receive typing
+        }
+        if (/^[0-9]$/.test(e.key)) { lockKey(e.key); return; }
+        if (e.key === 'Backspace') { lockKey('back'); return; }
+        if (e.key === 'Enter') { lockKey('ok'); return; }
+        return;   // swallow other keys while the gate is up
+    }
     const k = e.key.toLowerCase();
     if (k === '1' || k === 'd') { choose('dev'); return; }
     if (k === '2' || k === 's') { choose('desktop'); return; }
@@ -108,3 +193,4 @@ document.addEventListener('keydown', (e) => {
 setTimeout(endIntro, 3500);
 
 if (introActive) runIntro();
+else if (!finishing) { finishing = true; locked = true; finishBoot(); }   // no intro → gate immediately

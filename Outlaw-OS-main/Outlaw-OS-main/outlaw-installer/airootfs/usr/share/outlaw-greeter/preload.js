@@ -14,4 +14,7 @@ contextBridge.exposeInMainWorld('greeter', {
     // Phase 8: cinematic boot intro + optional pre-flight check (both read-only).
     bootLog: () => ipcRenderer.invoke('greeter:boot-log'),
     preflight: () => ipcRenderer.invoke('greeter:preflight'),
+    // Lock gate — require the shell's PIN before the picker (fail-open in main).
+    authNeeded: () => ipcRenderer.invoke('greeter:auth-needed'),
+    verifyUnlock: (payload) => ipcRenderer.invoke('greeter:verify', payload),
 });
