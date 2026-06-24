@@ -366,6 +366,7 @@ button {
     text-transform: uppercase; letter-spacing: 0.04em; transition: background .12s, color .12s, border-color .12s;
 }
 button:hover { background: var(--term); color: #001400; }
+button:active:not(:disabled) { transform: translateY(1px); }   /* tactile press feedback */
 button:focus-visible { outline: 2px solid var(--term); outline-offset: 2px; }
 button.danger { border-color: var(--danger); color: var(--danger); }
 button.danger:hover { background: var(--danger); color: #150000; }
