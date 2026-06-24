@@ -2633,6 +2633,14 @@ function wire() {
     $('#glow-toggle').addEventListener('change', (e) => { document.body.classList.toggle('glow', e.target.checked); setSetting({ glow: e.target.checked }); });
     { const rm = $('#reduce-motion-toggle'); if (rm) rm.addEventListener('change', (e) => { document.body.classList.toggle('reduce-motion', e.target.checked); setSetting({ reduceMotion: e.target.checked }); }); }
     { const us = $('#ui-scale'); if (us) us.addEventListener('change', (e) => { const f = parseFloat(e.target.value) || 1; if (api.setZoom) api.setZoom(f); setSetting({ uiScale: f }); }); }
+    // QoL — reset appearance (theme/effects/motion/text size) to defaults.
+    { const ar = $('#appearance-reset'); if (ar) ar.addEventListener('click', async () => {
+        try {
+            await setSetting({ theme: 'green', crtFx: false, glow: false, reduceMotion: false, uiScale: 1 });
+            await loadSettings();   // re-applies theme, effects, motion + zoom
+            toast('Appearance reset to defaults.');
+        } catch { toast('Couldn\'t reset appearance.'); }
+    }); }
     // F1 — error-log controls.
     { const b = $('#errlog-refresh'); if (b) b.addEventListener('click', errlogRefresh); }
     { const b = $('#errlog-github'); if (b) b.addEventListener('click', errlogGithub); }
