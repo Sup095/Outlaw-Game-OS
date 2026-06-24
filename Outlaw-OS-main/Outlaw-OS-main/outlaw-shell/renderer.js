@@ -1923,6 +1923,9 @@ function shareStabilityFeedback() {
 
 // --- Phase 12: loading screen (driven by streamed 'job-progress' events) ----
 const loadingScreen = (() => {
+    let _t0 = 0, _tick = null;
+    function _fmt(ms) { const s = Math.max(0, Math.round(ms / 1000)); return s < 60 ? s + 's' : Math.floor(s / 60) + 'm ' + (s % 60) + 's'; }
+    function _stopTick() { if (_tick) { clearInterval(_tick); _tick = null; } }
     function open(title) {
         const t = $('#ls-title'); if (t) t.textContent = title || 'Working…';
         const log = $('#ls-log'); if (log) log.textContent = '';
@@ -1931,6 +1934,9 @@ const loadingScreen = (() => {
         const st = $('#ls-status'); if (st) st.textContent = 'working…';
         const close = $('#ls-close'); if (close) close.disabled = true;
         const ov = $('#loadscreen'); if (ov) ov.classList.add('show');
+        // QoL — live elapsed time so a long job never feels frozen.
+        _t0 = Date.now(); _stopTick();
+        _tick = setInterval(() => { const s = $('#ls-status'); if (s) s.textContent = 'working… (' + _fmt(Date.now() - _t0) + ')'; }, 1000);
     }
     function setSteps(labels) {
         const steps = $('#ls-steps');
@@ -1949,12 +1955,14 @@ const loadingScreen = (() => {
         el.textContent += line + '\n'; el.scrollTop = el.scrollHeight;
     }
     function done(ok) {
+        _stopTick();
         $$('#ls-steps li').forEach((li) => { li.classList.add('done'); li.classList.remove('active'); });
         const bar = $('#ls-bar'); if (bar) bar.classList.add('done');
-        const st = $('#ls-status'); if (st) st.textContent = ok ? '✓ done' : '✗ failed — see the log';
+        const took = _t0 ? ' in ' + _fmt(Date.now() - _t0) : '';
+        const st = $('#ls-status'); if (st) st.textContent = (ok ? '✓ done' : '✗ failed — see the log') + took;
         const close = $('#ls-close'); if (close) close.disabled = false;
     }
-    function hide() { const ov = $('#loadscreen'); if (ov) ov.classList.remove('show'); }
+    function hide() { _stopTick(); const ov = $('#loadscreen'); if (ov) ov.classList.remove('show'); }
     return { open, setSteps, setStep, log, done, hide };
 })();
 if (api && api.on) api.on('job-progress', (p) => {
