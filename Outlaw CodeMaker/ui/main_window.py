@@ -424,6 +424,7 @@ class MainWindow(QMainWindow):
         self.send_btn = QPushButton("Send  ➤")
         self.send_btn.setObjectName("PrimaryButton")
         self.send_btn.setMinimumWidth(96)
+        self.send_btn.setToolTip("Send your request to the AI (Enter)")
         self.send_btn.clicked.connect(self._on_send)
 
         self.continue_btn = QPushButton("▸ Continue")
@@ -433,6 +434,7 @@ class MainWindow(QMainWindow):
         self.continue_btn.setVisible(False)
 
         self.stop_btn = QPushButton("■ Stop")
+        self.stop_btn.setToolTip("Stop the agent and pause the current task")
         self.stop_btn.clicked.connect(self.orch.cancel)
         self.stop_btn.setEnabled(False)
         self.stop_btn.setMinimumWidth(80)
