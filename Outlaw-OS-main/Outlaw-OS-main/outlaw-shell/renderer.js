@@ -3102,6 +3102,22 @@ function wire() {
 // ---------------------------------------------------------------------------
 // Init
 // ---------------------------------------------------------------------------
+// QoL — warn once at startup if the disk is nearly full (installs/updates would
+// fail confusingly otherwise). Also logged so a "Report a problem" captures it.
+async function checkDiskSpace() {
+    try {
+        const d = await api.system.disk();
+        if (!d || !d.available || !d.totalMb) return;
+        const freeMb = Math.max(0, d.totalMb - d.usedMb);
+        if (d.pct >= 92 || freeMb < 2048) {
+            const gb = (freeMb / 1024).toFixed(1);
+            const msg = `⚠ Low disk space — ${gb} GB free (${d.pct}% used). Free up space before installing apps or updates.`;
+            setTimeout(() => toast(msg), 2600);
+            try { api.errorlog.add({ level: 'warning', source: 'shell-ui', message: msg }); } catch {}
+        }
+    } catch {}
+}
+
 // QoL — after an update applies, tell the user once which version they're on.
 async function checkVersionBump() {
     try {
@@ -3133,6 +3149,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     wireNetworkUI();
     refreshNetStatus().catch(() => {});
     checkVersionBump().catch(() => {});   // QoL — "Updated to vX" note after an update
+    checkDiskSpace().catch(() => {});     // QoL — warn if the disk is nearly full
     wireAuth();
     calcRender();
     // Sign-in gate (Phase 3c): the lock screen first (if enabled), then boot.
