@@ -289,4 +289,51 @@ window.OUTLAW_HELP = [
             + '<b>Esc</b> — close the power menu, or a finished loading screen. '
             + 'In the assistant, press <b>Enter</b> to send.</p>',
     },
+    {
+        id: 'gaming', cat: 'Apps & games', title: 'Gaming (Steam, Lutris, GameMode)',
+        keywords: 'gaming games steam lutris gamemode mangohud play proton fps',
+        body: '<p>The <b>Gaming</b> page launches <b>Steam</b> and <b>Lutris</b> (click to install if '
+            + 'missing) and shows your GPU plus whether <b>GameMode</b> and <b>MangoHud</b> are available. '
+            + 'For the best performance, install the <b>gaming graphics profile</b> in Settings → Session and '
+            + 'turn on <b>Performance Mode</b> while you play.</p>',
+    },
+    {
+        id: 'gamedev-tools', cat: 'Apps & games', title: 'Game-dev tools (Godot, Blender, GIMP)',
+        keywords: 'game dev godot blender gimp vscode code editor art assets tools',
+        body: '<p>The <b>Game Dev</b> page launches the tools you build games with — <b>Godot</b>, '
+            + '<b>Blender</b>, <b>GIMP</b> and a code editor (click to install if missing). To have the AI '
+            + 'write your game <i>for</i> you, switch to the <b>Dev session</b> (Outlaw CodeMaker) from the '
+            + 'boot greeter instead.</p>',
+    },
+    {
+        id: 'hotswap', cat: 'System tools', title: 'Hotswap (boot another OS)',
+        keywords: 'hotswap boot reboot other os windows dual boot grub switch power menu',
+        body: '<p><b>Hotswap</b> (the power menu ⏻, or the topbar button) reboots you straight into another '
+            + 'operating system on your machine — handy for dual-boot setups. Pick the OS and the machine '
+            + 'restarts into it. <i>Known issue being worked on:</i> on some setups it currently needs a '
+            + 'second manual reboot to take.</p>',
+    },
+    {
+        id: 'performance-mode', cat: 'Settings & updates', title: 'Performance Mode',
+        keywords: 'performance mode gaming cpu governor speed power fps boost',
+        body: '<p><b>Performance Mode</b> (in the System Core command center) switches your CPU to a '
+            + 'performance governor for more speed while gaming or building — at the cost of a little more '
+            + 'power. Toggle it off to return to balanced/power-saving. Safe and fully reversible.</p>',
+    },
+    {
+        id: 'drivers', cat: 'Settings & updates', title: 'Graphics / driver profiles',
+        keywords: 'driver graphics gpu vulkan mesa gaming profile lean session nvidia amd intel',
+        body: '<p><b>Settings → Session</b> has a one-click <b>gaming graphics profile</b> that installs the '
+            + 'userspace Vulkan/Mesa + 32-bit stack (plus GameMode/MangoHud) for your GPU, and a <b>lean</b> '
+            + 'profile that reverts it. It\'s applied after boot via the package manager — userspace only, '
+            + 'never the kernel driver or bootloader — so it\'s fully revertible.</p>',
+    },
+    {
+        id: 'tuner', cat: 'Settings & updates', title: 'Tune my settings',
+        keywords: 'tune tuner hardware scan stress test auto settings recommend best optimize',
+        body: '<p><b>Tune my settings</b> (in Settings, or just ask Cr1tt3r) looks at your hardware and picks '
+            + 'the best settings for you — visual effects, the VRAM/RAM saver, performance mode, update checks '
+            + 'and the AI engine. There\'s also a hardware scan and an optional short stress test that watches '
+            + 'your temperature.</p>',
+    },
 ];
