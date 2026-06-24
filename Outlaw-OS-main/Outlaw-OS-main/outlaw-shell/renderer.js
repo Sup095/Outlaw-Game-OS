@@ -2205,6 +2205,11 @@ async function loadSettings() {
             nameEl.textContent = (eng && eng !== 'base' && s.aiPersonaName) ? s.aiPersonaName : 'Cr1tt3r';
         }
     } catch {}
+    // QoL — fill the About card's version once.
+    try {
+        const av = document.querySelector('#about-version');
+        if (av && av.textContent === '…') av.textContent = 'v' + (await api.appVersion() || '?');
+    } catch {}
     $('#crt-toggle').checked = !!s.crtFx;
     $('#glow-toggle').checked = !!s.glow;
     const rmToggle = $('#reduce-motion-toggle');
