@@ -74,6 +74,7 @@ function systemPrompt(appIds, machine, persona) {
         '- run_command: ONLY when the user explicitly asks to run a shell command. arg = the command. This always asks the user to confirm first.',
         '',
         'Rules: pick the single best tool. Prefer "answer" for anything conversational.',
+        'If the request fits no tool, use "answer": briefly say you can\'t do that exact thing and point to the closest thing you CAN (open a screen, change a setting, install an app, lock/airplane/updates, or run a command). NEVER invent a tool or claim an action happened when it did not.',
         'Never invent file paths. Keep "text" under 240 characters. Output JSON only.',
     ].join('\n');
 }
