@@ -632,6 +632,7 @@ async function refreshAppsInstalledOnly() {
 async function handleAppsInstall(id) {
     const app = _appsState.catalog.find((a) => a.id === id);
     if (!app) return;
+    if (!isOnline()) { toast('You\'re offline — connect to the internet to install apps.'); return; }
     // Important installs (Essentials + Security) require the PIN/password.
     // Everyday apps install without prompting (passwordless via the polkit rule).
     if (['Essentials', 'Security'].includes(app.category)) {
@@ -659,6 +660,7 @@ async function handleAppsInstall(id) {
 async function searchAllPackages() {
     const q = (_appsState.search || '').trim();
     if (!q || _appsState.repoSearching) return;
+    if (!isOnline()) { toast('You\'re offline — connect to the internet to search for apps.'); return; }
     _appsState.repoSearching = true;
     _renderAppsList();
     try {
@@ -678,6 +680,7 @@ async function searchAllPackages() {
 // Phase 15c — install any official package by name (from the search results).
 async function handleAppsInstallPkg(name) {
     if (!name) return;
+    if (!isOnline()) { toast('You\'re offline — connect to the internet to install apps.'); return; }
     // Installing arbitrary software is an "important" action — gate on PIN/password.
     const ok = await requireImportantAuth();
     if (!ok) { toast('Cancelled — not installed.'); return; }
