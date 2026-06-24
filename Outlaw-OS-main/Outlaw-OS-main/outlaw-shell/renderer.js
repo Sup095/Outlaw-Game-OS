@@ -1619,6 +1619,9 @@ async function sendAI() {
     // the DOM on any screen, so these work from anywhere; we reuse the wired
     // handlers so confirms + UI + toasts all behave as if the user clicked them.
     if (res.lockScreen) { try { lockNow(); } catch {} }
+    if (res.openReport) {
+        try { showScreen('settings'); setTimeout(() => { const c = $('#report-card'); if (c) c.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 90); } catch {}
+    }
     if (typeof res.airplane === 'boolean') {
         try {
             const tog = $('#airplane-toggle');

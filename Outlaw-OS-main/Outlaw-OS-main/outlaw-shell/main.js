@@ -1066,6 +1066,8 @@ async function executeIntent(intent) {
                 case 'airplane_off': return { did: 'system_action', airplane: false, text: intent.text || 'Airplane mode off.' };
                 case 'storage_ram_on': return { did: 'system_action', swap: true, text: intent.text || 'Setting up storage as extra memory…' };
                 case 'storage_ram_off': return { did: 'system_action', swap: false, text: intent.text || 'Turning off storage-as-memory.' };
+                case 'report_problem':
+                    return { did: 'system_action', openReport: true, text: intent.text || 'Opening the problem reporter — collect the log and send it.' };
                 case 'check_updates': {
                     // Read-only: check GitHub for a newer Outlaw OS shell release + report.
                     try {
