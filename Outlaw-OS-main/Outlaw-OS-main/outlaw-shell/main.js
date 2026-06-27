@@ -1329,6 +1329,29 @@ function registerIpc() {
         };
     });
 
+    // Round-2 QOL — battery status for the topbar (laptops). Read-only from sysfs;
+    // returns { present:false } on desktops / non-Linux so the indicator hides.
+    ipcMain.handle('system:battery', async () => {
+        if (!IS_LINUX) return { present: false };
+        try {
+            const base = '/sys/class/power_supply';
+            let dirs = [];
+            try { dirs = fs.readdirSync(base); } catch { return { present: false }; }
+            const bat = dirs.find((d) => /^BAT/i.test(d));
+            if (!bat) return { present: false };
+            const read = (f) => { try { return fs.readFileSync(path.join(base, bat, f), 'utf8').trim(); } catch { return ''; } };
+            const cap = parseInt(read('capacity'), 10);
+            if (!Number.isFinite(cap)) return { present: false };
+            const status = read('status') || 'Unknown';   // Charging|Discharging|Full|Not charging|Unknown
+            return {
+                present: true,
+                percent: Math.max(0, Math.min(100, cap)),
+                status,
+                charging: status === 'Charging' || status === 'Full',
+            };
+        } catch { return { present: false }; }
+    });
+
     ipcMain.handle('system:net', () => {
         // Return raw counters; the renderer diffs successive calls to derive
         // throughput. Keeping main stateless means no background timers that

@@ -31,6 +31,7 @@ contextBridge.exposeInMainWorld('outlaw', {
         // only ticks while the System Core screen is visible.
         gpuDetailed: () => ipcRenderer.invoke('system:gpu-detailed'),
         disk: () => ipcRenderer.invoke('system:disk'),
+        battery: () => ipcRenderer.invoke('system:battery'),
         net: () => ipcRenderer.invoke('system:net'),
         inventory: () => ipcRenderer.invoke('system:inventory'),
         // Returns {live: bool, dismissed: bool}. Drives the live-ISO welcome

@@ -1237,6 +1237,20 @@ async function maybeShowQuickstart() {
 // ---------------------------------------------------------------------------
 // Live top-bar stats
 // ---------------------------------------------------------------------------
+// Round-2 QOL — battery indicator (laptops; hidden on desktops / no battery).
+let _batTick = 0;
+async function updateBattery() {
+    const el = $('#stat-battery'); if (!el) return;
+    try {
+        const b = await api.system.battery();
+        if (!b || !b.present) { el.hidden = true; return; }
+        el.hidden = false;
+        el.textContent = (b.charging ? '⚡ ' : '🔋 ') + b.percent + '%';
+        el.title = 'Battery ' + b.percent + '% · ' + b.status;
+        el.classList.toggle('warn-text', !b.charging && b.percent <= 15);
+    } catch { el.hidden = true; }
+}
+
 function startStats() {
     const tick = async () => {
         try {
@@ -1247,6 +1261,7 @@ function startStats() {
             clk.textContent = s.time;
             // QoL — full date on hover.
             try { clk.title = new Date().toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }); } catch {}
+            if (_batTick++ % 8 === 0) updateBattery();   // ~every 16s; first tick fires it
         } catch {}
     };
     tick();
