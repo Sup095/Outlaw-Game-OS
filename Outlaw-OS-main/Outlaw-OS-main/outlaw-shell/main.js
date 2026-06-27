@@ -2351,6 +2351,31 @@ function registerIpc() {
         return { ok: true };
     });
     ipcMain.handle('errorlog:issue-url', () => errorlog.issueUrl(settings.updateRepo, APP_VERSION));
+    // Open the prefilled GitHub issue in the SYSTEM BROWSER. window.open is denied
+    // by the kiosk's window-open handler, which is why the button did nothing.
+    // GitHub itself requires the user to be signed in to actually submit the issue.
+    ipcMain.handle('errorlog:open-issue', () => {
+        try {
+            const url = errorlog.issueUrl(settings.updateRepo, APP_VERSION);
+            if (!url) return { ok: false, error: 'No repository set.' };
+            shell.openExternal(url);
+            return { ok: true };
+        } catch (e) { return { ok: false, error: e.message }; }
+    });
+    // Save the combined log to a real file — blob/anchor downloads are a no-op in
+    // the kiosk. Writes to ~/Downloads and returns the path for a toast.
+    ipcMain.handle('errorlog:save', () => {
+        try {
+            const txt = errorlog.read();
+            if (!txt || !txt.trim()) return { ok: false, error: 'The log is empty — click "Collect errors" first.' };
+            const dir = path.join(os.homedir(), 'Downloads');
+            try { fs.mkdirSync(dir, { recursive: true }); } catch {}
+            const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+            const file = path.join(dir, `outlaw-errorlog-${stamp}.log`);
+            fs.writeFileSync(file, txt, 'utf8');
+            return { ok: true, path: file };
+        } catch (e) { return { ok: false, error: e.message }; }
+    });
 
     ipcMain.handle('ai:confirm-action', async (_e, action) => {
         if (action && action.tool === 'run_command') {

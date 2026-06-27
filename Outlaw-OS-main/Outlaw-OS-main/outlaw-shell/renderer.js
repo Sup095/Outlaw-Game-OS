@@ -2423,18 +2423,18 @@ async function errlogRefresh() {
     if (view) view.value = txt || '(no errors or warnings logged — nice.)';
 }
 async function errlogDownload() {
-    let txt = '';
-    try { txt = await api.errorlog.read(); } catch {}
-    const blob = new Blob([txt || '(empty)'], { type: 'text/plain' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = 'outlaw-errors.log';
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+    // Blob/anchor downloads are a no-op in the kiosk shell (no download handler),
+    // so the main process writes the file to ~/Downloads and tells us the path.
+    const r = await api.errorlog.save().catch(() => null);
+    if (r && r.ok) toast('Log saved to Downloads: ' + (r.path || '').replace(/^.*[\\/]/, ''));
+    else toast((r && r.error) || 'Could not save the log.');
 }
 async function errlogGithub() {
-    try { const url = await api.errorlog.issueUrl(); if (url) window.open(url, '_blank'); }
-    catch { toast('Could not open the issue page.'); }
+    // window.open is denied by the hardened window-open handler, so the main
+    // process opens the prefilled GitHub issue in the system browser instead.
+    const r = await api.errorlog.openIssue().catch(() => null);
+    if (r && r.ok) toast('Opening GitHub — sign in there to submit your report.');
+    else toast('Couldn\'t open GitHub. Set your repo in Settings → Updates, or use Copy and paste into a new issue.');
 }
 async function errlogClear() {
     try { await api.errorlog.clear(); } catch {}
