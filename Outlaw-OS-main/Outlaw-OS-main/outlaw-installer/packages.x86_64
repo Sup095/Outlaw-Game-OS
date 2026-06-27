@@ -102,6 +102,19 @@ fuse2
 # they're absent the session falls back to the old no-WM kiosk.
 openbox
 tint2
+
+# --- Audio (PipeWire) ---
+# WITHOUT THIS THE SYSTEM HAS NO SOUND. pipewire-pulse / pipewire-alsa give
+# Pulse/ALSA app compatibility (games, browsers, Godot); wireplumber is the
+# session manager; alsa-utils provides amixer/alsactl and backs the desktop's
+# topbar volume control. Socket-activated by the user's systemd instance on
+# login (pam_systemd) — no manual start needed.
+pipewire
+pipewire-pulse
+pipewire-alsa
+wireplumber
+alsa-utils
+
 ttf-jetbrains-mono
 noto-fonts
 

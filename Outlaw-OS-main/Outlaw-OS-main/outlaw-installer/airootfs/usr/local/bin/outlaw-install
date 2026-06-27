@@ -65,6 +65,13 @@ ESSENTIAL_PKGS=(
   # outlaw-lm-studio launcher also falls back to --appimage-extract-and-run, but
   # native FUSE mounting is faster and fixes double-clicking AppImages in Files.
   fuse2
+  # Audio — the PipeWire stack (modern Arch default). WITHOUT THIS THE INSTALLED
+  # SYSTEM HAS NO SOUND. pipewire-pulse / pipewire-alsa give Pulse/ALSA app
+  # compatibility (games, browsers, Godot); wireplumber is the session manager;
+  # alsa-utils provides amixer/alsactl and backs the desktop's volume control.
+  # Socket-activated by the user's systemd instance on login (pam_systemd) — no
+  # manual start needed. Verify on a test pass: play any sound + the topbar slider.
+  pipewire pipewire-pulse pipewire-alsa wireplumber alsa-utils
   ttf-jetbrains-mono noto-fonts mesa
   # Xorg video fallbacks. Primary path is modesetting over the GPU's KMS
   # driver (vmwgfx / vboxvideo / real GPU); these two are auto-fallbacks Xorg
