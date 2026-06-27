@@ -86,6 +86,13 @@ contextBridge.exposeInMainWorld('outlaw', {
     // QoL — current shell version (for the "Updated to vX.Y.Z" note).
     appVersion: () => ipcRenderer.invoke('app:version'),
 
+    // Round-2 QOL — volume control (PipeWire/Pulse/ALSA, auto-detected in main).
+    audio: {
+        get: () => ipcRenderer.invoke('audio:get'),
+        set: (pct) => ipcRenderer.invoke('audio:set', pct),
+        toggleMute: () => ipcRenderer.invoke('audio:toggle-mute'),
+    },
+
     // --- Local AI assistant -------------------------------------------------
     ai: {
         status: () => ipcRenderer.invoke('ai:status'),

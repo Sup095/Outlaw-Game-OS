@@ -1352,6 +1352,66 @@ function registerIpc() {
         } catch { return { present: false }; }
     });
 
+    // Round-2 QOL — volume control. Detect the audio backend once (PipeWire →
+    // PulseAudio → ALSA) and drive it. Every set takes a CLAMPED integer %, so
+    // there is no shell-injection surface.
+    let _audioBackend = null;
+    async function detectAudioBackend() {
+        if (_audioBackend) return _audioBackend;
+        for (const cmd of ['wpctl', 'pactl', 'amixer']) {
+            const r = await runShell(`command -v ${cmd} >/dev/null 2>&1 && echo yes`);
+            if (/yes/.test(r.stdout || '')) { _audioBackend = cmd; return _audioBackend; }
+        }
+        _audioBackend = 'none';
+        return _audioBackend;
+    }
+    ipcMain.handle('audio:get', async () => {
+        if (!IS_LINUX) return { available: false };
+        try {
+            const be = await detectAudioBackend();
+            if (be === 'wpctl') {
+                const r = await runShell('wpctl get-volume @DEFAULT_AUDIO_SINK@ 2>/dev/null', { timeout: 4000 });
+                const m = (r.stdout || '').match(/Volume:\s*([\d.]+)/);
+                return { available: !!m, volume: m ? Math.round(parseFloat(m[1]) * 100) : 0, muted: /MUTED/i.test(r.stdout || '') };
+            }
+            if (be === 'pactl') {
+                const v = await runShell('pactl get-sink-volume @DEFAULT_SINK@ 2>/dev/null', { timeout: 4000 });
+                const m = (v.stdout || '').match(/(\d+)%/);
+                const mut = await runShell('pactl get-sink-mute @DEFAULT_SINK@ 2>/dev/null', { timeout: 4000 });
+                return { available: !!m, volume: m ? Number(m[1]) : 0, muted: /yes/i.test(mut.stdout || '') };
+            }
+            if (be === 'amixer') {
+                const r = await runShell('amixer get Master 2>/dev/null', { timeout: 4000 });
+                const m = (r.stdout || '').match(/\[(\d+)%\]/);
+                return { available: !!m, volume: m ? Number(m[1]) : 0, muted: /\[off\]/i.test(r.stdout || '') };
+            }
+        } catch {}
+        return { available: false };
+    });
+    ipcMain.handle('audio:set', async (_e, pct) => {
+        if (!IS_LINUX) return { ok: false };
+        const v = Math.max(0, Math.min(100, parseInt(pct, 10) || 0));
+        const be = await detectAudioBackend();
+        let cmd = null;
+        if (be === 'wpctl') cmd = `wpctl set-volume @DEFAULT_AUDIO_SINK@ ${v}%`;
+        else if (be === 'pactl') cmd = `pactl set-sink-volume @DEFAULT_SINK@ ${v}%`;
+        else if (be === 'amixer') cmd = `amixer set Master ${v}% unmute 2>/dev/null`;
+        if (!cmd) return { ok: false };
+        const r = await runShell(cmd, { timeout: 4000 });
+        return { ok: r.code === 0 || r.code === undefined };
+    });
+    ipcMain.handle('audio:toggle-mute', async () => {
+        if (!IS_LINUX) return { ok: false };
+        const be = await detectAudioBackend();
+        let cmd = null;
+        if (be === 'wpctl') cmd = 'wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle';
+        else if (be === 'pactl') cmd = 'pactl set-sink-mute @DEFAULT_SINK@ toggle';
+        else if (be === 'amixer') cmd = 'amixer set Master toggle 2>/dev/null';
+        if (!cmd) return { ok: false };
+        const r = await runShell(cmd, { timeout: 4000 });
+        return { ok: r.code === 0 || r.code === undefined };
+    });
+
     ipcMain.handle('system:net', () => {
         // Return raw counters; the renderer diffs successive calls to derive
         // throughput. Keeping main stateless means no background timers that

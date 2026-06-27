@@ -1251,6 +1251,28 @@ async function updateBattery() {
     } catch { el.hidden = true; }
 }
 
+// Round-2 QOL — volume control popover.
+function _setVolIcon(vol, muted) {
+    const btn = $('#stat-volume'); if (!btn) return;
+    btn.textContent = (muted || vol === 0) ? '🔇' : vol < 50 ? '🔉' : '🔊';
+}
+async function refreshVolumeUi() {
+    const btn = $('#stat-volume'); if (!btn) return;
+    try {
+        const a = await api.audio.get();
+        if (!a || !a.available) { btn.hidden = true; return; }
+        btn.hidden = false;
+        _setVolIcon(a.volume, a.muted);
+        const sl = $('#vol-slider'); if (sl) sl.value = a.volume;
+        const pct = $('#vol-pct'); if (pct) pct.textContent = a.volume + '%';
+        const mb = $('#vol-mute'); if (mb) mb.textContent = a.muted ? '🔇' : '🔊';
+    } catch { btn.hidden = true; }
+}
+function toggleVolumePopover() {
+    const pop = $('#volume-popover'); if (!pop) return;
+    if (pop.hidden) { refreshVolumeUi(); pop.hidden = false; } else pop.hidden = true;
+}
+
 function startStats() {
     const tick = async () => {
         try {
@@ -3051,11 +3073,27 @@ function wire() {
     // QoL — Settings search/filter.
     const setSearch = $('#settings-search');
     if (setSearch) setSearch.addEventListener('input', (e) => filterSettings(e.target.value));
+    // Round-2 QOL — volume popover.
+    { const sv = $('#stat-volume'); if (sv) sv.addEventListener('click', toggleVolumePopover); }
+    { const sl = $('#vol-slider'); if (sl) sl.addEventListener('input', async (e) => {
+        const v = parseInt(e.target.value, 10) || 0;
+        const pct = $('#vol-pct'); if (pct) pct.textContent = v + '%';
+        _setVolIcon(v, false);
+        try { await api.audio.set(v); } catch {}
+    }); }
+    { const mb = $('#vol-mute'); if (mb) mb.addEventListener('click', async () => { try { await api.audio.toggleMute(); } catch {} refreshVolumeUi(); }); }
+    document.addEventListener('click', (e) => {
+        const pop = $('#volume-popover');
+        if (!pop || pop.hidden) return;
+        if (e.target.closest('#volume-popover') || e.target.closest('#stat-volume')) return;
+        pop.hidden = true;
+    });
     // QoL — Esc and click-outside close the power menu (expected desktop behavior).
     document.addEventListener('keydown', (e) => {
-        // Esc — close a FINISHED loading screen (never mid-operation; the X stays
-        // disabled until done, so we mirror that), then the power menu.
+        // Esc — close the volume popover, a FINISHED loading screen (never
+        // mid-operation; the X stays disabled until done), then the power menu.
         if (e.key === 'Escape') {
+            const vp = $('#volume-popover'); if (vp && !vp.hidden) { vp.hidden = true; return; }
             const ls = $('#loadscreen'), lsClose = $('#ls-close');
             if (ls && ls.classList.contains('show') && lsClose && !lsClose.disabled) { loadingScreen.hide(); return; }
             const pm = $('#power-modal');
@@ -3173,6 +3211,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     refreshNetStatus().catch(() => {});
     checkVersionBump().catch(() => {});   // QoL — "Updated to vX" note after an update
     checkDiskSpace().catch(() => {});     // QoL — warn if the disk is nearly full
+    refreshVolumeUi().catch(() => {});    // QoL — show the volume control if audio is present
     wireAuth();
     calcRender();
     // Sign-in gate (Phase 3c): the lock screen first (if enabled), then boot.

@@ -1178,6 +1178,14 @@ table.proc td { padding: 5px 8px; border-bottom: 1px solid rgba(20,61,13,0.4); }
 /* ---- Toast ---- */
 #toast { position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%); background: var(--panel); border: 1px solid var(--term-dim); color: var(--term); padding: 10px 16px; border-radius: 6px; opacity: 0; transition: opacity .2s; z-index: 1100; pointer-events: none; }
 #toast.show { opacity: 1; }
+/* Round-2 QOL — volume slider popover (anchored under the topbar). */
+#volume-popover {
+    position: fixed; top: 46px; right: 14px; z-index: 1100;
+    background: var(--panel); border: 1px solid var(--term-dim); border-radius: 8px;
+    padding: 10px 12px; min-width: 220px; box-shadow: 0 6px 22px rgba(0,0,0,0.5);
+}
+#volume-popover[hidden] { display: none; }
+#stat-volume { cursor: pointer; }
 /* C11 — offline/airplane state surfaces via the topbar #offline-pill (driven by
    updateOnlineStatus + refreshNetStatus); no separate badge. */
 .badge { font-size: 11px; padding: 1px 7px; border-radius: 999px; border: 1px solid var(--line); }

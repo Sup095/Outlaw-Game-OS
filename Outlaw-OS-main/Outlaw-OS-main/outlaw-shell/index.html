@@ -69,6 +69,7 @@
         <span class="stat pill" id="stat-cpu">CPU --%</span>
         <span class="stat pill" id="stat-ram">RAM --</span>
         <span class="stat pill" id="stat-ai">AI OFF</span>
+        <button class="stat pill" id="stat-volume" title="Volume" hidden style="padding:4px 8px;">🔊</button>
         <span class="stat pill" id="stat-battery" title="Battery" hidden></span>
         <span class="stat" id="stat-clock">--:--:--</span>
         <button class="nav-item" data-action="hotswap" title="Switch OS / boot menu" style="width:auto;padding:6px 10px;">⇄ HOTSWAP</button>
@@ -911,6 +912,14 @@
 </div>
 
 <div id="toast"></div>
+<!-- Round-2 QOL — volume slider popover (opened from the topbar speaker). -->
+<div id="volume-popover" hidden>
+    <div class="row" style="gap:10px;align-items:center;">
+        <button id="vol-mute" title="Mute / unmute" style="padding:6px 9px;">🔊</button>
+        <input type="range" id="vol-slider" min="0" max="100" value="50" style="flex:1;min-width:130px;">
+        <span id="vol-pct" class="mono" style="min-width:38px;text-align:right;">50%</span>
+    </div>
+</div>
 
 <!-- System Core scripts. dialogue.js (SC5) loads the cold-mode catalogue and
      must run BEFORE syscore.js so the picker is ready when boot_complete
