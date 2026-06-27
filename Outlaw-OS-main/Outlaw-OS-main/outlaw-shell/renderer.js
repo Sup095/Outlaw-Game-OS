@@ -1273,6 +1273,18 @@ function toggleVolumePopover() {
     if (pop.hidden) { refreshVolumeUi(); pop.hidden = false; } else pop.hidden = true;
 }
 
+// Round-2 QOL — screenshots. PrtSc = full (1s delay so menus close, no pre-toast
+// that'd be captured); Shift+PrtSc = drag-select a region. Saved to ~/Pictures.
+async function takeScreenshot(mode) {
+    if (mode === 'region') toast('Drag to select a region…');
+    try {
+        const r = await api.screenshot(mode);
+        if (r && r.ok) toast('📷 Saved to Pictures: ' + (r.path || '').replace(/^.*\//, ''));
+        else toast((r && r.error) || 'Screenshot failed.');
+    } catch (e) { toast('Screenshot failed: ' + e.message); }
+}
+window.takeScreenshot = takeScreenshot;   // so System Core (or the AI) can trigger it
+
 function startStats() {
     const tick = async () => {
         try {
@@ -3103,6 +3115,8 @@ function wire() {
         // Don't fire navigation shortcuts while the sign-in/lock overlay is up.
         const signin = $('#signin');
         if (signin && signin.style.display === 'flex') return;
+        // Round-2 QOL — PrtSc = full screenshot, Shift+PrtSc = drag-select a region.
+        if (e.key === 'PrintScreen') { e.preventDefault(); takeScreenshot(e.shiftKey ? 'region' : 'full'); return; }
         // Ctrl/Cmd+K — quick-ask the AI from anywhere.
         if ((e.ctrlKey || e.metaKey) && (e.key === 'k' || e.key === 'K')) {
             e.preventDefault();

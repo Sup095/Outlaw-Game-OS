@@ -287,6 +287,7 @@ window.OUTLAW_HELP = [
         body: '<p><b>Ctrl + K</b> — jump to the AI assistant and start typing (a quick ask), from anywhere. '
             + '<b>Alt + 1…9</b> — jump to the matching sidebar screen (1 = Dashboard, 2 = System Core, and so on). '
             + '<b>Esc</b> — close the power menu, or a finished loading screen. '
+            + '<b>PrtSc</b> — save a screenshot to Pictures (<b>Shift+PrtSc</b> to drag-select a region). '
             + 'In the assistant, press <b>Enter</b> to send.</p>',
     },
     {

@@ -1412,6 +1412,24 @@ function registerIpc() {
         return { ok: r.code === 0 || r.code === undefined };
     });
 
+    // Round-2 QOL — screenshots via scrot (already bundled for CodeMaker OCR).
+    // mode 'region' = interactive drag-select; otherwise full screen with a 1s
+    // delay so any open menu/popover can close. Saves to ~/Pictures.
+    ipcMain.handle('screenshot:capture', async (_e, mode) => {
+        if (!IS_LINUX) return { ok: false, error: 'Screenshots run on Outlaw OS.' };
+        const has = await runShell('command -v scrot >/dev/null 2>&1 && echo yes');
+        if (!/yes/.test(has.stdout || '')) return { ok: false, error: 'Screenshot tool (scrot) not available.' };
+        const dir = path.join(os.homedir(), 'Pictures');
+        try { fs.mkdirSync(dir, { recursive: true }); } catch {}
+        const region = mode === 'region';
+        const opts = region ? '-s' : '-d 1';
+        const cmd = `cd ${JSON.stringify(dir)} && scrot ${opts} 'Screenshot-%Y-%m-%d_%H-%M-%S.png' -e 'echo $f'`;
+        const r = await runShell(cmd, { timeout: region ? 60000 : 10000 });
+        const fname = ((r.stdout || '').trim().split('\n').filter(Boolean).pop() || '').replace(/^.*\//, '');
+        if ((r.code === 0 || r.code === undefined) && fname) return { ok: true, path: path.join(dir, fname) };
+        return { ok: false, error: region ? 'Screenshot cancelled.' : (r.stderr || 'Capture failed.').slice(-160) };
+    });
+
     ipcMain.handle('system:net', () => {
         // Return raw counters; the renderer diffs successive calls to derive
         // throughput. Keeping main stateless means no background timers that

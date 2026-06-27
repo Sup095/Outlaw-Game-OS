@@ -1344,6 +1344,10 @@
                 }, 90);
                 break;
             }
+            case 'screenshot': {
+                if (window.takeScreenshot) window.takeScreenshot('full');
+                break;
+            }
         }
     }
 

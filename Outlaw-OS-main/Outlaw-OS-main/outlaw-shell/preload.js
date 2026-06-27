@@ -92,6 +92,8 @@ contextBridge.exposeInMainWorld('outlaw', {
         set: (pct) => ipcRenderer.invoke('audio:set', pct),
         toggleMute: () => ipcRenderer.invoke('audio:toggle-mute'),
     },
+    // Round-2 QOL — screenshots (scrot). mode 'region' | 'full'.
+    screenshot: (mode) => ipcRenderer.invoke('screenshot:capture', mode),
 
     // --- Local AI assistant -------------------------------------------------
     ai: {
