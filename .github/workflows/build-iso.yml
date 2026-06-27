@@ -57,126 +57,47 @@ jobs:
     name: Validate package names
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    container:
-      image: archlinux:latest
+    # No job-level `container:` — we pull the Arch image ourselves WITH RETRY and
+    # run the validation via `docker run`. A transient Docker Hub blip at the old
+    # container-init pull (which we cannot retry) used to fail jobs uninformatively.
     steps:
-      - name: Refresh pacman + enable multilib
-        run: |
-          set -e
-          # Retry pacman through transient mirror failures (a single .sig/.pkg
-          # failing from one mirror) — refresh the DB between attempts.
-          retry() {
-            n=0
-            until "$@"; do
-              n=$((n + 1))
-              if [ "$n" -ge 5 ]; then echo "::error::'$*' failed after $n attempts"; return 1; fi
-              echo "::warning::pacman attempt $n failed — refreshing databases, retrying in 15s…"
-              sleep 15
-              pacman -Syy --noconfirm || true
-            done
-          }
-          pacman-key --init
-          pacman-key --populate archlinux
-          # Our package set includes lib32-* packages, so the multilib repo
-          # must be enabled for them to resolve.
-          if ! grep -q '^\[multilib\]' /etc/pacman.conf; then
-            printf '\n[multilib]\nInclude = /etc/pacman.d/mirrorlist\n' >> /etc/pacman.conf
-          fi
-          retry pacman -Syu --noconfirm --disable-download-timeout
-          retry pacman -S --noconfirm --needed --disable-download-timeout git
-
       - name: Check out the repository
         uses: actions/checkout@v5
         with:
           fetch-depth: 1
 
+      - name: Pull the Arch container (with retry — Docker Hub can be flaky)
+        run: |
+          set -e
+          for i in 1 2 3 4 5 6; do
+            docker pull archlinux:latest && exit 0
+            echo "::warning::archlinux:latest pull attempt $i failed; retrying in 20s…"
+            sleep 20
+          done
+          echo "::error::Could not pull archlinux:latest after 6 attempts (Docker Hub outage?)."
+          exit 1
+
       - name: Validate every package resolves in the Arch repos
         run: |
-          set -uo pipefail
-          PKGFILE="$INSTALLER_DIR/packages.x86_64"
-          INSTALLER="$INSTALLER_DIR/airootfs/usr/local/bin/outlaw-install"
-
-          echo "::group::Collecting package names"
-          # Live-ISO set: one package per line. Drop comment + blank lines,
-          # then take the first whitespace-delimited field of each line (the
-          # package name) — this trims indentation WITHOUT collapsing newlines.
-          mapfile -t LIVE < <(grep -vE '^[[:space:]]*#|^[[:space:]]*$' "$PKGFILE" \
-                              | awk '{print $1}' | grep -v '^$' || true)
-          # Installed-system ESSENTIAL_PKGS bash array: take lines between
-          # 'ESSENTIAL_PKGS=(' and the closing ')', strip inline comments,
-          # split into words, keep package-looking tokens.
-          mapfile -t ESS < <(awk '/ESSENTIAL_PKGS=\(/{f=1;next} f&&/^\)/{f=0} f{sub(/#.*/,"");print}' "$INSTALLER" \
-                              | tr ' \t' '\n\n' | grep -E '^[a-z0-9]' || true)
-          ALL="$(printf '%s\n' "${LIVE[@]}" "${ESS[@]}" | sort -u | grep -v '^$' || true)"
-          COUNT="$(printf '%s\n' "$ALL" | grep -c . || true)"
-          echo "Live-ISO packages   : ${#LIVE[@]}"
-          echo "Installer essential : ${#ESS[@]}"
-          echo "Unique to validate  : $COUNT"
-          printf '%s\n' "$ALL" | tr '\n' ' '; echo
-          echo "::endgroup::"
-
-          echo "::group::Resolving against the repos"
-          MISSING=""
-          while IFS= read -r pkg; do
-            [[ -z "$pkg" ]] && continue
-            if pacman -Si -- "$pkg" >/dev/null 2>&1; then
-              echo "  ok   $pkg"
-            else
-              echo "  MISS $pkg"
-              MISSING="$MISSING $pkg"
-            fi
-          done <<< "$ALL"
-          echo "::endgroup::"
-
-          if [[ -n "${MISSING// /}" ]]; then
-            echo "::error::Package preflight FAILED — these don't resolve in the official Arch repos (typo / renamed / AUR-only / dropped):$MISSING"
-            echo ""
-            echo "Fix the name(s) in $PKGFILE and/or ESSENTIAL_PKGS in outlaw-install,"
-            echo "or move any AUR-only package to an on-demand install. This check runs"
-            echo "BEFORE the ~20-minute ISO build so you catch it in seconds."
-            exit 1
-          fi
-          echo "✅ All $COUNT packages resolve in the official repos. Safe to build."
+          set -e
+          docker run --rm \
+            -v "$GITHUB_WORKSPACE:/work" -w /work \
+            -e INSTALLER_DIR="$INSTALLER_DIR" \
+            archlinux:latest bash /work/.github/ci/preflight-in-container.sh
 
   build:
     name: Build Outlaw OS ISO
     needs: preflight
     runs-on: ubuntu-latest
     timeout-minutes: 60
-    container:
-      image: archlinux:latest
-      # mkarchiso uses loop devices + chroot. The GitHub Actions runner
-      # supports privileged containers; we need it for archiso to function.
-      options: --privileged
+    # No job-level `container:` — we pull the Arch image WITH RETRY and run the
+    # build (deps install + mkarchiso) via `docker run --privileged`. A transient
+    # Docker Hub blip at the old container-init pull (no retry we control) failed
+    # the whole build AND broke the host-less "upload build log" step with a
+    # "ContainerId null" error. All GitHub-action steps (checkout/upload/release)
+    # now run on the host, so they no longer depend on the job container.
 
     steps:
-      - name: Refresh pacman + install build deps
-        run: |
-          # Keyring init + sync. Container images sometimes ship a stale or
-          # missing keyring which makes pacman -Sy fail. This makes it robust.
-          # Transient Arch mirror hiccups (a single .sig/.pkg failing to download
-          # from one mirror) previously failed the whole build — retry with a DB
-          # refresh between attempts so a flaky mirror self-heals instead of
-          # breaking CI. (No `local` — these run under /bin/sh.)
-          retry() {
-            n=0
-            until "$@"; do
-              n=$((n + 1))
-              if [ "$n" -ge 5 ]; then echo "::error::'$*' failed after $n attempts"; return 1; fi
-              echo "::warning::pacman attempt $n failed — refreshing databases, retrying in 15s…"
-              sleep 15
-              pacman -Syy --noconfirm || true
-            done
-          }
-          pacman-key --init
-          pacman-key --populate archlinux
-          retry pacman -Syu --noconfirm --disable-download-timeout
-          retry pacman -S --noconfirm --needed --disable-download-timeout \
-            archiso git base-devel \
-            nodejs python python-pip rsync \
-            mkinitcpio mkinitcpio-archiso squashfs-tools \
-            dosfstools mtools libisoburn
-
       - name: Check out the repository
         uses: actions/checkout@v5
         with:
@@ -253,34 +174,36 @@ jobs:
             echo "No tag — build.sh will use its built-in default."
           fi
 
-      - name: Build the ISO
-        env:
-          # build.sh looks for CodeMaker via OUTLAW_CODEMAKER_SRC first. Point
-          # it at the top-level CodeMaker directory in the repo.
-          OUTLAW_CODEMAKER_SRC: ${{ github.workspace }}/Outlaw CodeMaker
-          # When this is a tag build, override the version. Otherwise empty,
-          # which build.sh treats as "keep your default".
-          OUTLAW_ISO_VERSION: ${{ steps.ver.outputs.iso_version }}
+      - name: Pull the Arch container (with retry — this was the Docker Hub failure point)
         run: |
           set -e
-          cd "$INSTALLER_DIR"
+          for i in 1 2 3 4 5 6; do
+            docker pull archlinux:latest && exit 0
+            echo "::warning::archlinux:latest pull attempt $i failed; retrying in 20s…"
+            sleep 20
+          done
+          echo "::error::Could not pull archlinux:latest after 6 attempts (Docker Hub outage?)."
+          exit 1
 
-          # Capture build output to a log file we can always tail later, even
-          # when GitHub's collapsed-step viewer hides the actual failure line.
-          LOG="$GITHUB_WORKSPACE/build.log"
-          if ./build.sh 2>&1 | tee "$LOG"; then
-            echo "::notice::build.sh succeeded."
-          else
-            RC=${PIPESTATUS[0]}
-            echo "::error::build.sh failed with exit code $RC"
-            echo "::group::Last 200 lines of build output (recap)"
-            tail -n 200 "$LOG" || true
-            echo "::endgroup::"
-            echo "::group::Disk usage at failure time"
-            df -h
-            echo "::endgroup::"
-            exit "$RC"
-          fi
+      - name: Build the ISO (inside the Arch container)
+        run: |
+          set -eo pipefail
+          # Run deps-install + mkarchiso inside the container via a committed
+          # script (clean, no YAML-quoting). The repo is bind-mounted at /work;
+          # --privileged is required for mkarchiso's loop devices + chroot. Env
+          # vars are passed EXPLICITLY ("$VAR") — a bare `-e VAR` is fragile, and
+          # the CodeMaker path has a space, so it must be quoted.
+          docker run --rm --privileged \
+            -v "$GITHUB_WORKSPACE:/work" -w /work \
+            -e INSTALLER_DIR="$INSTALLER_DIR" \
+            -e OUTPUT_DIR="$OUTPUT_DIR" \
+            -e OUTLAW_ISO_VERSION="${{ steps.ver.outputs.iso_version }}" \
+            -e OUTLAW_CODEMAKER_SRC="/work/Outlaw CodeMaker" \
+            archlinux:latest bash /work/.github/ci/build-in-container.sh
+          # The build runs as root in the container; hand the output (ISO + work +
+          # profile, all under OUTPUT_DIR) + the log back to the runner so the
+          # host upload/package/release steps can read them.
+          sudo chown -R "$(id -u):$(id -g)" "$GITHUB_WORKSPACE/$OUTPUT_DIR" "$GITHUB_WORKSPACE/build.log" 2>/dev/null || true
 
       - name: Upload build log (always — useful for diagnosing failures too)
         if: always()
