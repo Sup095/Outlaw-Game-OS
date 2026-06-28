@@ -327,6 +327,17 @@ probe_extras() {
 # Shrink a partition's filesystem AND its partition-table entry by TAKE GiB.
 # Probed read-only first; refuses dirty NTFS and tight fits. NTFS gets a
 # Windows-side chkdsk scheduled automatically on its next boot (normal).
+# Re-read the partition table and WAIT for udev to finish so the kernel + parted
+# agree on the new geometry. A bare `partprobe; sleep 1` often races on slower
+# disks — the freed region then looks absent and the install aborts even though
+# the shrink worked. B5 hardening.
+settle_disk() {
+    local disk="$1"
+    sync
+    partprobe "$disk" 2>/dev/null || true
+    udevadm settle --timeout=10 2>/dev/null || true
+}
+
 shrink_partition() {
     local part="$1" take_gib="$2"
     local disk partnum fstype size_b size_mib min_mib new_mib start_mib
@@ -375,8 +386,7 @@ shrink_partition() {
     [[ -n "$start_mib" ]] || die "Couldn't read where partition $partnum starts."
     parted -s "$disk" unit MiB resizepart "$partnum" "$(( start_mib + new_mib ))MiB" \
         || die "Couldn't shrink the partition entry for $part."
-    partprobe "$disk" 2>/dev/null || true
-    sleep 1
+    settle_disk "$disk"
 }
 
 # Create an ext4 partition of GIB GiB inside the largest free region of DISK,
@@ -384,8 +394,17 @@ shrink_partition() {
 # globals NEWPART, ESP, BIOS_DISK.
 create_in_free_space() {
     local disk="$1" want_gib="$2"
-    local fstart fsize start_mib end_mib before after
+    local fstart fsize start_mib end_mib before after _try
     read -r fstart fsize < <(largest_free_region "$disk")
+    # Right after a shrink the freed region can take a moment to surface in
+    # `parted print free`, even with udev settled. Re-probe a few times before
+    # giving up, so a slow disk doesn't trip the guard on a shrink that worked.
+    _try=0
+    while (( fsize < want_gib * 1024 - 512 && _try < 6 )); do
+        sleep 1; settle_disk "$disk"
+        read -r fstart fsize < <(largest_free_region "$disk")
+        _try=$(( _try + 1 ))
+    done
     (( fsize >= want_gib * 1024 - 512 )) \
         || die "Free space on $disk shrank unexpectedly (need ${want_gib} GiB, found $(( fsize / 1024 )) GiB)."
     start_mib="$fstart"
@@ -400,12 +419,11 @@ create_in_free_space() {
     before="$(lsblk -nrpo NAME "$disk" | tail -n +2 | sort)"
     parted -a optimal -s "$disk" mkpart primary ext4 "${start_mib}MiB" "${end_mib}MiB" \
         || die "Couldn't create the partition (is the partition table full?)."
-    partprobe "$disk" 2>/dev/null || true
-    sleep 1
+    settle_disk "$disk"
     after="$(lsblk -nrpo NAME "$disk" | tail -n +2 | sort)"
     NEWPART="$(comm -13 <(printf '%s\n' "$before") <(printf '%s\n' "$after") | head -n1)"
     if [[ -z "$NEWPART" || ! -b "$NEWPART" ]]; then
-        partprobe "$disk" 2>/dev/null || true; sleep 1
+        sleep 1; settle_disk "$disk"
         after="$(lsblk -nrpo NAME "$disk" | tail -n +2 | sort)"
         NEWPART="$(comm -13 <(printf '%s\n' "$before") <(printf '%s\n' "$after") | head -n1)"
     fi
