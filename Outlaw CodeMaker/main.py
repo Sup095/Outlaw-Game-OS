@@ -11,6 +11,7 @@ silently.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import os
@@ -109,14 +110,29 @@ class _SharedErrorLogHandler(logging.Handler):
 
     _path = Path.home() / ".outlaw-errors.log"
 
+    @staticmethod
+    def _key(body: str) -> str:
+        # #6 — STABLE content key shared with the desktop shell (errorlog.js _key).
+        # sha1 of the normalized body so the same logical error dedups across BOTH
+        # writers and across restarts. Python's built-in hash() is randomized per
+        # process and differs from JS, so it could never match the shell's entries.
+        return hashlib.sha1(body.encode("utf-8", "replace")).hexdigest()
+
+    @staticmethod
+    def _line_body(line: str) -> str:
+        # Recover "source: message" from `[<iso>] <LEVEL> <source>: <message>` —
+        # strip the bracketed timestamp AND the single LEVEL token. Must match the
+        # shell's _lineBody so seeding from disk dedups against the shell's writes.
+        return re.sub(r"^\[[^\]]*\]\s*\S+\s*", "", line).strip()
+
     def __init__(self) -> None:
         super().__init__(level=logging.WARNING)
-        self._seen: set[int] = set()
+        self._seen: set[str] = set()
         try:
             for line in self._path.read_text(encoding="utf-8").splitlines():
-                body = line.split("] ", 1)[-1].strip()
+                body = self._line_body(line)
                 if body:
-                    self._seen.add(hash(body))
+                    self._seen.add(self._key(body))
         except Exception:  # noqa: BLE001
             pass
 
@@ -126,7 +142,7 @@ class _SharedErrorLogHandler(logging.Handler):
                 return
             msg = " ".join(self.format(record).split())[:600]
             body = "codemaker: " + msg
-            key = hash(body)
+            key = self._key(body)
             if key in self._seen:
                 return
             self._seen.add(key)

@@ -11,6 +11,7 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const crypto = require('crypto');
 const { execFile } = require('child_process');
 
 // $HOME so it survives updates AND is shared by both sessions (CodeMaker writes
@@ -18,21 +19,35 @@ const { execFile } = require('child_process');
 const LOG_PATH = path.join(os.homedir(), '.outlaw-errors.log');
 const MAX_LINES = 3000;
 
+// #6 — the dedup set holds STABLE content keys (sha1 of the normalized body), so
+// the SAME logical error is stored once even across (a) shell restarts and (b)
+// the two writers — the desktop shell (this file) AND Outlaw CodeMaker (Python,
+// main.py). Both must compute the key identically: normalize the body the same way
+// and sha1 it. A process-local hash (the old JS imul / Python hash()) could never
+// match between the two writers, so the same error appeared twice in one report.
 const _seen = new Set();
 
-function _hash(s) {
-    let h = 0;
-    for (let i = 0; i < s.length; i++) h = (Math.imul(h, 31) + s.charCodeAt(i)) | 0;
-    return h;
+// Stable, language-agnostic content key. Mirror in CodeMaker's _SharedErrorLogHandler.
+function _key(body) {
+    return crypto.createHash('sha1').update(String(body)).digest('hex');
 }
 
-// Seed the dedup set from whatever is already on disk so restarts don't re-add.
+// Recover the dedup body ("source: message") from a stored line of the shared
+// format `[<iso>] <LEVEL> <source>: <message>` — strip the bracketed timestamp
+// AND the single LEVEL token after it. Must match emit-time body exactly (and the
+// Python side's parse) so seeding from disk dedups against fresh writes.
+function _lineBody(line) {
+    return String(line).replace(/^\[[^\]]*\]\s*\S+\s*/, '').trim();
+}
+
+// Seed the dedup set from whatever is already on disk so restarts (and the other
+// writer's lines) don't re-add.
 (function loadSeen() {
     try {
         const txt = fs.readFileSync(LOG_PATH, 'utf8');
         for (const line of txt.split('\n')) {
-            const body = line.replace(/^\[[^\]]*\]\s*/, '').trim();
-            if (body) _seen.add(_hash(body));
+            const body = _lineBody(line);
+            if (body) _seen.add(_key(body));
         }
     } catch { /* no file yet */ }
 })();
@@ -52,7 +67,7 @@ function append(level, source, message) {
         const msg = String(message == null ? '' : message).replace(/\s+/g, ' ').trim().slice(0, 600);
         if (!msg) return;
         const body = `${source}: ${msg}`;
-        const key = _hash(body);
+        const key = _key(body);
         if (_seen.has(key)) return;   // dedup — never the same entry twice
         _seen.add(key);
         fs.appendFileSync(LOG_PATH, `[${new Date().toISOString()}] ${String(level).toUpperCase()} ${body}\n`);
