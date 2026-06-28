@@ -375,12 +375,15 @@
             return;
         }
         const name = (g.name || 'GPU').slice(0, 28);
-        if (g.source === 'nvml' && g.vramTotalMb > 0) {
+        // Show live VRAM whenever we have a total — NVIDIA (nvml) or AMD/Intel
+        // discrete cards (drm sysfs). Integrated GPUs share system RAM and report
+        // no dedicated VRAM, so we just name the chip.
+        if (g.vramTotalMb > 0) {
             const used = Math.round(g.vramUsedMb);
             const total = Math.round(g.vramTotalMb);
             _setReadout('sc-gpu', used + ' / ' + total + ' MB', name + ' · ' + g.vramPct + '%');
         } else {
-            _setReadout('sc-gpu', name, 'VRAM probe needs NVML');
+            _setReadout('sc-gpu', name, 'shared memory · no dedicated VRAM');
         }
     }
 

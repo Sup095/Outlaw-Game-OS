@@ -1338,13 +1338,33 @@ function registerIpc() {
             return { available: true, name, vramUsedMb: used, vramTotalMb: total,
                      vramPct: pct, source: 'nvml' };
         }
-        // Non-NVIDIA fallback — return the GPU model from lspci so the slot
-        // isn't empty. VRAM stays at 0 (we can't read it generically).
+        // Non-NVIDIA — read the GPU model from lspci AND, for AMD/Intel cards with
+        // dedicated VRAM, live used/total from the DRM sysfs nodes (bytes). amdgpu
+        // and i915 expose mem_info_vram_used / mem_info_vram_total; integrated GPUs
+        // share system RAM and have no node, so VRAM correctly stays 0. We pick the
+        // card with the largest total (the discrete one on hybrid laptops).
         const lspci = await runShell(
             "lspci 2>/dev/null | grep -Ei 'vga|3d|display' | sed 's/^.*: //' | head -n 1",
             { timeout: 2000 },
         );
         const name = (lspci.stdout || '').trim() || 'GPU n/a';
+        const drm = await runShell(
+            'for d in /sys/class/drm/card*/device; do ' +
+            't=$(cat "$d/mem_info_vram_total" 2>/dev/null); ' +
+            'u=$(cat "$d/mem_info_vram_used" 2>/dev/null); ' +
+            '[ -n "$t" ] && echo "$t ${u:-0}"; done | sort -rn | head -n 1',
+            { timeout: 2000 },
+        );
+        const dm = (drm.stdout || '').trim().split(/\s+/);
+        const totalBytes = Number(dm[0]) || 0;
+        const usedBytes = Number(dm[1]) || 0;
+        if (totalBytes > 0) {
+            const totalMb = Math.round(totalBytes / (1024 * 1024));
+            const usedMb = Math.round(usedBytes / (1024 * 1024));
+            const pct = totalMb > 0 ? Math.round((usedMb / totalMb) * 100) : 0;
+            return { available: true, name, vramUsedMb: usedMb, vramTotalMb: totalMb,
+                     vramPct: pct, source: 'drm' };
+        }
         return { available: true, name, vramUsedMb: 0, vramTotalMb: 0,
                  vramPct: 0, source: 'lspci' };
     });
