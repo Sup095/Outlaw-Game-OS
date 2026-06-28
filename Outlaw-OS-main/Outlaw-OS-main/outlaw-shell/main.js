@@ -739,7 +739,7 @@ function recommendModel(ramGb, vramGb, opts = {}) {
 let _specsCache = null;
 async function gatherSpecs() {
     if (_specsCache) return _specsCache;
-    // The probe must NEVER hard-fail — the AI Setup card AND the settings tuner
+    // The probe must NEVER hard-fail — the AI Setup card (and "Check my PC")
     // depend on it, and an early throw shows up to the user as the whole thing
     // "failing immediately". Any unexpected error falls back to Node's own readings.
     try {
@@ -952,20 +952,59 @@ const AI_SETTABLE = {
     uiScale: { values: ['0.9', '1', '1.15', '1.3'] },
 };
 
-function parseSettingChange(arg) {
-    const m = String(arg || '').match(/^\s*([a-zA-Z]+)\s*[:=\s]\s*([a-zA-Z0-9]+)\s*$/);
-    if (!m) return null;
-    const key = m[1];
-    const val = m[2].toLowerCase();
-    const spec = AI_SETTABLE[key];
-    if (!spec) return null;
-    if (spec.bool) {
-        if (['on', 'true', 'yes', '1', 'enable', 'enabled'].includes(val)) return { [key]: true };
-        if (['off', 'false', 'no', '0', 'disable', 'disabled'].includes(val)) return { [key]: false };
-        return null;
+// Case-insensitive lookup into AI_SETTABLE (the tiny model often emits lowercase
+// keys like "aiengine"/"performancemode", which a case-sensitive lookup rejected).
+const _AI_SETTABLE_LC = Object.fromEntries(Object.keys(AI_SETTABLE).map((k) => [k.toLowerCase(), k]));
+
+// Reverse map: an enum VALUE -> the single key it belongs to, but ONLY for values
+// that are unambiguous (belong to exactly one settable key). This lets the AI (or
+// the user) name the WRONG key and still land on the right setting — the classic
+// case being "performanceMode=minimal" (performanceMode is on/off; "minimal" is a
+// vramSaverMode value) or a bare "mode=lmstudio" -> aiEngine=lmstudio.
+const _AI_VALUE_TO_KEY = (() => {
+    const byVal = {};
+    for (const [k, spec] of Object.entries(AI_SETTABLE)) {
+        if (!spec.values) continue;
+        for (const v of spec.values) (byVal[v] = byVal[v] || new Set()).add(k);
     }
-    if (spec.values && spec.values.includes(val)) return { [key]: val };
-    return null;
+    const out = {};
+    for (const [v, keys] of Object.entries(byVal)) if (keys.size === 1) out[v] = [...keys][0];
+    return out; // e.g. green->theme, lmstudio->aiEngine, lean/minimal/auto->vramSaverMode
+})();
+
+// Human-readable, per-key list of what the AI can change (kept in sync with
+// AI_SETTABLE above) — used in the "couldn't apply that" message so the user/AI
+// learns the exact accepted values instead of a vague rejection.
+const AI_SETTABLE_HELP = 'theme=green|gold|broken, uiScale=0.9|1|1.15|1.3, '
+    + 'crtFx/glow/reduceMotion/performanceMode/autoCheck/coreVoiceEnabled=on|off, '
+    + 'vramSaverMode=auto|off|lean|minimal, aiEngine=base|lmstudio|ollama';
+
+function parseSettingChange(arg) {
+    // Accepts one OR MORE "key=value" pairs (the model sometimes batches them,
+    // e.g. "aiEngine=lmstudio, vramSaverMode=minimal"). Keys are matched
+    // case-insensitively; values allow a dot (uiScale=1.15) and a dash.
+    const patch = {};
+    const re = /([a-zA-Z]+)\s*[:=]\s*([a-zA-Z0-9.\-]+)/g;
+    let m;
+    while ((m = re.exec(String(arg || ''))) !== null) {
+        const key = _AI_SETTABLE_LC[m[1].toLowerCase()];
+        const val = m[2].toLowerCase();
+        let applied = false;
+        if (key) {
+            const spec = AI_SETTABLE[key];
+            if (spec.bool) {
+                if (['on', 'true', 'yes', '1', 'enable', 'enabled'].includes(val)) { patch[key] = true; applied = true; }
+                else if (['off', 'false', 'no', '0', 'disable', 'disabled'].includes(val)) { patch[key] = false; applied = true; }
+            } else if (spec.values && spec.values.includes(val)) {
+                patch[key] = val; applied = true;
+            }
+        }
+        // The key was missing or its value didn't validate, but the VALUE alone
+        // unambiguously names one setting — apply it there. Forgives the tiny
+        // model's frequent "right value, wrong key" mistakes.
+        if (!applied && _AI_VALUE_TO_KEY[val]) patch[_AI_VALUE_TO_KEY[val]] = val;
+    }
+    return Object.keys(patch).length ? patch : null;
 }
 
 // QoL — screens the AI may navigate to for the user (matches the sidebar).
@@ -1034,9 +1073,8 @@ async function executeIntent(intent) {
             // QoL — let the assistant adjust a safe, reversible setting for the user.
             const patch = parseSettingChange(intent.arg || '');
             if (!patch) {
-                return { text: 'I can change: theme, crtFx, glow, performanceMode, vramSaverMode, aiEngine, '
-                    + 'autoCheck, coreVoiceEnabled — e.g. "vramSaverMode=lean". I couldn\'t apply "'
-                    + (intent.arg || '') + '".', did: 'none' };
+                return { text: 'I can change these (with their allowed values): ' + AI_SETTABLE_HELP
+                    + '. I couldn\'t apply "' + (intent.arg || '') + '".', did: 'none' };
             }
             const key = Object.keys(patch)[0];
             // The renderer applies this through settings:set (full side-effects).
@@ -2664,63 +2702,9 @@ function registerIpc() {
             : { ok: false, error: (r.stderr || r.stdout || 'Revert failed.').slice(-800) };
     });
 
-    // --- Phase 5: per-machine tuning (outlaw-tune) --------------------------
-    // probe / recommend / stress / status are read-only (no pkexec). apply +
-    // reset are privileged and go through the audited outlaw-tune helper, which
-    // only ever writes its own fixed set of files. JSON is parsed here so the
-    // renderer gets objects, not raw text.
-    const _parseJson = (s) => { try { return JSON.parse(s); } catch { return null; } };
-
-    ipcMain.handle('tune:probe', async () => {
-        if (!IS_LINUX) return { ok: false, error: 'Hardware tuning runs on Outlaw OS.' };
-        const r = await runShell('outlaw-tune probe', { timeout: 15000 });
-        const data = _parseJson(r.stdout || '');
-        return data ? { ok: true, data } : { ok: false, error: (r.stderr || 'probe failed').slice(-400) };
-    });
-
-    ipcMain.handle('tune:recommend', async () => {
-        if (!IS_LINUX) return { ok: false, error: 'Hardware tuning runs on Outlaw OS.' };
-        const r = await runShell('outlaw-tune recommend json', { timeout: 15000 });
-        const data = _parseJson(r.stdout || '');
-        return data ? { ok: true, data } : { ok: false, error: (r.stderr || 'recommend failed').slice(-400) };
-    });
-
-    ipcMain.handle('tune:stress', async (_e, seconds) => {
-        if (!IS_LINUX) return { ok: false, error: 'The stress test runs on Outlaw OS.' };
-        // Clamp here too; the helper clamps again as defence in depth.
-        let s = parseInt(seconds, 10); if (!Number.isFinite(s)) s = 10;
-        s = Math.max(3, Math.min(30, s));
-        const r = await runShell(`outlaw-tune stress ${s}`, { timeout: (s + 20) * 1000 });
-        const data = _parseJson(r.stdout || '');
-        return data ? { ok: true, data } : { ok: false, error: (r.stderr || 'stress test failed').slice(-400) };
-    });
-
-    ipcMain.handle('tune:status', async () => {
-        if (!IS_LINUX) return { ok: false, error: 'Hardware tuning runs on Outlaw OS.' };
-        const r = await runShell('outlaw-tune status', { timeout: 8000 });
-        return { ok: true, data: _parseJson(r.stdout || '') || { applied: false } };
-    });
-
-    ipcMain.handle('tune:apply', async () => {
-        if (!IS_LINUX) return { ok: false, error: 'Hardware tuning runs on Outlaw OS.' };
-        const r = await runShell('pkexec /usr/local/bin/outlaw-tune apply', { timeout: 1000 * 60 * 2 });
-        if (r.code !== 0) return { ok: false, error: (r.stderr || r.stdout || `exit ${r.code}`).slice(-800) };
-        // The helper prints OUTLAW_VRAM_MODE=<mode>; mirror it into the shell's
-        // own VRAM-saver setting so CodeMaker's default matches the hardware.
-        const m = (r.stdout || '').match(/OUTLAW_VRAM_MODE=(\w+)/);
-        if (m && ['auto', 'off', 'lean', 'minimal'].includes(m[1])) {
-            settings = saveSettings({ ...settings, vramSaverMode: m[1] });
-            try { vramTier.setMode(m[1]); } catch {}
-        }
-        return { ok: true, log: (r.stdout || '').slice(-800) };
-    });
-
-    ipcMain.handle('tune:reset', async () => {
-        if (!IS_LINUX) return { ok: false, error: 'Hardware tuning runs on Outlaw OS.' };
-        const r = await runShell('pkexec /usr/local/bin/outlaw-tune reset', { timeout: 1000 * 60 });
-        if (r.code !== 0) return { ok: false, error: (r.stderr || r.stdout || `exit ${r.code}`).slice(-800) };
-        return { ok: true, log: (r.stdout || '').slice(-400) };
-    });
+    // (The old "Tune This PC" feature was removed — the AI assistant now handles
+    // per-machine setting changes directly via set_setting. The outlaw-tune helper
+    // remains on disk for any manual/advanced use but is no longer wired to the UI.)
 
     // --- Safe mode marker (set by outlaw-session-watchdog after a crash loop) ----
     ipcMain.handle('safe-mode:check', () => {

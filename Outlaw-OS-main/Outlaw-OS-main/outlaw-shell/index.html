@@ -139,7 +139,7 @@
             </div>
             <details class="page-help">
                 <summary>What is the System Core?</summary>
-                <p>The System Core is your machine's <b>command center</b> — live status, the Core assistant, diagnostics, and one-tap actions (talk to Cr1tt3r, report a problem, tune your settings, update). The rings show live <b>CPU, RAM and VRAM</b> use. The badge shows the current <b>VRAM-saver tier</b> (change it in Settings → AI / VRAM).</p>
+                <p>The System Core is your machine's <b>command center</b> — live status, the Core assistant, diagnostics, and one-tap actions (talk to Cr1tt3r, report a problem, take a screenshot, update). The rings show live <b>CPU, RAM and VRAM</b> use. The badge shows the current <b>VRAM-saver tier</b> (change it in Settings → AI / VRAM).</p>
                 <p><b>Cold mode</b> (default) uses built-in dialogue and sends <i>zero</i> AI traffic — fully offline and free. <b>Go Live</b> connects to your local LM Studio so the Core can answer questions and run safe actions for you (open an app, run a diagnostic, search files). Live mode only works when LM Studio is running with a model loaded.</p>
                 <p>Use the controls here to run a <b>system diagnostic</b>, watch temperatures, toggle <b>performance mode</b>, and talk to the Core. Nothing leaves your machine.</p>
             </details>
@@ -331,10 +331,6 @@
                     <button class="sc-control-btn" data-sc-control="report">
                         <span class="sc-ctl-ico">⚑</span><span class="sc-ctl-label">Report a Problem</span>
                         <span class="sc-ctl-sub" id="sc-ctl-report-sub">collect &amp; send the error log</span>
-                    </button>
-                    <button class="sc-control-btn" data-sc-control="tune">
-                        <span class="sc-ctl-ico">🎚</span><span class="sc-ctl-label">Tune My Settings</span>
-                        <span class="sc-ctl-sub">best settings for your hardware</span>
                     </button>
                     <button class="sc-control-btn" data-sc-control="screenshot">
                         <span class="sc-ctl-ico">📷</span><span class="sc-ctl-label">Screenshot</span>
@@ -536,7 +532,7 @@
                 </div>
                 <div id="ai-log"></div>
                 <div class="row" style="margin-top:10px;">
-                    <input id="ai-in" placeholder="Ask anything, or 'install krita', 'tune my settings', 'open apps'…" autocomplete="off">
+                    <input id="ai-in" placeholder="Ask anything, or 'install krita', 'use less VRAM', 'open apps'…" autocomplete="off">
                     <button class="primary" data-action="ai-send">Send</button>
                 </div>
             </div>
@@ -630,25 +626,6 @@
                         <input id="ollama-model" placeholder="qwen2.5-coder:7b" autocomplete="off" style="width:170px;">
                         <button id="ollama-pull" type="button">Pull &amp; use</button>
                     </div>
-                </div>
-                <div class="setting" style="display:block;border-top:1px solid var(--line,#2a3242);margin-top:8px;padding-top:10px;">
-                    <div class="label" style="margin-bottom:8px;">Let Cr1tt3r tune everything for you<small>Answer two quick questions and Cr1tt3r picks the best settings for your hardware — visual effects, VRAM saver, performance, update checks and the AI engine — so you don't have to.</small></div>
-                    <div class="row" style="gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:8px;">
-                        <span class="muted">Priority:</span>
-                        <select id="tune-priority" style="width:auto;min-width:170px;">
-                            <option value="balanced">Balanced (recommended)</option>
-                            <option value="performance">Max performance</option>
-                            <option value="lowpower">Quiet &amp; low-power</option>
-                            <option value="visuals">Best visuals</option>
-                        </select>
-                        <span class="muted">Run heavy apps at once?</span>
-                        <select id="tune-multitask" style="width:auto;min-width:80px;">
-                            <option value="no">No</option>
-                            <option value="yes">Yes</option>
-                        </select>
-                        <button class="primary" id="tune-apply" type="button">Tune my settings</button>
-                    </div>
-                    <div id="tune-result" class="muted" style="font-size:11px;"></div>
                 </div>
                 <div class="setting">
                     <div class="label">Current model<small id="ai-model-sub">Built-in model, or whatever you load in LM Studio when the built-in AI is off.</small></div>
@@ -828,26 +805,6 @@
                     <button data-action="stability-refresh">↻ Community tally</button>
                     <span id="stability-tally" class="muted mono">—</span>
                     <button data-action="stability-share" class="primary">React 👍/👎 on the release</button>
-                </div>
-            </div>
-
-            <div class="card">
-                <h3>Tune This PC</h3>
-                <div class="muted" style="margin-bottom:8px;">
-                    Scan your hardware and apply the best settings for <em>this</em> machine —
-                    CPU governor, swappiness, zram, file-watcher limits, and CodeMaker's VRAM
-                    default. Optional: a short CPU stress test to check stability under load.
-                </div>
-                <div class="row" style="align-items:center;">
-                    <button data-action="tune-scan">🔍 Scan hardware</button>
-                    <button data-action="tune-stress" title="Loads all CPU cores for ~10 seconds while watching temperature.">🔥 Stress test (10s)</button>
-                    <span id="tune-status" class="muted mono"></span>
-                </div>
-                <pre id="tune-output" class="mono" style="display:none;white-space:pre-wrap;background:var(--panel-2,#0d130d);border:1px solid var(--line,#1c2a1c);border-radius:8px;padding:10px 12px;margin-top:8px;max-height:240px;overflow:auto;font-size:12px;"></pre>
-                <div class="row" style="margin-top:8px;align-items:center;">
-                    <button class="primary" data-action="tune-apply" id="tune-apply-btn" disabled>Apply recommended tuning</button>
-                    <button data-action="tune-reset">Reset to defaults</button>
-                    <span id="tune-applied" class="muted mono"></span>
                 </div>
             </div>
 

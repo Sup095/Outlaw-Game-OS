@@ -1319,7 +1319,7 @@
                 if (nav) nav.click();
                 break;
             }
-            // C14 — hub actions: surface the assistant, the error log + the tuner.
+            // C14 — hub actions: surface the assistant, the error log + screenshot.
             case 'ask-ai': {
                 const nav = document.querySelector('[data-screen="ai"]');
                 if (nav) nav.click();
@@ -1332,15 +1332,6 @@
                 setTimeout(() => {
                     const c = document.querySelector('#report-card');
                     if (c) c.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                }, 90);
-                break;
-            }
-            case 'tune': {
-                const nav = document.querySelector('[data-screen="settings"]');
-                if (nav) nav.click();
-                setTimeout(() => {
-                    const c = document.querySelector('#tune-apply');
-                    if (c) c.scrollIntoView({ behavior: 'smooth', block: 'center' });
                 }, 90);
                 break;
             }

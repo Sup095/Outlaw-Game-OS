@@ -188,16 +188,6 @@ contextBridge.exposeInMainWorld('outlaw', {
         apply: () => ipcRenderer.invoke('drivers:apply'),
         revert: () => ipcRenderer.invoke('drivers:revert'),
     },
-    // Phase 5: per-machine hardware tuning. probe/recommend/stress/status are
-    // read-only; apply/reset are privileged (pkexec) via the outlaw-tune helper.
-    tune: {
-        probe: () => ipcRenderer.invoke('tune:probe'),
-        recommend: () => ipcRenderer.invoke('tune:recommend'),
-        stress: (seconds) => ipcRenderer.invoke('tune:stress', seconds),
-        status: () => ipcRenderer.invoke('tune:status'),
-        apply: () => ipcRenderer.invoke('tune:apply'),
-        reset: () => ipcRenderer.invoke('tune:reset'),
-    },
     installer: {
         launch: () => ipcRenderer.invoke('installer:launch'),
     },

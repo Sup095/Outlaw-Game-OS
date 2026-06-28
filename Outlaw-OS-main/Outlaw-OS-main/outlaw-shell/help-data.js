@@ -269,7 +269,8 @@ window.OUTLAW_HELP = [
         keywords: 'system core hub command center telemetry diagnostics control ai health rings',
         body: '<p>The <b>System Core</b> is your command center: live CPU / RAM / VRAM rings, '
             + 'diagnostics, and one-tap actions — <b>Ask Cr1tt3r</b>, <b>Report a Problem</b>, '
-            + '<b>Tune My Settings</b>, update, and performance mode. The Report button even shows '
+            + '<b>Screenshot</b>, update, and performance mode. To change settings for your hardware, '
+            + 'just ask Cr1tt3r (e.g. "use less VRAM"). The Report button even shows '
             + 'how many issues are in the error log.</p>',
     },
     {
@@ -330,11 +331,11 @@ window.OUTLAW_HELP = [
             + 'never the kernel driver or bootloader — so it\'s fully revertible.</p>',
     },
     {
-        id: 'tuner', cat: 'Settings & updates', title: 'Tune my settings',
-        keywords: 'tune tuner hardware scan stress test auto settings recommend best optimize',
-        body: '<p><b>Tune my settings</b> (in Settings, or just ask Cr1tt3r) looks at your hardware and picks '
-            + 'the best settings for you — visual effects, the VRAM/RAM saver, performance mode, update checks '
-            + 'and the AI engine. There\'s also a hardware scan and an optional short stress test that watches '
-            + 'your temperature.</p>',
+        id: 'ai-tune', cat: 'AI', title: 'Let the AI change settings for you',
+        keywords: 'tune settings auto recommend best optimize vram performance ai cr1tt3r change adjust',
+        body: '<p>Just <b>ask Cr1tt3r</b> in plain language and it changes the setting for you — '
+            + '"use less VRAM", "switch the AI to LM Studio", "turn on performance mode", "make the text bigger", '
+            + '"use the green theme". It can set the VRAM/RAM saver, visual effects, performance mode, update '
+            + 'checks, text size and the AI engine. Every change is safe and reversible.</p>',
     },
 ];
