@@ -114,6 +114,8 @@ contextBridge.exposeInMainWorld('outlaw', {
         // Phase 4: spec-aware local-model recommendation for the setup guide.
         // Forward opts ({purpose,tier,spill}) so the dev/desktop + tier choices apply.
         recommend: (opts) => ipcRenderer.invoke('ai:recommend', opts),
+        // #2: optional plain-language AI take on the recommendation (best-effort).
+        recommendExplain: (opts) => ipcRenderer.invoke('ai:recommend-explain', opts),
         // Phase 4: hardware-aware plain-prose setup chat (walks the user through
         // getting a local model running). payload = { prompt, history? }.
         setupChat: (payload) => ipcRenderer.invoke('ai:setup-chat', payload),

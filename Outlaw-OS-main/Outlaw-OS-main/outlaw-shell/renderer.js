@@ -2208,7 +2208,10 @@ function escapeHtml(s) {
     return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 
-// Phase 4: render the spec-aware model recommendation into the AI setup card.
+// Phase 4 / #2: render the spec-aware recommendation into the AI setup card.
+// Shows the best ENGINE for this machine (built-in / Ollama / LM Studio — not just
+// LM Studio) plus a setup path for each, the recommended one expanded. An optional
+// plain-language AI "take" is filled in async by checkPc (see #ai-setup-ai-take).
 function renderAiRecommendation(r) {
     const out = $('#ai-setup-result');
     if (!out) return;
@@ -2218,25 +2221,59 @@ function renderAiRecommendation(r) {
         : (r.gpuName ? `${escapeHtml(r.gpuName)} · no dedicated VRAM` : 'no discrete GPU');
     const rec = r.recommended || {};
     const starter = r.starter || {};
-    const starterLine = (r.sameAsStarter || !starter.model) ? '' :
-        `<p class="muted" style="margin:6px 0 0;">Weak PC or not sure? Start with <b>${escapeHtml(starter.model)}</b> (${escapeHtml(starter.size || '')}) — ${escapeHtml(starter.note || '')} Once it's running you can ask <em>it</em> how to set up the bigger one.</p>`;
+    const engine = r.recommendedEngine || 'ollama';
+    const ollamaTag = rec.ollama || '';
+    const engineLabel = engine === 'base' ? 'the built-in AI (already on — no setup)'
+        : engine === 'ollama' ? 'Ollama (one command, works on any GPU or CPU)'
+        : 'LM Studio (point-and-click app)';
+    const gpuNote = r.gpuOffload
+        ? 'You have a capable GPU, so it runs fast on the GPU.'
+        : 'No dedicated GPU — it runs on your CPU + RAM (still works, just slower).';
+    const op = (e) => (e === engine ? ' open' : '');   // expand the recommended one
+
+    // Path 1 — built-in (zero setup).
+    const builtin = `
+        <details${op('base')}><summary><b>Built-in AI</b> — zero setup ${engine === 'base' ? '· recommended' : ''}</summary>
+            <div class="muted" style="padding:6px 0 2px;line-height:1.6;">
+                Outlaw ships a tiny model that's already running — just open <b>Settings → AI &amp; VRAM</b>,
+                set the AI engine to <b>Built-in</b>, and ask away. Great for light help and system control on
+                any PC. For bigger, smarter answers, use Ollama or LM Studio below.
+            </div>
+        </details>`;
+    // Path 2 — Ollama (recommended default for most machines).
+    const ollama = `
+        <details${op('ollama')}><summary><b>Ollama</b> — one command ${engine === 'ollama' ? '· recommended' : ''}</summary>
+            <ol style="margin:6px 0 0;padding-left:20px;line-height:1.6;">
+                <li>Open <b>Settings → AI &amp; VRAM</b>, set the AI engine to <b>Ollama</b>.</li>
+                <li>In the <b>Ollama model</b> box, enter <code>${escapeHtml(ollamaTag || 'qwen2.5:7b')}</code> and click <b>Pull &amp; use</b> — it downloads, then runs it. ${gpuNote}</li>
+                <li>Come back here and ask anything. (No GUI, no account — it all stays on this PC.)</li>
+            </ol>
+        </details>`;
+    // Path 3 — LM Studio (GUI alternative).
+    const lmstudio = `
+        <details${op('lmstudio')}><summary><b>LM Studio</b> — point-and-click app ${engine === 'lmstudio' ? '· recommended' : ''}</summary>
+            <ol style="margin:6px 0 0;padding-left:20px;line-height:1.6;">
+                <li>Click <b>Get / Open LM Studio</b> above — it opens <b>lmstudio.ai</b>. Download the <b>Linux</b> AppImage (no installer — the AppImage <i>is</i> the app), save it to <b>Downloads</b> or <b>Applications</b>, then click <b>Get / Open LM Studio</b> again so Outlaw makes it runnable and launches it.</li>
+                <li>In LM Studio's search, find <b>${escapeHtml(rec.model)}</b> and download it.</li>
+                <li>Load it. ${r.gpuOffload ? 'Turn <b>GPU offload ON</b>.' : 'Leave GPU offload off (CPU).'} Set context length to <b>${rec.ctx}</b>, then click <b>Start Server</b> (port 1234).</li>
+                <li>Open <b>Settings → AI &amp; VRAM</b>, set the engine to <b>LM Studio</b>, and ask away.</li>
+            </ol>
+        </details>`;
+
     out.innerHTML = `
         <div style="border-top:1px solid var(--line,#2a2f29);padding-top:10px;">
             <div class="mono muted" style="font-size:12px;">
                 ${escapeHtml(r.cpu)} · ${r.cores} cores · ${r.ramGb} GB RAM · ${gpuTxt}
             </div>
-            <p style="margin:8px 0 2px;"><b>Recommended:</b> ${escapeHtml(rec.model)}
+            <p style="margin:8px 0 2px;"><b>Best for your PC:</b> ${engineLabel}</p>
+            <p style="margin:0 0 2px;"><b>Recommended model:</b> ${escapeHtml(rec.model)}
                 <span class="muted">(${escapeHtml(rec.size)})</span></p>
             ${r.note ? `<p class="muted" style="margin:0 0 2px;">${escapeHtml(r.note)}</p>` : ''}
             <p class="muted" style="margin:0;">Runs on: ${escapeHtml(r.runsOn)} · context length ${rec.ctx}</p>
-            ${starterLine}
-            <ol style="margin:10px 0 0;padding-left:20px;line-height:1.6;">
-                <li>Click <b>Get / Open LM Studio</b> above — it opens <b>lmstudio.ai</b>. Download the <b>Linux</b> build: a file named like <code>LM-Studio-&lt;version&gt;.AppImage</code> (a few hundred MB, no installer — the AppImage <i>is</i> the app). Save it to your <b>Downloads</b> or <b>Applications</b> folder, then click <b>Get / Open LM Studio</b> again — Outlaw makes it runnable and launches it for you (no need to fiddle with the file).</li>
-                <li>In LM Studio's search, find <b>${escapeHtml(rec.model)}</b> and download it.</li>
-                <li>Load the model. ${r.gpuOffload ? 'Turn <b>GPU offload ON</b> (you have a capable GPU).' : 'Leave GPU offload off — it runs on your CPU.'} Set context length to <b>${rec.ctx}</b>.</li>
-                <li>Click <b>Start Server</b> in LM Studio (top bar, port 1234).</li>
-                <li>Open <b>Settings → Local AI Assistant</b> and flip <b>Enable on-device AI</b> on. That's it — come back here and ask anything.</li>
-            </ol>
+            <div id="ai-setup-ai-take" class="muted" style="margin:8px 0 0;font-style:italic;"></div>
+            <div style="margin-top:10px;display:flex;flex-direction:column;gap:6px;">
+                ${builtin}${ollama}${lmstudio}
+            </div>
         </div>`;
 }
 
@@ -2653,6 +2690,16 @@ function wire() {
             };
             try {
                 renderAiRecommendation(await api.ai.recommend(opts));
+                // #2 — fill in the plain-language AI take async (best-effort; the
+                // reliable recommendation is already on screen if the AI is down).
+                const take = $('#ai-setup-ai-take');
+                if (take) {
+                    take.textContent = '';
+                    try {
+                        const ex = await api.ai.recommendExplain(opts);
+                        if (ex && ex.ok && ex.text) take.textContent = '“' + ex.text + '” — Cr1tt3r';
+                    } catch {}
+                }
             } catch (err) {
                 if (out) out.innerHTML = '<span class="muted">Could not read specs: ' + escapeHtml(err.message) + '</span>';
             }

@@ -486,7 +486,7 @@
 
             <details class="page-help">
                 <summary>How does the AI work?</summary>
-                <p>Outlaw runs AI <b>privately on this PC</b> — no internet, no account, nothing leaves the machine. It talks to <b>LM Studio</b> (a free local model runner). Click <b>Check my PC</b> below and Outlaw picks a model your hardware can actually run, then walks you through installing it. Weak PC? There's a tiny model that runs on almost anything — once it's loaded it can answer the rest of your setup questions itself.</p>
+                <p>Outlaw runs AI <b>privately on this PC</b> — no internet, no account, nothing leaves the machine. You can run it three ways: the <b>built-in</b> tiny model (already on, zero setup), <b>Ollama</b> (one command, works on any GPU or CPU), or <b>LM Studio</b> (a point-and-click app). Click <b>Check my PC</b> below and Outlaw reads your RAM, GPU and CPU, picks a model your hardware can actually run, and recommends the best engine for it — then walks you through that path.</p>
             </details>
 
             <div class="card" id="ai-setup-card">
@@ -514,7 +514,7 @@
                 </div>
                 <div id="ai-setup-result" style="margin-top:12px;"></div>
                 <div style="margin-top:12px;border-top:1px solid var(--line,#2a2f29);padding-top:10px;">
-                    <div class="label" style="margin-bottom:6px;">Stuck? Ask the AI to set itself up<small>Once a model is loaded in LM Studio it answers right here — already knowing your exact hardware.</small></div>
+                    <div class="label" style="margin-bottom:6px;">Stuck? Ask the AI to set itself up<small>Once any model is running (built-in, Ollama or LM Studio) it answers right here — already knowing your exact hardware.</small></div>
                     <div id="ai-setup-chat-log" style="margin-bottom:8px;"></div>
                     <div class="row" style="gap:8px;">
                         <input id="ai-setup-chat-in" placeholder="e.g. which model should I pick? how do I start the server?" autocomplete="off">

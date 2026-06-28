@@ -675,20 +675,22 @@ function recommendModel(ramGb, vramGb, opts = {}) {
     const gpu = vramGb >= 4;                       // a usable discrete GPU?
     const starter = { model: 'Qwen2.5 0.5B Instruct (Q4_K_M)', size: '~0.4 GB',
                       note: 'Runs on almost anything, even old laptops.' };
-    // General instruct catalogue (desktop), smallest → largest.
+    // General instruct catalogue (desktop), smallest → largest. `ollama` is the
+    // pull tag for the Ollama engine; the same weights are searchable by name in
+    // LM Studio. Both engines (and CPU-only) work on any GPU vendor.
     const M = {
-        s05: { model: 'Qwen2.5 0.5B Instruct (Q4_K_M)', size: '~0.4 GB', ctx: 2048, tier: 'tiny' },
-        s3:  { model: 'Llama 3.2 3B Instruct (Q4_K_M)',  size: '~2.2 GB', ctx: 4096, tier: 'small' },
-        s7:  { model: 'Qwen2.5 7B Instruct (Q4_K_M)',    size: '~4.7 GB', ctx: 8192, tier: 'medium' },
-        s14: { model: 'Qwen2.5 14B Instruct (Q4_K_M)',   size: '~9 GB',   ctx: 8192, tier: 'large' },
-        s32: { model: 'Qwen2.5 32B Instruct (Q4_K_M)',   size: '~19 GB',  ctx: 8192, tier: 'xl' },
+        s05: { model: 'Qwen2.5 0.5B Instruct (Q4_K_M)', size: '~0.4 GB', ctx: 2048, tier: 'tiny',   ollama: 'qwen2.5:0.5b' },
+        s3:  { model: 'Llama 3.2 3B Instruct (Q4_K_M)',  size: '~2.2 GB', ctx: 4096, tier: 'small',  ollama: 'llama3.2:3b' },
+        s7:  { model: 'Qwen2.5 7B Instruct (Q4_K_M)',    size: '~4.7 GB', ctx: 8192, tier: 'medium', ollama: 'qwen2.5:7b' },
+        s14: { model: 'Qwen2.5 14B Instruct (Q4_K_M)',   size: '~9 GB',   ctx: 8192, tier: 'large',  ollama: 'qwen2.5:14b' },
+        s32: { model: 'Qwen2.5 32B Instruct (Q4_K_M)',   size: '~19 GB',  ctx: 8192, tier: 'xl',     ollama: 'qwen2.5:32b' },
     };
     // Coding catalogue (Dev session) — Qwen2.5-Coder, bigger context for code.
     const C = {
-        c15: { model: 'Qwen2.5-Coder 1.5B (Q4_K_M)', size: '~1.0 GB', ctx: 8192,  tier: 'tiny' },
-        c7:  { model: 'Qwen2.5-Coder 7B (Q4_K_M)',   size: '~4.7 GB', ctx: 16384, tier: 'medium' },
-        c14: { model: 'Qwen2.5-Coder 14B (Q4_K_M)',  size: '~9 GB',   ctx: 16384, tier: 'large' },
-        c32: { model: 'Qwen2.5-Coder 32B (Q4_K_M)',  size: '~19 GB',  ctx: 16384, tier: 'xl' },
+        c15: { model: 'Qwen2.5-Coder 1.5B (Q4_K_M)', size: '~1.0 GB', ctx: 8192,  tier: 'tiny',   ollama: 'qwen2.5-coder:1.5b' },
+        c7:  { model: 'Qwen2.5-Coder 7B (Q4_K_M)',   size: '~4.7 GB', ctx: 16384, tier: 'medium', ollama: 'qwen2.5-coder:7b' },
+        c14: { model: 'Qwen2.5-Coder 14B (Q4_K_M)',  size: '~9 GB',   ctx: 16384, tier: 'large',  ollama: 'qwen2.5-coder:14b' },
+        c32: { model: 'Qwen2.5-Coder 32B (Q4_K_M)',  size: '~19 GB',  ctx: 16384, tier: 'xl',     ollama: 'qwen2.5-coder:32b' },
     };
     let rec, budget, runsOn, note;
 
@@ -722,12 +724,20 @@ function recommendModel(ramGb, vramGb, opts = {}) {
         note = 'The most capable general model your PC can run.';
     }
 
+    // Engine recommendation — vendor-agnostic (uses vramGb, which already reads
+    // NVIDIA via nvidia-smi AND AMD/Intel via the DRM sysfs node). Ollama is the
+    // one-command default that works on any GPU or CPU-only; the built-in model
+    // suits very weak PCs with zero setup; LM Studio is the GUI alternative. This
+    // is a sensible default — the on-device AI refines it in plain language.
+    const weak = !gpu && ramGb < 8;
+    const recommendedEngine = (weak || rec.tier === 'tiny') ? 'base' : 'ollama';
+
     return {
         gpu, purpose, budgetGb: Math.round(budget * 10) / 10,
         tier: purpose === 'desktop' ? tier : null,
         spill: purpose === 'dev' ? spill : null,
         runsOn, note, gpuOffload: gpu,
-        starter, recommended: rec,
+        starter, recommended: rec, recommendedEngine,
         sameAsStarter: rec.model === starter.model,
     };
 }
@@ -2267,6 +2277,40 @@ function registerIpc() {
         const s = await gatherSpecs();
         const rec = recommendModel(s.ramGb, s.vramGb, opts || {});
         return { ok: true, ...s, ...rec };
+    });
+
+    // #2 — "use AI, not just a preset". After the deterministic recommendation is
+    // shown, the on-device AI adds a short plain-language take on what THIS machine
+    // can comfortably run and which engine fits best. Best-effort: if no AI is
+    // reachable we return ok:false and the UI simply omits the paragraph (the
+    // reliable preset recommendation is always shown either way).
+    ipcMain.handle('ai:recommend-explain', async (_e, opts) => {
+        try {
+            const be = aiBackend();
+            const st = await aiAgent.status(be);
+            if (!st.available) return { ok: false };
+            const s = await gatherSpecs();
+            const rec = recommendModel(s.ramGb, s.vramGb, opts || {});
+            const m = rec.recommended || {};
+            const engineName = rec.recommendedEngine === 'base' ? 'the built-in model (no setup)'
+                : rec.recommendedEngine === 'ollama' ? 'Ollama' : 'LM Studio';
+            const sys = 'You are Cr1tt3r, this PC\'s on-device AI. In 2-3 short, friendly sentences, '
+                + 'tell the user in plain language what their hardware can comfortably run for local AI and '
+                + 'why the recommended engine fits. Be concrete but not technical. No lists, no JSON, no markdown.';
+            const user = 'This computer: ' + machineSummary(s) + '. '
+                + 'Recommended model: ' + (m.model || '?') + ' (' + (m.size || '?') + '). '
+                + 'Recommended engine: ' + engineName + '. '
+                + 'GPU offload: ' + (rec.gpuOffload ? 'yes' : 'no (CPU + RAM)') + '. '
+                + 'Write the short take now.';
+            const text = await aiAgent.chat(
+                [{ role: 'system', content: sys }, { role: 'user', content: user }],
+                { ...be, maxTokens: 180 },
+            );
+            const clean = String(text || '').trim();
+            return clean ? { ok: true, text: clean } : { ok: false };
+        } catch {
+            return { ok: false };
+        }
     });
 
     // Phase 4: hardware-aware setup guide. A plain-prose chat (NOT the JSON-intent
