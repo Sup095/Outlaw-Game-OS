@@ -62,8 +62,8 @@ class SettingsDialog(QDialog):
         self.result_config: dict | None = None
 
         intro = QLabel(
-            "Tell Outlaw where your Godot project lives and how to reach LM Studio. "
-            "Changes apply immediately — no restart, no editing files."
+            "Tell Outlaw where your Godot project lives and how to reach your AI engine "
+            "(LM Studio or Ollama). Changes apply immediately — no restart, no editing files."
         )
         intro.setWordWrap(True)
         intro.setStyleSheet(f"color:{COLORS['muted']};")
@@ -171,13 +171,23 @@ class SettingsDialog(QDialog):
         layout.addLayout(btns)
 
     def _on_engine_changed(self, _idx: int) -> None:
-        # Fill the backend URL for the chosen engine; the user can still edit it.
+        # Fill the backend URL + a sensible model default for the chosen engine;
+        # the user can still edit both.
         if self.engine_combo.currentData() == "ollama":
             self.url_edit.setText("http://127.0.0.1:11434/v1")
             self.model_edit.setPlaceholderText("an Ollama tag, e.g. qwen2.5-coder:7b")
+            # #12 — Ollama needs a REAL model tag; LM Studio's 'local-model' sentinel
+            # 404s on Ollama's OpenAI endpoint. If the field still holds the sentinel
+            # (or is blank), pre-fill the recommended coder tag so it works out of the
+            # box (pull it from Settings → AI on the desktop, or `ollama pull`).
+            if self.model_edit.text().strip() in ("", "local-model"):
+                self.model_edit.setText("qwen2.5-coder:7b")
         else:
             self.url_edit.setText("http://localhost:1234/v1")
             self.model_edit.setPlaceholderText("local-model = auto-detect the loaded model")
+            # Restore LM Studio's auto-detect sentinel if leaving the Ollama default.
+            if self.model_edit.text().strip() in ("", "qwen2.5-coder:7b"):
+                self.model_edit.setText("local-model")
 
     def _save(self) -> None:
         cfg = copy.deepcopy(self._config)

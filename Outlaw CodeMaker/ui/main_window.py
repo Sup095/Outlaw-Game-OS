@@ -1167,19 +1167,29 @@ class MainWindow(QMainWindow):
         from .new_game_wizard import NewGameWizard, build_guided_kickoff_task
         paths = self.config.get("paths") or {}
         default_parent = Path(paths.get("default_games_dir") or (Path.home() / "Godot Games"))
-        wizard = NewGameWizard(default_parent_dir=default_parent, parent=self)
-        if not wizard.exec() or wizard.result is None:
-            return
-        result = wizard.result
-        self.projects_store.register(
-            name=result.name,
-            path=str(result.project_path),
-            dimension=result.dimension,
-            genre=result.genre or None,
-        )
-        self._switch_to_project(str(result.project_path).replace("\\", "/"))
-        if result.start_guided_session:
-            self.queue_kickoff_task(build_guided_kickoff_task(result))
+        # #13 — guard the WHOLE New Game flow (wizard construction, registry
+        # register, project switch, kickoff) so nothing on the "create game" path
+        # can crash the app; any failure becomes a clear dialog instead.
+        try:
+            wizard = NewGameWizard(default_parent_dir=default_parent, parent=self)
+            if not wizard.exec() or wizard.result is None:
+                return
+            result = wizard.result
+            self.projects_store.register(
+                name=result.name,
+                path=str(result.project_path),
+                dimension=result.dimension,
+                genre=result.genre or None,
+            )
+            self._switch_to_project(str(result.project_path).replace("\\", "/"))
+            if result.start_guided_session:
+                self.queue_kickoff_task(build_guided_kickoff_task(result))
+        except Exception as exc:  # noqa: BLE001 — the New Game flow must never crash the app
+            logger.exception("New Game flow failed")
+            QMessageBox.critical(
+                self, "New Game failed",
+                f"Something went wrong starting a new game:\n\n{exc}",
+            )
 
     def _switch_to_project(self, path: str) -> None:
         """Re-point the orchestrator at a different Godot project. Reuses the

@@ -720,45 +720,61 @@ class NewGameWizard(QDialog):
             "created_with": "outlaw-codemaker-wizard",
             "mode": self.mode,
         }
-        if self.mode == "quick":
-            metadata["genre"] = self.genre_field.value()
-            metadata["style"] = self.style_field.value()
-            metadata["mechanics"] = self.mechanics_field.value()
-        else:
-            metadata["initial_notes"] = self.guided_notes.toPlainText().strip()
-        # Reserve the Steam config block in the shape the Steam panel reads.
-        # The user fills these in later via Steam panel → Save Steam config.
-        # See core/steam_publish.SteamConfig for the canonical schema.
-        metadata.setdefault("steam", {
-            "app_id": "",
-            "build_account": "",
-            "default_branch": "default",
-            "depots": [],
-        })
-        metadata.setdefault("build_dir", "build")
-
+        # #13 — the field reads + sidecar write are best-effort: the scaffold has
+        # already succeeded, so a bad field value or a non-serializable entry must
+        # NEVER crash project creation. Broadened from OSError to Exception so JSON
+        # (TypeError/ValueError from json.dumps) and attribute errors are caught too.
         try:
+            if self.mode == "quick":
+                metadata["genre"] = self.genre_field.value()
+                metadata["style"] = self.style_field.value()
+                metadata["mechanics"] = self.mechanics_field.value()
+            else:
+                metadata["initial_notes"] = self.guided_notes.toPlainText().strip()
+            # Reserve the Steam config block in the shape the Steam panel reads.
+            # The user fills these in later via Steam panel → Save Steam config.
+            # See core/steam_publish.SteamConfig for the canonical schema.
+            metadata.setdefault("steam", {
+                "app_id": "",
+                "build_account": "",
+                "default_branch": "default",
+                "depots": [],
+            })
+            metadata.setdefault("build_dir", "build")
             write_outlaw_metadata(target, metadata)
-        except OSError as exc:
+        except Exception as exc:  # noqa: BLE001 — sidecar is optional; never crash
+            logger.warning("Project metadata/sidecar not fully written: %s", exc)
             QMessageBox.warning(
                 self, "Sidecar warning",
                 f"Project was created, but I couldn't write .outlaw/project.json:\n\n{exc}\n\n"
                 "You can still proceed — Steam publishing will need you to add it later.",
             )
 
-        self.result = WizardResult(
-            mode=self.mode,
-            name=name,
-            project_path=target,
-            dimension=dim,
-            template_id=template.id,
-            genre=metadata.get("genre", ""),
-            style=metadata.get("style", ""),
-            mechanics=metadata.get("mechanics", ""),
-            start_guided_session=(self.mode == "guided"),
-            metadata=metadata,
-        )
-        self.accept()
+        # #13 — build the result + close the dialog under a guard too: this runs in
+        # a Qt slot, so an unhandled exception here crashes the whole app instead of
+        # just failing the wizard. The project files already exist on disk either way.
+        try:
+            self.result = WizardResult(
+                mode=self.mode,
+                name=name,
+                project_path=target,
+                dimension=dim,
+                template_id=template.id,
+                genre=metadata.get("genre", ""),
+                style=metadata.get("style", ""),
+                mechanics=metadata.get("mechanics", ""),
+                start_guided_session=(self.mode == "guided"),
+                metadata=metadata,
+            )
+            self.accept()
+        except Exception as exc:  # noqa: BLE001 — must not crash the app from a slot
+            logger.exception("New Game finish failed while building the result")
+            QMessageBox.critical(
+                self, "Couldn't finish",
+                f"Your project files were created at:\n{target}\n\n"
+                f"…but finishing the wizard failed:\n\n{exc}\n\n"
+                "You can open the project from the picker.",
+            )
 
 
 # ---------------------------------------------------------------------------
