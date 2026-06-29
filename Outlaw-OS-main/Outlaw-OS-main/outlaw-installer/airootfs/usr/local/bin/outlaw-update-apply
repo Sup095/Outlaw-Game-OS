@@ -59,11 +59,13 @@ VERSION="$(sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$N
 # old problem where the shell updated but the helper scripts didn't. Done BEFORE
 # the shell swap; the folder is removed afterwards so the shell dir stays clean.
 COMP="$NEW/components"
+PKG_MANIFEST=""          # stashed before $COMP is removed; synced after the swap
 if [[ -d "$COMP" ]]; then
     echo "Installing components (helpers, greeter, first-boot, installer, CodeMaker)…"
     if [[ -d "$COMP/bin" ]]; then
         for f in "$COMP/bin"/outlaw-*; do
-            [[ -f "$f" ]] && install -Dm755 "$f" "/usr/local/bin/$(basename "$f")"
+            [[ -f "$f" ]] && install -Dm755 "$f" "/usr/local/bin/$(basename "$f")" \
+                && echo "  • helper: $(basename "$f")"
         done
     fi
     for pair in "greeter:/usr/share/outlaw-greeter" \
@@ -72,10 +74,12 @@ if [[ -d "$COMP" ]]; then
         src="$COMP/${pair%%:*}"; dst="${pair##*:}"
         if [[ -d "$src" ]]; then
             mkdir -p "$dst"; cp -rT "$src" "$dst"; chown -R root:root "$dst"
+            echo "  • ${pair%%:*} -> $dst"
         fi
     done
     [[ -f "$COMP/polkit/49-outlaw.rules" ]] \
-        && install -Dm644 "$COMP/polkit/49-outlaw.rules" /etc/polkit-1/rules.d/49-outlaw.rules
+        && install -Dm644 "$COMP/polkit/49-outlaw.rules" /etc/polkit-1/rules.d/49-outlaw.rules \
+        && echo "  • polkit rule"
     # CodeMaker: update the CODE only. cp -rT merges over the install, so the
     # existing .venv, db/ and user data (not carried in the payload) are kept —
     # the Dev session keeps working with its already-built environment.
@@ -83,6 +87,13 @@ if [[ -d "$COMP" ]]; then
         mkdir -p /opt/outlaw-codemaker
         cp -rT "$COMP/codemaker" /opt/outlaw-codemaker
         chown -R root:root /opt/outlaw-codemaker 2>/dev/null || true
+        echo "  • CodeMaker (code only — venv/db/user data kept)"
+    fi
+    # Stash the package manifest for the post-swap sync ($COMP is removed next,
+    # and $NEW gets moved into place).
+    if [[ -f "$COMP/packages.list" ]]; then
+        PKG_MANIFEST="$TMP/packages.list"
+        cp "$COMP/packages.list" "$PKG_MANIFEST"
     fi
     rm -rf "$COMP"
 fi
@@ -97,3 +108,27 @@ chown -R root:root "$TARGET"
 chmod -R go-w "$TARGET"
 
 echo "Outlaw shell updated to v${VERSION:-?}. Previous version kept at $BACKUP."
+
+# --- System package sync (comprehensive update) -----------------------------
+# #7/#9 — install any packages added since this machine was installed (e.g. the
+# audio stack) so an OTA update isn't "just the shell". Best-effort: the shell +
+# components already updated, so a mirror hiccup or an unavailable package must
+# NOT fail the whole update. We only ADD/refresh (--needed); we never auto-remove,
+# because a wrong removal could break a working system.
+if [[ -n "$PKG_MANIFEST" && -f "$PKG_MANIFEST" ]]; then
+    mapfile -t _pkgs < <(grep -E '^[a-z0-9][a-z0-9._+-]*$' "$PKG_MANIFEST")
+    if (( ${#_pkgs[@]} > 0 )); then
+        echo "Syncing system packages (${#_pkgs[@]} expected; installing any new/missing)…"
+        if pacman -Sy --needed --noconfirm "${_pkgs[@]}"; then
+            echo "Package sync complete."
+        else
+            echo "Note: some packages couldn't be installed (offline or a mirror was down). The shell + components update is fine; re-run the updater later to finish packages." >&2
+        fi
+    fi
+fi
+
+# Diagnostic breadcrumb — records what version this machine last applied + when,
+# so "is the update actually applying?" can be answered at a glance.
+mkdir -p /var/lib/outlaw-os 2>/dev/null || true
+{ echo "version=${VERSION:-?}"; echo "applied=$(date -Iseconds 2>/dev/null || echo unknown)"; } \
+    > /var/lib/outlaw-os/last-update 2>/dev/null || true

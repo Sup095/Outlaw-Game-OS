@@ -276,6 +276,18 @@ jobs:
           [ -d "$BASE/outlaw-installer-gui" ] && \
             rsync -a --exclude=node_modules "$BASE/outlaw-installer-gui/" "$STAGE/components/installer-gui/"
           cp "$BASE/outlaw-installer/airootfs/etc/polkit-1/rules.d/49-outlaw.rules" "$STAGE/components/polkit/" 2>/dev/null || true
+          # #7/#9 — ship the canonical installed-system package set so an OTA update
+          # can pull in NEW packages added since the user installed (e.g. the audio
+          # stack). Single source of truth: the installer's ESSENTIAL_PKGS array.
+          # outlaw-update-apply reads components/packages.list and `pacman -S --needed`s
+          # it. Extract the array body, drop comments, split to one name per line.
+          INST="$BASE/outlaw-installer/airootfs/usr/local/bin/outlaw-install"
+          if [ -f "$INST" ]; then
+            awk '/^ESSENTIAL_PKGS=\(/{f=1;next} f&&/^\)/{f=0} f{print}' "$INST" \
+              | sed 's/#.*//' | tr ' \t' '\n\n' \
+              | grep -E '^[a-z0-9][a-z0-9._+-]*$' | sort -u > "$STAGE/components/packages.list"
+            echo "packages.list ($(wc -l < "$STAGE/components/packages.list") pkgs):"; cat "$STAGE/components/packages.list"
+          fi
           CM="$GITHUB_WORKSPACE/Outlaw CodeMaker"
           if [ -d "$CM" ]; then
             rsync -a --exclude=.venv --exclude=db --exclude=backups --exclude=workspace \
