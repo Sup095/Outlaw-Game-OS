@@ -1114,6 +1114,16 @@ h3 { font-size: 13px; text-transform: uppercase; color: var(--term-dim); }
 
 /* ---- Files / Tasks / Terminal ---- */
 .fs-path { color: var(--term-dim); margin-bottom: 8px; word-break: break-all; }
+/* QoL — Files: quick-folder chips + clickable breadcrumb. */
+.fs-quick { display: flex; flex-wrap: wrap; gap: 6px; margin: 2px 0 8px; }
+.fs-chip { padding: 4px 10px; font-size: 12px; border-radius: 999px; cursor: pointer;
+  background: var(--panel-2); border: 1px solid var(--line); color: var(--muted, #8aa); }
+.fs-chip:hover { color: var(--term); border-color: var(--term-dim); }
+.fs-crumbs { display: flex; flex-wrap: wrap; align-items: center; gap: 2px; }
+.fs-crumbs .crumb { background: transparent; border: none; cursor: pointer; padding: 1px 4px;
+  border-radius: 4px; color: var(--term-dim); font: inherit; }
+.fs-crumbs .crumb:hover { color: var(--term); background: rgba(var(--term-rgb),0.08); }
+.fs-crumbs .crumb-sep { color: var(--muted, #678); opacity: .6; }
 .fs-list { display: flex; flex-direction: column; }
 .fs-row { display: flex; gap: 10px; padding: 6px 8px; border-radius: 4px; cursor: pointer; text-transform: none; letter-spacing: 0; text-align: left; background: transparent; border: none; color: var(--text); }
 .fs-row:hover { background: rgba(var(--term-rgb),0.07); color: var(--term); }

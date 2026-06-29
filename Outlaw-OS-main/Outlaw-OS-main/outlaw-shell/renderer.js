@@ -368,7 +368,7 @@ function showScreen(name) {
         const content = document.querySelector('.content');
         if (content) content.scrollTop = 0;
     }
-    if (name === 'files') loadFiles(currentDir || null);
+    if (name === 'files') { _fsFilter = ''; const ff = $('#fs-filter'); if (ff) ff.value = ''; loadFiles(currentDir || null); }
     if (name === 'tasks') { refreshTasks(); startTasksPoll(); } else { stopTasksPoll(); }
     if (name === 'gaming') refreshGaming();
     if (name === 'apps') loadAppsCatalog();
@@ -1017,11 +1017,12 @@ async function launchApp(id) {
 // ---------------------------------------------------------------------------
 let currentDir = null;
 let parentDir = null;
+let _fsFilter = '';
 async function loadFiles(dir) {
     const res = await api.files.list(dir);
     if (res.error) { toast(res.error); }
     currentDir = res.path; parentDir = res.parent;
-    $('#fs-path').textContent = res.path;
+    renderBreadcrumb(res.path);
     const list = $('#fs-list');
     list.innerHTML = '';
     if (!res.entries || !res.entries.length) {
@@ -1042,6 +1043,40 @@ async function loadFiles(dir) {
         const size = e.type === 'file' ? humanSize(e.size) : '';
         row.innerHTML = `<span>${ico}</span><span>${escapeHtml(e.name)}</span><span class="sz">${size}</span>`;
         list.appendChild(row);
+    }
+    applyFsFilter();   // keep any active filter applied across navigation
+}
+
+// QoL — a clickable breadcrumb so you can jump back up several levels in one tap
+// (instead of pressing Up repeatedly).
+function renderBreadcrumb(p) {
+    const el = $('#fs-path');
+    if (!el) return;
+    el.innerHTML = '';
+    el.classList.add('fs-crumbs');
+    const mkCrumb = (label, target) => {
+        const b = document.createElement('button');
+        b.className = 'crumb';
+        b.textContent = label;
+        b.addEventListener('click', () => loadFiles(target));
+        return b;
+    };
+    el.appendChild(mkCrumb('/', '/'));
+    let acc = '';
+    for (const seg of String(p || '').split('/').filter(Boolean)) {
+        acc += '/' + seg;
+        const sep = document.createElement('span'); sep.className = 'crumb-sep'; sep.textContent = '›';
+        el.appendChild(sep);
+        el.appendChild(mkCrumb(seg, acc));
+    }
+}
+
+// QoL — live filter of the current folder (name contains, case-insensitive).
+function applyFsFilter() {
+    const q = _fsFilter.trim().toLowerCase();
+    for (const row of $$('#fs-list .fs-row')) {
+        const name = (row.dataset.name || '').toLowerCase();
+        row.style.display = (!q || name.includes(q)) ? '' : 'none';
     }
 }
 function humanSize(b) {
@@ -2480,6 +2515,14 @@ function wire() {
             }
             return;
         }
+        // QoL — quick-folder chips (Downloads / Documents / …) jump straight there.
+        const fsChip = e.target.closest('.fs-chip');
+        if (fsChip) {
+            const home = await api.files.home();
+            const base = String(home || '').replace(/\/+$/, '');
+            loadFiles(base + '/' + fsChip.dataset.folder);
+            return;
+        }
         const calcBtn = e.target.closest('#calc-pad [data-k]');
         if (calcBtn) { calcKey(calcBtn.dataset.k); return; }
 
@@ -2571,6 +2614,9 @@ function wire() {
     if (appsSearchEl) {
         appsSearchEl.addEventListener('input', (e) => setAppsSearch(e.target.value));
     }
+    // QoL — Files in-folder filter.
+    const fsFilterEl = $('#fs-filter');
+    if (fsFilterEl) fsFilterEl.addEventListener('input', (e) => { _fsFilter = e.target.value || ''; applyFsFilter(); });
 
     // Phase 2 — re-scan apps "On this PC" when the shell regains focus (e.g. after
     // downloading an AppImage in the browser and tabbing back), so it appears

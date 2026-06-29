@@ -347,9 +347,17 @@
         <!-- Files -->
         <section class="screen" id="screen-files">
             <div class="row"><h2>File Manager</h2><span class="spacer"></span>
+                <input id="fs-filter" placeholder="Filter this folder…" autocomplete="off" style="width:auto;min-width:150px;">
                 <button data-action="files-up">↑ Up</button>
                 <button data-action="files-home">⌂ Home</button>
                 <button class="primary" data-action="files-open-fm" title="Open this folder in the full file manager (Thunar) to open, copy, rename and right-click files.">📂 Open in file manager</button>
+            </div>
+            <div class="fs-quick" id="fs-quick">
+                <button class="fs-chip" data-folder="Downloads">⬇ Downloads</button>
+                <button class="fs-chip" data-folder="Documents">📄 Documents</button>
+                <button class="fs-chip" data-folder="Pictures">🖼 Pictures</button>
+                <button class="fs-chip" data-folder="Music">♪ Music</button>
+                <button class="fs-chip" data-folder="Videos">🎬 Videos</button>
             </div>
             <div class="fs-path mono" id="fs-path"></div>
             <details class="page-help">
