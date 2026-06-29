@@ -277,21 +277,24 @@ window.OUTLAW_HELP = [
     },
     {
         id: 'report-problem', cat: 'Troubleshooting', title: 'Report a problem (send the error log)',
-        keywords: 'error log report problem crash bug github send download diagnostics issue picker',
+        keywords: 'error log report problem crash bug github send diagnostics issue picker clear copy',
         body: '<p>If something failed, crashed, or bounced you to the session picker, open '
             + '<b>Settings → Report a problem</b> (or <b>System Core → Report a Problem</b>). '
             + 'Click <b>Collect errors</b> to gather a deduplicated log from the desktop, the Dev '
-            + 'session, Xorg and the system journal, then <b>Send to GitHub</b> (opens a pre-filled '
-            + 'issue) or <b>Download .log</b>. This is the best way to get boot crash-loops fixed.</p>',
+            + 'session, Xorg and the system journal, then <b>Copy</b> it, click <b>Open GitHub issues</b>, '
+            + 'and paste it into a new issue. When you\'re done reporting, click <b>Clear</b> so '
+            + 'already-sent errors don\'t pile up with new ones. This is the best way to get boot '
+            + 'crash-loops fixed.</p>',
     },
     {
         id: 'shortcuts', cat: 'The desktop', title: 'Keyboard shortcuts',
-        keywords: 'keyboard shortcut hotkey keys ctrl alt esc quick ask navigate switch screen',
+        keywords: 'keyboard shortcut hotkey keys ctrl alt esc quick ask navigate switch screen settings terminal history',
         body: '<p><b>Ctrl + K</b> — jump to the AI assistant and start typing (a quick ask), from anywhere. '
+            + '<b>Ctrl + ,</b> — open Settings. '
             + '<b>Alt + 1…9</b> — jump to the matching sidebar screen (1 = Dashboard, 2 = System Core, and so on). '
             + '<b>Esc</b> — close the power menu, or a finished loading screen. '
             + '<b>PrtSc</b> — save a screenshot to Pictures (<b>Shift+PrtSc</b> to drag-select a region). '
-            + 'In the assistant, press <b>Enter</b> to send.</p>',
+            + 'In the assistant, press <b>Enter</b> to send. In the Terminal, <b>↑ / ↓</b> recall previous commands.</p>',
     },
     {
         id: 'gaming', cat: 'Apps & games', title: 'Gaming (Steam, Lutris, GameMode)',

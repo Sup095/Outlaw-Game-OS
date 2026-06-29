@@ -1360,6 +1360,23 @@ async function inspectCommand(cmd) {
     } catch {}
 }
 
+// QoL — bash-like command history (Up/Down recall) for the terminal.
+let _termHist = [];
+let _termHistIdx = -1;   // -1 = at the live (un-navigated) input line
+function _termHistPush(cmd) {
+    if (_termHist[_termHist.length - 1] !== cmd) _termHist.push(cmd);
+    if (_termHist.length > 100) _termHist.shift();
+    _termHistIdx = -1;
+}
+function _termHistNav(dir, input) {
+    if (!_termHist.length) return;
+    if (_termHistIdx === -1) _termHistIdx = _termHist.length;   // begin just past the end
+    _termHistIdx = Math.max(0, Math.min(_termHist.length, _termHistIdx + dir));
+    input.value = _termHistIdx >= _termHist.length ? '' : _termHist[_termHistIdx];
+    requestAnimationFrame(() => { try { input.setSelectionRange(input.value.length, input.value.length); } catch {} });
+    inspectCommand(input.value);
+}
+
 async function runTerminal(cmd) {
     const out = $('#term-out');
     out.value += `> ${cmd}\n`;
@@ -2616,7 +2633,9 @@ function wire() {
     const ti = $('#term-in');
     ti.addEventListener('input', () => inspectCommand(ti.value));
     ti.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') { const c = ti.value.trim(); if (c) { ti.value = ''; $('#term-hint').textContent = ''; runTerminal(c); } }
+        if (e.key === 'Enter') { const c = ti.value.trim(); if (c) { ti.value = ''; $('#term-hint').textContent = ''; _termHistPush(c); runTerminal(c); } }
+        else if (e.key === 'ArrowUp') { e.preventDefault(); _termHistNav(-1, ti); }
+        else if (e.key === 'ArrowDown') { e.preventDefault(); _termHistNav(1, ti); }
     });
 
     // AI input
@@ -3111,6 +3130,12 @@ function wire() {
         if ((e.ctrlKey || e.metaKey) && (e.key === 'k' || e.key === 'K')) {
             e.preventDefault();
             try { showScreen('ai'); const i = $('#ai-in'); if (i) i.focus(); } catch {}
+            return;
+        }
+        // Ctrl/Cmd+, — open Settings (the conventional shortcut).
+        if ((e.ctrlKey || e.metaKey) && e.key === ',') {
+            e.preventDefault();
+            try { showScreen('settings'); } catch {}
             return;
         }
         // Alt+1..9 — jump to the Nth sidebar screen (not while typing in a field).
