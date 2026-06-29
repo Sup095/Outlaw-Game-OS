@@ -1198,7 +1198,7 @@ function renderHelp(query) {
 const QUICKSTART_STEPS = [
     { ico: '✦', title: 'Welcome to Outlaw OS', body: '<p>A lightweight Linux built for AI-driven game development. This quick tour shows where everything is — you can <b>Skip</b> at any time.</p>' },
     { ico: '▣', title: 'Finding your way', body: '<p>The <b>sidebar</b> on the left switches screens — Dashboard, Files, Task Manager, Apps, AI Assistant and more. The top bar shows live CPU/RAM and the clock.</p>' },
-    { ico: '✦', title: 'Private, local AI', body: '<p>Open <b>AI Assistant → Check my PC</b> and Outlaw recommends a model your hardware can run, then walks you through installing <b>LM Studio</b>. It all runs on your machine — no account.</p>' },
+    { ico: '✦', title: 'Private, local AI', body: '<p>Open <b>AI Assistant → Check my PC</b> and Outlaw recommends a model your hardware can run plus the best engine for it — the <b>built-in</b> model (already on), <b>Ollama</b> or <b>LM Studio</b>. It all runs on your machine — no account.</p>' },
     { ico: '📦', title: 'Apps & games', body: '<p>The <b>Apps</b> page installs Steam, Firefox, Godot and more in one click. The <b>On this PC</b> view finds everything you’ve already installed, including AppImages.</p>' },
     { ico: '🛠', title: 'Build games', body: '<p>The <b>Dev session</b> (Outlaw CodeMaker) is an AI agent for making Godot games. Switch to it from <b>Settings → Session</b> or the boot greeter.</p>' },
     { ico: '❔', title: 'Stuck? Open Help', body: '<p>The <b>Help</b> screen explains every part of the OS and how to fix common problems, with a search box. You can replay this tour from there too. Enjoy Outlaw OS!</p>' },

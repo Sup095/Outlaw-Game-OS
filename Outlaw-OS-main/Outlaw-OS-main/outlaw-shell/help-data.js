@@ -96,14 +96,14 @@ window.OUTLAW_HELP = [
 
     // ---- AI ----------------------------------------------------------------
     {
-        id: 'ai-setup', cat: 'AI', title: 'Setting up local AI (LM Studio)',
-        keywords: 'ai lm studio model download setup check pc recommend server port 1234',
-        body: '<p>Open <b>AI Assistant</b> and click <b>Check my PC</b> — Outlaw reads your RAM, '
-            + 'GPU and CPU and recommends a model your hardware can run, plus a tiny starter model '
-            + 'that runs on anything. Then: <b>Get / Open LM Studio</b> → download the Linux '
-            + '<code>.AppImage</code> → click the button again to launch it → download the model → '
-            + 'click <b>Start Server</b> (port 1234) → flip <b>Enable on-device AI</b> in Settings. '
-            + 'Stuck? Use the <b>Ask the AI to set itself up</b> box.</p>',
+        id: 'ai-setup', cat: 'AI', title: 'Setting up local AI',
+        keywords: 'ai lm studio ollama built-in model download setup check pc recommend server engine',
+        body: '<p>Open <b>AI Assistant</b> and click <b>Check my PC</b> — Outlaw reads your RAM, GPU and '
+            + 'CPU, recommends a model your hardware can run, and tells you the best <b>engine</b> for it. '
+            + 'You have three choices (see <i>AI engines</i>): the <b>built-in</b> model is already on — '
+            + 'zero setup; <b>Ollama</b> takes one command to pull a bigger model; <b>LM Studio</b> is a '
+            + 'point-and-click app. Pick the engine in <b>Settings → AI &amp; VRAM</b>. Stuck? Use the '
+            + '<b>Ask the AI to set itself up</b> box — it already knows your exact hardware.</p>',
     },
     {
         id: 'ai-assistant', cat: 'AI', title: 'Using the AI Assistant',
@@ -258,11 +258,13 @@ window.OUTLAW_HELP = [
     },
     {
         id: 'ai-personalities', cat: 'AI', title: 'AI names & personalities',
-        keywords: 'personality name cr1tt3r varmint persona model character rename',
-        body: '<p>On the desktop your assistant is <b>Cr1tt3r</b>; in the Dev session it is '
-            + '<b>V4rm1nt</b>. If you switch the desktop assistant to a different model you loaded '
-            + 'yourself, you can invite it to <b>pick its own name and personality</b> — just ask. '
-            + 'The bundled base model always stays Cr1tt3r.</p>',
+        keywords: 'personality name cr1tt3r varmint outlaw core persona model character rename system core',
+        body: '<p>Outlaw has three separate AI personas, each in its own place: <b>Cr1tt3r</b> is your '
+            + 'desktop AI Assistant; <b>V4rm1nt</b> is the coder in the Dev session (Outlaw CodeMaker); and '
+            + 'the <b>OUTLAW CORE</b> is the voice of the System Core command center. They are distinct on '
+            + 'purpose and don\'t change. If you switch the desktop assistant to a different model you loaded '
+            + 'yourself, you can invite <i>that</i> model to <b>pick its own name and personality</b> — just '
+            + 'ask. The bundled built-in model always stays Cr1tt3r.</p>',
     },
     {
         id: 'system-core-hub', cat: 'System tools', title: 'System Core (command center)',
@@ -337,5 +339,46 @@ window.OUTLAW_HELP = [
             + '"use less VRAM", "switch the AI to LM Studio", "turn on performance mode", "make the text bigger", '
             + '"use the green theme". It can set the VRAM/RAM saver, visual effects, performance mode, update '
             + 'checks, text size and the AI engine. Every change is safe and reversible.</p>',
+    },
+    {
+        id: 'ai-engines', cat: 'AI', title: 'AI engines — built-in, Ollama or LM Studio',
+        keywords: 'ai engine base built-in ollama lm studio lmstudio model switch backend local',
+        body: '<p>Outlaw can run its local AI three ways — pick one in <b>Settings → AI &amp; VRAM</b>: '
+            + '<b>Built-in</b> (a tiny model that ships with Outlaw — already on, zero setup); '
+            + '<b>Ollama</b> (one command to pull bigger models; works on any GPU or CPU); and '
+            + '<b>LM Studio</b> (a point-and-click app you download). Use <b>Check my PC</b> in the AI '
+            + 'Assistant and Outlaw recommends the best engine and model for your hardware, then walks '
+            + 'you through it. Everything runs on this machine — no account, nothing leaves your PC.</p>',
+    },
+    {
+        id: 'vram-saver', cat: 'AI', title: 'VRAM saver modes',
+        keywords: 'vram saver mode auto off lean minimal video memory gpu tier ai context',
+        body: '<p>The <b>VRAM saver</b> (<b>Settings → AI &amp; VRAM</b>) controls how hard Outlaw trims '
+            + 'AI video-memory use so the desktop stays responsive: <b>Auto</b> (recommended) kicks in only '
+            + 'when free VRAM runs low; <b>Off</b> never trims (use it if you have VRAM to spare); '
+            + '<b>Lean</b> always uses smaller AI contexts (predictable, lighter); <b>Minimal</b> is a '
+            + 'bare-bones emergency mode that also pauses System Core voice + Live mode to free the most '
+            + 'memory. The System Core badge shows the current tier.</p>',
+    },
+    {
+        id: 'volume', cat: 'The desktop', title: 'Volume & sound',
+        keywords: 'volume sound audio mute speaker loud quiet topbar slider pipewire',
+        body: '<p>Click the <b>speaker icon</b> (🔊) on the top bar to open the volume slider and a '
+            + '<b>mute</b> button. Drag the slider to set the level, or click the speaker to mute/unmute. '
+            + 'The icon hides on machines with no audio hardware.</p>',
+    },
+    {
+        id: 'battery', cat: 'The desktop', title: 'Battery indicator',
+        keywords: 'battery laptop charge charging percent power topbar low',
+        body: '<p>On laptops, the top bar shows your <b>battery percentage</b> with 🔋 (on battery) or '
+            + '⚡ (charging). It turns red when the battery drops below 15% and you are not plugged in. '
+            + 'Desktop computers with no battery don\'t show this.</p>',
+    },
+    {
+        id: 'calculator', cat: 'System tools', title: 'Calculator',
+        keywords: 'calculator calc math arithmetic add subtract multiply divide numbers',
+        body: '<p>The <b>Calculator</b> (sidebar) is a simple desktop calculator: click the number '
+            + 'buttons and operators (÷ × − +) and <b>=</b> to calculate, or just type on your keyboard. '
+            + 'Press <b>C</b> or <b>Esc</b> to clear. Basic arithmetic — no memory or scientific functions.</p>',
     },
 ];
