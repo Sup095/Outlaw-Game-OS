@@ -1133,10 +1133,21 @@ table.proc td { padding: 5px 8px; border-bottom: 1px solid rgba(20,61,13,0.4); }
 #ai-log { height: 56vh; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding-right: 6px; }
 /* QoL — friendly empty state (pure CSS, vanishes the moment a message arrives). */
 #ai-log:empty::before { content: "Ask me anything — or try \201Cinstall krita\201D, \201Ctune my settings\201D, or \201Copen apps\201D."; margin: auto; max-width: 420px; text-align: center; color: var(--term-dim); font-style: italic; line-height: 1.6; }
-.msg { max-width: 80%; padding: 10px 12px; border-radius: 10px; white-space: pre-wrap; }
+.msg { max-width: 80%; padding: 10px 12px; border-radius: 10px; white-space: pre-wrap; position: relative; }
 .msg.user { align-self: flex-end; background: rgba(var(--term-rgb),0.12); border: 1px solid var(--term-dim); }
 .msg.ai { align-self: flex-start; background: var(--panel-2); border: 1px solid var(--line); }
 .msg.sys { align-self: center; font-size: 12px; opacity: .7; }
+/* QoL — per-message Copy button on AI replies (hover-revealed). */
+.msg-copy { position: absolute; top: 4px; right: 4px; padding: 1px 6px; font-size: 12px;
+  line-height: 1.4; border-radius: 6px; background: var(--panel); border: 1px solid var(--line);
+  color: var(--muted, #8aa); cursor: pointer; opacity: 0; transition: opacity .12s ease; }
+.msg.ai:hover .msg-copy, .msg-copy:focus-visible { opacity: 0.85; }
+.msg-copy:hover { opacity: 1; color: var(--text); }
+/* QoL — starter prompt chips in an empty AI chat. */
+.starter-chips { display: flex; flex-wrap: wrap; gap: 6px; align-self: flex-start; margin: 2px 0 4px; }
+.starter-chip { padding: 5px 11px; font-size: 12px; border-radius: 999px; cursor: pointer;
+  background: var(--panel-2); border: 1px solid var(--line); color: var(--muted, #8aa); }
+.starter-chip:hover { color: var(--text); border-color: var(--term-dim); }
 /* C10 — animated "typing" dots while the AI is thinking. */
 .msg.ai.thinking { display: inline-flex; gap: 5px; align-items: center; }
 .msg.ai.thinking .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--term);

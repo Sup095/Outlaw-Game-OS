@@ -1356,7 +1356,28 @@ function addMsg(kind, text) {
     const log = $('#ai-log');
     const div = document.createElement('div');
     div.className = 'msg ' + kind;
-    div.textContent = text;
+    const body = document.createElement('span');
+    body.className = 'msg-text';
+    body.textContent = text;
+    div.appendChild(body);
+    // QoL — a hover-revealed Copy button on AI replies (handy for commands the
+    // assistant prints, or to paste an answer elsewhere).
+    if (kind === 'ai') {
+        const btn = document.createElement('button');
+        btn.className = 'msg-copy';
+        btn.type = 'button';
+        btn.title = 'Copy this message';
+        btn.textContent = '⧉';
+        btn.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            try {
+                await navigator.clipboard.writeText(body.textContent || '');
+                btn.textContent = '✓';
+                setTimeout(() => { btn.textContent = '⧉'; }, 1200);
+            } catch { toast('Couldn\'t copy to clipboard.'); }
+        });
+        div.appendChild(btn);
+    }
     log.appendChild(div);
     log.scrollTop = log.scrollHeight;
 }
@@ -1479,9 +1500,37 @@ function loadConvoIntoLog() {
     if (!c.messages.length) {
         addMsg('ai', 'Cr1tt3r here. Ask me anything, or tell me to do things — "install krita", '
             + '"use less VRAM", "switch to the gold theme", "open settings".');
+        renderStarterChips();
         return;
     }
     for (const m of c.messages) addMsg(m.role === 'user' ? 'user' : 'ai', m.content);
+}
+
+// QoL — clickable starter prompts in a brand-new chat so new users see what the
+// assistant can do. Clicking one sends it. Removed as soon as the chat has content.
+const AI_STARTER_PROMPTS = [
+    'What can you do?',
+    'Open the Apps page',
+    'Use less VRAM',
+    'Install a photo editor',
+];
+function renderStarterChips() {
+    const log = $('#ai-log');
+    if (!log) return;
+    const wrap = document.createElement('div');
+    wrap.className = 'starter-chips';
+    for (const p of AI_STARTER_PROMPTS) {
+        const chip = document.createElement('button');
+        chip.type = 'button';
+        chip.className = 'starter-chip';
+        chip.textContent = p;
+        chip.addEventListener('click', () => {
+            const input = $('#ai-in');
+            if (input) { input.value = p; sendAI(); }
+        });
+        wrap.appendChild(chip);
+    }
+    log.appendChild(wrap);
 }
 
 async function initAiChats() {
