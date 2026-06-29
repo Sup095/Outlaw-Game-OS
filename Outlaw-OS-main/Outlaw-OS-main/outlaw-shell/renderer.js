@@ -844,8 +844,18 @@ async function loadSysInfo() {
     try {
         const i = await api.system.info();
         const gpu = await api.system.gpu();
+        // QoL — show free disk space at a glance (handy on small drives).
+        let diskLine = '';
+        try {
+            const d = await api.system.disk();
+            if (d && d.available && d.totalMb) {
+                const freeGb = (Math.max(0, d.totalMb - d.usedMb) / 1024).toFixed(1);
+                const totGb = (d.totalMb / 1024).toFixed(0);
+                diskLine = `\nDISK ${freeGb} GB free of ${totGb} GB (${d.pct}% used)`;
+            }
+        } catch {}
         $('#sysinfo').textContent =
-            `${i.hostname}  •  ${i.cpu} (${i.cores} cores)\nRAM ${i.ramUsed}/${i.ramTotal}  •  kernel ${i.kernel}\nGPU ${gpu}`;
+            `${i.hostname}  •  ${i.cpu} (${i.cores} cores)\nRAM ${i.ramUsed}/${i.ramTotal}  •  kernel ${i.kernel}\nGPU ${gpu}${diskLine}`;
         const v = $('#app-version'); if (v) v.textContent = 'v' + (i.appVersion || '?');
     } catch {
         $('#sysinfo').textContent = 'Preview mode — full telemetry available on Outlaw OS.';
@@ -3166,7 +3176,7 @@ async function checkDiskSpace() {
         const freeMb = Math.max(0, d.totalMb - d.usedMb);
         if (d.pct >= 92 || freeMb < 2048) {
             const gb = (freeMb / 1024).toFixed(1);
-            const msg = `⚠ Low disk space — ${gb} GB free (${d.pct}% used). Free up space before installing apps or updates.`;
+            const msg = `⚠ Low disk space — ${gb} GB free (${d.pct}% used). Try Settings → Free up space before installing apps or updates.`;
             setTimeout(() => toast(msg), 2600);
             try { api.errorlog.add({ level: 'warning', source: 'shell-ui', message: msg }); } catch {}
         }
