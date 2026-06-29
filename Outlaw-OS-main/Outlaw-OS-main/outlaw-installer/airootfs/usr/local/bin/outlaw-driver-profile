@@ -77,7 +77,14 @@ case "$CMD" in
         prep_pacman || { echo "ERROR: could not refresh databases (check Settings -> Network)."; exit 4; }
         read -r -a PKGS <<< "$(gaming_pkgs "$VENDOR")"
         echo ">> Installing: ${PKGS[*]}"
-        pacman -S --needed --noconfirm "${PKGS[@]}"
+        # ⚠ BOOT-SAFETY: see outlaw-pkg-install — never do a partial upgrade on a
+        # persistent installed system (refresh + install without upgrading the rest
+        # can leave the desktop unable to start after a dependency soname bump). On
+        # an installed system upgrade alongside the install (-u); on the ephemeral
+        # live ISO a plain install is correct.
+        PAC_INSTALL=(-S --needed --noconfirm)
+        [[ -d /run/archiso ]] || PAC_INSTALL=(-Su --needed --noconfirm)
+        pacman "${PAC_INSTALL[@]}" "${PKGS[@]}"
         echo ">> Done."
         ;;
     revert)

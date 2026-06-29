@@ -1429,6 +1429,7 @@ function addMsg(kind, text) {
         btn.className = 'msg-copy';
         btn.type = 'button';
         btn.title = 'Copy this message';
+        btn.setAttribute('aria-label', 'Copy this message');   // a11y: icon-only button needs a name
         btn.textContent = '⧉';
         btn.addEventListener('click', async (e) => {
             e.stopPropagation();

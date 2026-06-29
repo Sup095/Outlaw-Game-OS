@@ -52,7 +52,20 @@ if ! pacman -Syy --noconfirm; then
 fi
 
 echo ">> Installing: ${PKGS[*]}"
-if ! pacman -S --needed --noconfirm "${PKGS[@]}"; then
+# ⚠ BOOT-SAFETY: installing with a freshly-refreshed DB but WITHOUT upgrading the
+# rest of the system is a "partial upgrade" — on Arch the #1 way to break a running
+# system. A dependency's soname can bump (icu/glibc/gcc-libs are the classic cases)
+# and the upgraded lib then mismatches already-installed software, INCLUDING the
+# desktop shell, so it won't start → no desktop. So on a persistent installed
+# system we upgrade the system alongside the install (-u), keeping the library set
+# coherent. The live ISO is ephemeral (RAM overlay, resets on reboot) so a plain
+# install is correct there and a full upgrade would needlessly fill the tmpfs.
+PAC_INSTALL=(-S --needed --noconfirm)
+if [[ ! -d /run/archiso ]]; then
+    PAC_INSTALL=(-Su --needed --noconfirm)
+    echo "   (updating the system too, so the new packages stay compatible — this is what keeps installs from breaking your desktop)"
+fi
+if ! pacman "${PAC_INSTALL[@]}" "${PKGS[@]}"; then
     echo "ERROR: the install did not complete (see the messages above)."
     exit 5
 fi

@@ -38,7 +38,18 @@ REQS="$CM/requirements-linux.txt"
 [[ -f "$REQS" ]] || { echo "ERROR: no requirements file found in $CM."; exit 1; }
 
 echo "[1/3] Installing system packages (python + input/OCR backends)…"
-pacman -Sy --needed --noconfirm \
+# ⚠ BOOT-SAFETY: `-Sy <pkg>` (refresh, then install without upgrading the rest) is
+# a partial upgrade — on Arch the #1 way to break a running system (a dependency
+# soname bump can leave the desktop unable to start). On a persistent installed
+# system do a FULL upgrade (-Syu) so the library set stays coherent. On the live
+# ISO the system is ephemeral (RAM overlay), so -Sy is correct and a full upgrade
+# would try to upgrade the entire live system in RAM (huge, pointless).
+if [[ -d /run/archiso ]]; then
+    PAC_OP=(-Sy --needed --noconfirm)
+else
+    PAC_OP=(-Syu --needed --noconfirm)
+fi
+pacman "${PAC_OP[@]}" \
     python xdotool scrot tesseract tesseract-data-eng \
   || { echo; echo "ERROR: package download failed — check your network connection and try again."; exit 1; }
 
