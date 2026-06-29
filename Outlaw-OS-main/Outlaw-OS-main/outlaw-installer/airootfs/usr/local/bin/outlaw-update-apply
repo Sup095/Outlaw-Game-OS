@@ -113,16 +113,31 @@ echo "Outlaw shell updated to v${VERSION:-?}. Previous version kept at $BACKUP."
 # #7/#9 — install any packages added since this machine was installed (e.g. the
 # audio stack) so an OTA update isn't "just the shell". Best-effort: the shell +
 # components already updated, so a mirror hiccup or an unavailable package must
-# NOT fail the whole update. We only ADD/refresh (--needed); we never auto-remove,
-# because a wrong removal could break a working system.
+# NOT fail the whole update. We only ADD (--needed); we never auto-remove.
+#
+# ⚠ BOOT-SAFETY (regression fix): this MUST NOT be a partial upgrade. A previous
+# version ran `pacman -Sy --needed <subset>`, which refreshes the package DB to
+# newer-than-installed versions and then upgrades whichever shared libraries the
+# new packages pull in (an icu/glibc/gcc-libs soname bump is the classic case)
+# while the REST of the system stays on the old libs. That library mismatch can
+# stop Xorg/Electron/the greeter from launching — i.e. it can break the boot into
+# the desktop. On Arch a partial upgrade is explicitly unsupported.
+#
+# So: NO `-y`. We install ONLY from the already-synced local DB (`-S` without a
+# refresh), at versions that match the rest of the installed system — this can
+# never introduce a soname mismatch, so it can never break boot. The trade-off is
+# that a package that isn't resolvable from the current DB just won't install
+# here; that's a feature you re-run later, never a bricked desktop. (Genuinely
+# adding new packages the Arch-correct way needs a FULL `-Syu`, which belongs in
+# the planned full-reinstall updater, not an unattended background shell update.)
 if [[ -n "$PKG_MANIFEST" && -f "$PKG_MANIFEST" ]]; then
     mapfile -t _pkgs < <(grep -E '^[a-z0-9][a-z0-9._+-]*$' "$PKG_MANIFEST")
     if (( ${#_pkgs[@]} > 0 )); then
-        echo "Syncing system packages (${#_pkgs[@]} expected; installing any new/missing)…"
-        if pacman -Sy --needed --noconfirm "${_pkgs[@]}"; then
+        echo "Syncing system packages (${#_pkgs[@]} expected; installing any new/missing, no DB refresh)…"
+        if pacman -S --needed --noconfirm "${_pkgs[@]}"; then
             echo "Package sync complete."
         else
-            echo "Note: some packages couldn't be installed (offline or a mirror was down). The shell + components update is fine; re-run the updater later to finish packages." >&2
+            echo "Note: some packages couldn't be installed from the current package DB (offline, or they need a full system update). The shell + components update is fine and your system is unchanged; run a full system update later to finish packages." >&2
         fi
     fi
 fi

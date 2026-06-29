@@ -64,6 +64,24 @@ function getDiagRunner() {
         if (mainWindow && !mainWindow.isDestroyed()) {
             mainWindow.webContents.send('diagnostics-progress', payload);
         }
+        // F1 — fold the System Core diagnostics' findings into the combined
+        // error log, so "Report a problem" / Collect errors includes whatever a
+        // health scan turned up (failed checks + warnings), not just runtime
+        // crashes. Only fail/warn are logged — pass/skip aren't problems. The
+        // log's content-hash dedup means the same finding isn't stored twice
+        // across repeated scans. Best-effort: never let logging break a run.
+        if (payload && payload.phase === 'done' && payload.report) {
+            try {
+                const prof = payload.report.profile || 'scan';
+                for (const r of (payload.report.results || [])) {
+                    if (r.status === 'fail' || r.status === 'warn') {
+                        const lvl = r.status === 'fail' ? 'error' : 'warn';
+                        const msg = `[diagnostic:${prof}] ${r.label}: ${r.detail || ''}`.trim();
+                        errorlog.append(lvl, 'diagnostics', msg);
+                    }
+                }
+            } catch { /* logging must never break diagnostics */ }
+        }
     });
     return _diagRunner;
 }
@@ -1758,18 +1776,28 @@ function registerIpc() {
     });
 
     // ----- SC6 System Core Live AI ----------------------------------------
-    // coreai:ask routes a user prompt through LM Studio (via coreai.ask) and
-    // then dispatches whatever tool the model picked. ALL tool routes use
-    // existing audited code paths — no new privileged endpoints. Refuses to
-    // talk to LM Studio at all when VRAM is in the `minimal` tier; the
-    // renderer already won't let the user toggle Live mode on in that case,
+    // coreai:ask routes a user prompt through the configured AI engine (the
+    // built-in base AI by default, or Ollama / LM Studio — via coreai.ask using
+    // aiBackend()) and then dispatches whatever tool the model picked. ALL tool
+    // routes use existing audited code paths — no new privileged endpoints.
+    // Refuses to talk to the engine at all when VRAM is in the `minimal` tier;
+    // the renderer already won't let the user toggle Live mode on in that case,
     // but this is the defence-in-depth backstop.
 
     ipcMain.handle('coreai:status', async () => {
-        const lm = await coreai.status(aiBackend());
+        const be = aiBackend();
+        const lm = await coreai.status(be);
         const vram = await vramTier.getStatus();
+        // Friendly label for whichever engine Live mode actually uses — so the
+        // System Core UI never hard-codes "LM Studio" when the user is on the
+        // built-in base AI or Ollama (the default is the built-in base AI now).
+        const engineLabel = be.kind === 'base' ? 'Built-in AI'
+            : be.kind === 'ollama' ? 'Ollama'
+            : 'LM Studio';
         return {
             lmStudio: lm,
+            engine: be.kind,            // 'base' | 'ollama' | 'lmstudio'
+            engineLabel,
             vramTier: vram.tier,
             vramLabel: vram.label,
             // Gating intent: emergency tier means Live mode should refuse.

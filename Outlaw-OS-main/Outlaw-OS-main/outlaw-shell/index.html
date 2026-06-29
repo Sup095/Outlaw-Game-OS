@@ -135,12 +135,12 @@
                 <span class="syscore-mode" id="syscore-mode">COLD · standalone</span>
                 <button class="syscore-mode-toggle" id="sc-mode-toggle"
                         type="button"
-                        title="Flip between Cold (canned dialogue, zero AI traffic) and Live (LM Studio answers + tool calls).">Go Live</button>
+                        title="Flip between Cold (canned dialogue, zero AI traffic) and Live (your AI engine answers + tool calls).">Go Live</button>
             </div>
             <details class="page-help">
                 <summary>What is the System Core?</summary>
                 <p>The System Core is your machine's <b>command center</b> — live status, the Core assistant, diagnostics, and one-tap actions (talk to Cr1tt3r, report a problem, take a screenshot, update). The rings show live <b>CPU, RAM and VRAM</b> use. The badge shows the current <b>VRAM-saver tier</b> (change it in Settings → AI / VRAM).</p>
-                <p><b>Cold mode</b> (default) uses built-in dialogue and sends <i>zero</i> AI traffic — fully offline and free. <b>Go Live</b> connects to your local LM Studio so the Core can answer questions and run safe actions for you (open an app, run a diagnostic, search files). Live mode only works when LM Studio is running with a model loaded.</p>
+                <p><b>Cold mode</b> (default) uses built-in dialogue and sends <i>zero</i> AI traffic — fully offline and free. <b>Go Live</b> connects to your AI engine so the Core can answer questions and run safe actions for you (open an app, run a diagnostic, search files). It uses whichever engine you've set in <b>Settings → AI</b>: the <b>built-in base AI</b> (on by default, runs on almost any PC, nothing to install), a model you pull through <b>Ollama</b>, or a model you load in <b>LM Studio</b>. All of it runs locally — nothing leaves your machine.</p>
                 <p>Use the controls here to run a <b>system diagnostic</b>, watch temperatures, toggle <b>performance mode</b>, and talk to the Core. Nothing leaves your machine.</p>
             </details>
             <div class="core-stage" aria-hidden="true">

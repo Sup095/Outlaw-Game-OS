@@ -69,7 +69,8 @@
     // wait for vram:status to resolve.
     let _vramStatus = null;
     let _vramUnsubscribe = null;
-    // SC6 Live AI — flips between cold-dialogue and LM Studio-backed Live mode.
+    // SC6 Live AI — flips between cold-dialogue and engine-backed Live mode
+    // (the built-in base AI by default, or Ollama / LM Studio if the user set one).
     // sessionId is generated lazily on first Live activation and persists
     // across re-visits within the same shell process (so the conversation
     // survives a casual screen change). Reset button clears the server-side
@@ -78,6 +79,10 @@
     let _liveSessionId = null;
     let _liveBusy = false;
     let _liveButtonsWired = false;
+    // Friendly name of the AI engine Live mode will use. Default to a generic
+    // "AI" so we never wrongly claim a specific engine before we've probed;
+    // _refreshEngineLabel() fills in "Built-in AI" / "Ollama" / "LM Studio".
+    let _engineLabel = 'AI';
 
     function $$(sel) { return document.querySelector(sel); }
 
@@ -122,6 +127,7 @@
         // SC6 — wire the Live mode toggle + input handlers once; sync UI to
         // the current _liveMode flag (preserved across re-visits).
         _wireLiveOnce();
+        _refreshEngineLabel();
         _syncLiveUi();
         // P2 — System Control quick-actions card. Wire once; refresh the perf
         // label to reflect the current setting each visit.
@@ -1014,6 +1020,21 @@
         } catch { /* probe failed — leave the badge alone */ }
     }
 
+    // Probe which AI engine Live mode will use (built-in base AI / Ollama / LM
+    // Studio) so the toggle, chip and footer name the real engine instead of
+    // always saying "LM Studio". Best-effort: on any failure we keep "AI".
+    async function _refreshEngineLabel() {
+        const api = window.outlaw && window.outlaw.coreai;
+        if (!api) return;
+        try {
+            const st = await api.status();
+            if (st && st.engineLabel) {
+                _engineLabel = st.engineLabel;
+                _syncLiveUi();   // repaint chip/tooltip with the real engine name
+            }
+        } catch { /* leave the default "AI" label */ }
+    }
+
     function _onVramTierChanged(status) {
         if (!status) return;
         _vramStatus = status;
@@ -1123,7 +1144,7 @@
         _syncLiveUi();
         // Tell the cold-mode footer to reflect the new mode.
         _setFooter(_liveMode
-            ? 'live channel · LM Studio · ' + (_voiceStatus
+            ? 'live channel · ' + _engineLabel + ' · ' + (_voiceStatus
                 ? _voiceFooterText(_voiceStatus) : 'voice: probing…')
             : 'core online · live telemetry · ' + (_voiceStatus
                 ? _voiceFooterText(_voiceStatus) : 'voice: probing…'));
@@ -1144,10 +1165,10 @@
                 ? 'Live mode disabled — VRAM is in the Minimal tier. Free VRAM first.'
                 : _liveMode
                     ? 'Switch back to Cold mode (canned dialogue, zero AI traffic).'
-                    : 'Switch to Live mode (LM Studio answers + tool calls).';
+                    : 'Switch to Live mode (' + _engineLabel + ' answers + tool calls).';
         }
         if (modeChip) {
-            modeChip.textContent = _liveMode ? 'LIVE · LM Studio' : 'COLD · standalone';
+            modeChip.textContent = _liveMode ? 'LIVE · ' + _engineLabel : 'COLD · standalone';
         }
         if (inputRow) inputRow.hidden = !_liveMode;
         if (inputEl) {

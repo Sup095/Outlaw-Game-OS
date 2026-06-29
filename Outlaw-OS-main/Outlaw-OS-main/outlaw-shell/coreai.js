@@ -162,7 +162,16 @@ function sessionInfo(sessionId) {
 // Ask
 // ---------------------------------------------------------------------------
 
-async function ask({ sessionId, text, appIds, model, machine, baseUrl }) {
+// Engine-appropriate "can't reach the backend" message. `kind` comes from
+// aiBackend() ('base' | 'ollama' | 'lmstudio'); the built-in base AI and Ollama
+// must never be told to "start LM Studio".
+function _unreachableMsg(kind) {
+    if (kind === 'base') return 'The built-in AI isn\'t responding yet — it loads on demand. Give it a moment and try again.';
+    if (kind === 'ollama') return 'Ollama isn\'t responding — make sure Ollama is running and the model is pulled (Settings → AI).';
+    return 'LM Studio unreachable — start it, load a model, click Start Server.';
+}
+
+async function ask({ sessionId, text, appIds, model, machine, baseUrl, kind }) {
     const userText = String(text == null ? '' : text).slice(0, 4000).trim();
     if (!userText) {
         return { ok: false, error: 'empty prompt' };
@@ -196,18 +205,20 @@ async function ask({ sessionId, text, appIds, model, machine, baseUrl }) {
     } catch (e) {
         return {
             ok: false,
-            error: 'LM Studio unreachable — start it, load a model, click Start Server.',
+            error: _unreachableMsg(kind),
             cause: e.message,
         };
     }
 
     if (!res.ok) {
         const detail = await res.text().catch(() => '');
-        return { ok: false, error: `LM Studio HTTP ${res.status}: ${detail.slice(0, 200)}` };
+        const label = kind === 'base' ? 'Built-in AI' : kind === 'ollama' ? 'Ollama' : 'LM Studio';
+        return { ok: false, error: `${label} HTTP ${res.status}: ${detail.slice(0, 200)}` };
     }
     let data;
     try { data = await res.json(); } catch (e) {
-        return { ok: false, error: 'LM Studio returned invalid JSON' };
+        const label = kind === 'base' ? 'Built-in AI' : kind === 'ollama' ? 'Ollama' : 'LM Studio';
+        return { ok: false, error: `${label} returned invalid JSON` };
     }
     const content = data && data.choices && data.choices[0] && data.choices[0].message
         ? data.choices[0].message.content : '';

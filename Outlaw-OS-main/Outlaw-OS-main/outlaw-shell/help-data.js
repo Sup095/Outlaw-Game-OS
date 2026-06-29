@@ -281,7 +281,8 @@ window.OUTLAW_HELP = [
         body: '<p>If something failed, crashed, or bounced you to the session picker, open '
             + '<b>Settings → Report a problem</b> (or <b>System Core → Report a Problem</b>). '
             + 'Click <b>Collect errors</b> to gather a deduplicated log from the desktop, the Dev '
-            + 'session, Xorg and the system journal, then <b>Copy</b> it, click <b>Open GitHub issues</b>, '
+            + 'session, Xorg, the system journal, and any failed checks or warnings from the '
+            + '<b>System Core diagnostics</b>, then <b>Copy</b> it, click <b>Open GitHub issues</b>, '
             + 'and paste it into a new issue. When you\'re done reporting, click <b>Clear</b> so '
             + 'already-sent errors don\'t pile up with new ones. This is the best way to get boot '
             + 'crash-loops fixed.</p>',

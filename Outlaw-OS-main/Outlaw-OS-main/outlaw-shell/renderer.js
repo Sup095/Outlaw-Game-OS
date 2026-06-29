@@ -2790,7 +2790,7 @@ function wire() {
     if (baseAiToggle) baseAiToggle.addEventListener('change', async (e) => {
         const on = !!e.target.checked;
         await setSetting({ baseAiEnabled: on });
-        toast(on ? 'Using the built-in AI.' : 'Built-in AI off — will use LM Studio when it\'s running.');
+        toast(on ? 'Using the built-in AI.' : 'Built-in AI off — will use Ollama or LM Studio instead (whichever you\'ve set up).');
         if (on) { try { api.ai.ensureBaseModel(); } catch {} }   // pull the bundled model if missing
         refreshAiStatus();
     });
