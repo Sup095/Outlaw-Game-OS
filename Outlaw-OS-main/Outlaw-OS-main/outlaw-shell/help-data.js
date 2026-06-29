@@ -375,6 +375,15 @@ window.OUTLAW_HELP = [
             + 'Desktop computers with no battery don\'t show this.</p>',
     },
     {
+        id: 'free-up-space', cat: 'System tools', title: 'Free up disk space',
+        keywords: 'storage disk space full clean cleanup cache pacman thumbnails trash reclaim low',
+        body: '<p>Low on disk space? <b>Settings → Free up space</b> reclaims room safely. Click '
+            + '<b>Scan</b> to see how much you can get back, then <b>Clean up</b> — it clears the old '
+            + '<b>package-download cache</b> (keeping the newest of each package), <b>thumbnails</b> and '
+            + 'the <b>Trash</b>. It never touches your installed apps, files or settings. You may be asked '
+            + 'for your password for the package-cache part.</p>',
+    },
+    {
         id: 'calculator', cat: 'System tools', title: 'Calculator',
         keywords: 'calculator calc math arithmetic add subtract multiply divide numbers',
         body: '<p>The <b>Calculator</b> (sidebar) is a simple desktop calculator: click the number '

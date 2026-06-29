@@ -2589,6 +2589,43 @@ function registerIpc() {
         return { ok: true, log: tail };
     });
 
+    // QoL — Storage cleanup. Read-only SCAN reports reclaimable space; CLEAN removes
+    // only well-known SAFE caches: the pacman package cache trimmed to the newest
+    // version of each package (paccache -rk1 — the standard safe cleanup), plus the
+    // user's thumbnail cache and Trash (both regenerate on demand). It NEVER removes
+    // installed packages, orphans or app data. Helpful on near-full disks.
+    ipcMain.handle('storage:scan', async () => {
+        if (!IS_LINUX) return { ok: false, error: 'Storage cleanup runs on Outlaw OS.' };
+        // du -sm prints size in MiB; sum the safe targets. Old pacman cache = total
+        // cache minus what paccache would keep (approx via a dry-run line count is
+        // unreliable, so we report the whole cache as the upper bound + the rest).
+        const sh = "pacc=$(du -sm /var/cache/pacman/pkg 2>/dev/null | cut -f1); "
+            + "thumb=$(du -sm \"$HOME/.cache/thumbnails\" 2>/dev/null | cut -f1); "
+            + "trash=$(du -sm \"$HOME/.local/share/Trash\" 2>/dev/null | cut -f1); "
+            + "echo \"pacc=${pacc:-0} thumb=${thumb:-0} trash=${trash:-0}\"";
+        const r = await runShell(sh, { timeout: 15000 });
+        const out = r.stdout || '';
+        const num = (k) => { const m = out.match(new RegExp(k + '=(\\d+)')); return m ? parseInt(m[1], 10) : 0; };
+        const paccMb = num('pacc'), thumbMb = num('thumb'), trashMb = num('trash');
+        return { ok: true, paccMb, thumbMb, trashMb, totalMb: paccMb + thumbMb + trashMb };
+    });
+    ipcMain.handle('storage:clean', async () => {
+        if (!IS_LINUX) return { ok: false, error: 'Storage cleanup runs on Outlaw OS.' };
+        // User-owned caches first (no password needed): thumbnails + Trash.
+        await runShell('rm -rf "$HOME/.cache/thumbnails/"* "$HOME/.local/share/Trash/files/"* "$HOME/.local/share/Trash/info/"* 2>/dev/null; true',
+            { timeout: 30000 });
+        // System pacman cache (one admin prompt): keep the newest 1 of each package.
+        // paccache ships with pacman-contrib, which is part of the base install.
+        const r = await runShell('pkexec paccache -rk1', { timeout: 1000 * 60 * 3 });
+        if (r.code !== 0) {
+            const tail = (r.stderr || r.stdout || `exit ${r.code}`).slice(-600);
+            try { errorlog.append('warn', 'storage', 'pacman cache cleanup did not complete: ' + tail.slice(-300)); } catch {}
+            // The user-space part still succeeded — report partial success.
+            return { ok: true, partial: true, note: 'Cleared thumbnails + Trash. The package-cache step was skipped (' + tail.split('\n').pop() + ').' };
+        }
+        return { ok: true, log: (r.stdout || '').slice(-600) };
+    });
+
     // Shell self-updater (downloads from your GitHub Releases).
     ipcMain.handle('updates:check-shell', async () => {
         try {

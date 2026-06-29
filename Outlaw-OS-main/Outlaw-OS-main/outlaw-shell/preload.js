@@ -174,6 +174,11 @@ contextBridge.exposeInMainWorld('outlaw', {
         status: () => ipcRenderer.invoke('swap:status'),
         set: (opts) => ipcRenderer.invoke('swap:set', opts),
     },
+    // QoL — storage cleanup (scan = read-only; clean = safe caches only).
+    storage: {
+        scan: () => ipcRenderer.invoke('storage:scan'),
+        clean: () => ipcRenderer.invoke('storage:clean'),
+    },
     // Advisory community-stability signal for the installed version (read-only
     // GitHub reaction tally). The user's own vote is stored in settings.
     stability: {

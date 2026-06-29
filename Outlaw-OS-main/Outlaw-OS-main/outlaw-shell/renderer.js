@@ -2391,6 +2391,28 @@ async function errlogCopy() {
     catch { toast('Couldn\'t copy to clipboard.'); }
 }
 
+// QoL — storage cleanup (Settings → Free up space). Scan is read-only; clean only
+// trims safe caches (package cache to newest-of-each, thumbnails, Trash).
+function _storHuman(mb) { return mb >= 1024 ? (mb / 1024).toFixed(1) + ' GB' : (mb || 0) + ' MB'; }
+async function storageScan() {
+    const st = $('#storage-status'), btn = $('#storage-clean-btn');
+    if (st) st.textContent = 'scanning…';
+    const r = await api.storage.scan().catch(() => null);
+    if (!r || !r.ok) { if (st) st.textContent = (r && r.error) || 'scan failed'; return; }
+    if (st) st.textContent = `~${_storHuman(r.totalMb)} reclaimable — package cache ${_storHuman(r.paccMb)}, thumbnails ${_storHuman(r.thumbMb)}, Trash ${_storHuman(r.trashMb)}`;
+    if (btn) btn.disabled = (r.totalMb || 0) <= 0;
+}
+async function storageClean() {
+    if (!window.confirm('Free up space now?\n\nClears the old package-download cache (keeping the newest of each), thumbnails and the Trash. Your apps, files and settings are untouched. You may be asked for your password.')) return;
+    const st = $('#storage-status'), btn = $('#storage-clean-btn');
+    if (btn) btn.disabled = true;
+    if (st) st.textContent = 'cleaning… (you may be asked for your password)';
+    const r = await api.storage.clean().catch(() => null);
+    if (r && r.ok) { if (st) st.textContent = r.partial ? r.note : '✓ Done — re-scanning…'; toast('Freed up space.'); }
+    else { if (st) st.textContent = (r && r.error) || 'cleanup failed'; }
+    setTimeout(storageScan, 500);   // refresh the numbers
+}
+
 // ---------------------------------------------------------------------------
 // 🗺 In-OS roadmap (Settings) — interactive + themed. Mirrors the README roadmap.
 // ---------------------------------------------------------------------------
@@ -2574,6 +2596,8 @@ function wire() {
             case 'stability-broken': setStabilityVote('broken'); break;
             case 'stability-refresh': refreshStabilityTally(); break;
             case 'stability-share':  shareStabilityFeedback(); break;
+            case 'storage-scan':  storageScan(); break;
+            case 'storage-clean': storageClean(); break;
             case 'confirm-cancel': closeConfirm(false); break;
         }
     });
