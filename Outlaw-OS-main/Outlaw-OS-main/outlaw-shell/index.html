@@ -168,6 +168,7 @@
             <div class="core-input" id="core-input" hidden>
                 <input type="text" id="core-input-text"
                        placeholder="speak to the core…"
+                       aria-label="Message the System Core"
                        maxlength="500"
                        autocomplete="off" spellcheck="false">
                 <button id="core-input-send" type="button">Send</button>
@@ -502,12 +503,12 @@
                 <p class="muted" style="margin:0 0 10px;">One-time setup. Outlaw reads your RAM, GPU and CPU and recommends a model that fits.</p>
                 <div class="row" style="gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px;">
                     <span class="muted">This AI is for:</span>
-                    <select id="ai-purpose" style="width:auto;min-width:150px;">
+                    <select id="ai-purpose" aria-label="What this AI is for" style="width:auto;min-width:150px;">
                         <option value="desktop">the Desktop</option>
                         <option value="dev">the Dev session</option>
                     </select>
                     <span id="ai-tier-wrap">
-                        <select id="ai-tier" style="width:auto;min-width:190px;">
+                        <select id="ai-tier" aria-label="Preferred AI model size" style="width:auto;min-width:190px;">
                             <option value="powerful">most powerful I can run</option>
                             <option value="minimal">minimal but useful</option>
                         </select>
@@ -632,7 +633,7 @@
                 </div>
                 <div class="setting">
                     <div class="label">AI engine<small id="ai-engine-sub">What runs the model on this PC.</small></div>
-                    <select id="ai-engine" style="width:auto;min-width:210px;">
+                    <select id="ai-engine" aria-label="AI engine" style="width:auto;min-width:210px;">
                         <option value="base">Built-in · tiny model, runs on anything</option>
                         <option value="lmstudio">LM Studio · load your own model</option>
                         <option value="ollama">Ollama · a bigger model, no LM Studio</option>
@@ -655,7 +656,7 @@
                 </div>
                 <div class="setting">
                     <div class="label">Aggressive VRAM saver<small id="vram-mode-sub">probing…</small></div>
-                    <select id="vram-mode" style="width:auto;min-width:160px;">
+                    <select id="vram-mode" aria-label="Aggressive VRAM saver mode" style="width:auto;min-width:160px;">
                         <option value="auto">Auto · kicks in below 600 MB free</option>
                         <option value="off">Off · never trim, even when low</option>
                         <option value="lean">Always Lean · halve contexts always</option>
@@ -711,7 +712,7 @@
                 <h3>Appearance</h3>
                 <div class="setting">
                     <div class="label">Theme<small>Switch the whole desktop's look. Gold Gunmetal matches Outlaw CodeMaker</small></div>
-                    <select id="theme-select" style="width:auto;min-width:200px;">
+                    <select id="theme-select" aria-label="Theme" style="width:auto;min-width:200px;">
                         <option value="green">Green Phosphor (default)</option>
                         <option value="gold">Gold Gunmetal (sci-fi fortress)</option>
                         <option value="broken">Broken (unstable / demo)</option>
@@ -731,7 +732,7 @@
                 </div>
                 <div class="setting">
                     <div class="label">Text size<small>Scales the whole interface up or down — easier to read</small></div>
-                    <select id="ui-scale" style="width:auto;min-width:140px;">
+                    <select id="ui-scale" aria-label="Text size" style="width:auto;min-width:140px;">
                         <option value="0.9">Compact</option>
                         <option value="1">Normal</option>
                         <option value="1.15">Large</option>
@@ -749,11 +750,11 @@
                 <div class="muted" style="margin-bottom:8px;">Installed: <span id="app-version" class="mono">…</span></div>
                 <div class="setting">
                     <div class="label">GitHub repository<small>owner/repo — where releases are published</small></div>
-                    <input id="update-repo" placeholder="your-username/Outlaw-OS-main" style="width:auto;min-width:260px;">
+                    <input id="update-repo" aria-label="GitHub repository (owner/repo)" placeholder="your-username/Outlaw-OS-main" style="width:auto;min-width:260px;">
                 </div>
                 <div class="setting">
                     <div class="label">Update channel<small>Stable = only tested releases · Beta = the newest builds (help test)</small></div>
-                    <select id="update-channel" style="width:auto;min-width:200px;">
+                    <select id="update-channel" aria-label="Update channel" style="width:auto;min-width:200px;">
                         <option value="stable">Stable (recommended)</option>
                         <option value="beta">Beta (newest, untested)</option>
                     </select>
@@ -899,8 +900,8 @@
 <!-- Round-2 QOL — volume slider popover (opened from the topbar speaker). -->
 <div id="volume-popover" hidden>
     <div class="row" style="gap:10px;align-items:center;">
-        <button id="vol-mute" title="Mute / unmute" style="padding:6px 9px;">🔊</button>
-        <input type="range" id="vol-slider" min="0" max="100" value="50" style="flex:1;min-width:130px;">
+        <button id="vol-mute" title="Mute / unmute" aria-label="Mute or unmute" style="padding:6px 9px;">🔊</button>
+        <input type="range" id="vol-slider" min="0" max="100" value="50" aria-label="Volume" style="flex:1;min-width:130px;">
         <span id="vol-pct" class="mono" style="min-width:38px;text-align:right;">50%</span>
     </div>
 </div>
