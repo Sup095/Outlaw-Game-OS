@@ -384,8 +384,20 @@ shrink_partition() {
     start_mib="$(parted -s "$disk" unit MiB print 2>/dev/null \
                  | awk -v n="$partnum" '$1==n {gsub("MiB","",$2); print int($2); exit}')"
     [[ -n "$start_mib" ]] || die "Couldn't read where partition $partnum starts."
-    parted -s "$disk" unit MiB resizepart "$partnum" "$(( start_mib + new_mib ))MiB" \
-        || die "Couldn't shrink the partition entry for $part."
+    local end_mib=$(( start_mib + new_mib )) _rp_out
+    # Shrink the partition-table entry to match the now-smaller filesystem. parted's
+    # script mode (-s) is SUPPOSED to auto-confirm the "Shrinking a partition can cause
+    # data loss" prompt, but several parted versions abort on it instead — which is the
+    # "Couldn't shrink the partition entry" failure seen in the wild. So if -s fails we
+    # retry the interactive form, feeding "Yes" via ---pretend-input-tty. The filesystem
+    # is ALREADY safely shrunk at this point, so shrinking the table entry to match is
+    # safe. Capture parted's own message so any OTHER cause is reported, not a generic one.
+    if ! _rp_out="$(parted -s "$disk" unit MiB resizepart "$partnum" "${end_mib}MiB" 2>&1)"; then
+        if ! _rp_out="$(printf 'Yes\n' | parted ---pretend-input-tty "$disk" unit MiB resizepart "$partnum" "${end_mib}MiB" 2>&1)"; then
+            printf '%s\n' "$_rp_out" >&2
+            die "Couldn't shrink the partition entry for $part — the filesystem shrank safely, but updating the partition table failed. ($(printf '%s' "$_rp_out" | grep -iE 'error|warn|fail|cannot|unable|overlap|constraint|refus' | tail -n1))"
+        fi
+    fi
     settle_disk "$disk"
 }
 

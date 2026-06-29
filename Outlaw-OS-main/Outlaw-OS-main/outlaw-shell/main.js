@@ -73,10 +73,11 @@ function getDiagRunner() {
 // creation as the implicit subscription) so a shell launched purely to handle
 // IPC from a script doesn't fork nvidia-smi every 10s for nobody.
 const vramTier = new VramTierMonitor();
-// Apply the persisted mode on boot so the very first tier read reflects the
-// user's pref instead of the constructor default ('auto').
-try { vramTier.setMode(settings.vramSaverMode || 'auto'); }
-catch (e) { console.warn('vramTier initial setMode rejected:', e.message); }
+// NOTE: the persisted mode is applied just AFTER `settings` is loaded (see below).
+// It used to be set here, but `settings` is declared further down — referencing it
+// at module-load time threw "Cannot access 'settings' before initialization" (a
+// temporal-dead-zone error), so the user's saved VRAM-saver mode never actually
+// applied on boot. Now applied once settings exist.
 vramTier.on('tier-changed', (status) => {
     if (mainWindow && !mainWindow.isDestroyed()) {
         mainWindow.webContents.send('vram-tier-changed', status);
@@ -312,6 +313,12 @@ function privUpdate(timeout) {
 }
 
 let settings = loadSettings();
+
+// Apply the persisted VRAM-saver mode on boot so the very first tier read reflects
+// the user's pref instead of the constructor default ('auto'). Done HERE (not at the
+// vramTier construction above) because `settings` only exists from this line on.
+try { vramTier.setMode(settings.vramSaverMode || 'auto'); }
+catch (e) { console.warn('vramTier initial setMode rejected:', e.message); }
 
 // ---------------------------------------------------------------------------
 // Allowlisted application launchers
