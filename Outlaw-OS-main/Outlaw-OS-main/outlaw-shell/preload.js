@@ -138,10 +138,9 @@ contextBridge.exposeInMainWorld('outlaw', {
         clear: () => ipcRenderer.invoke('errorlog:clear'),
         add: (payload) => ipcRenderer.invoke('errorlog:add', payload),
         issueUrl: () => ipcRenderer.invoke('errorlog:issue-url'),
-        // Open the prefilled GitHub issue in the system browser (window.open is
-        // blocked in the kiosk). Save the log to a real file in ~/Downloads.
+        // Open the repo's GitHub Issues page in the browser (window.open is blocked
+        // in the kiosk). The user copies the log + makes an issue there.
         openIssue: () => ipcRenderer.invoke('errorlog:open-issue'),
-        save: () => ipcRenderer.invoke('errorlog:save'),
     },
 
     // --- Gaming -------------------------------------------------------------

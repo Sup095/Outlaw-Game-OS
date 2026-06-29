@@ -2453,29 +2453,22 @@ function registerIpc() {
         return { ok: true };
     });
     ipcMain.handle('errorlog:issue-url', () => errorlog.issueUrl(settings.updateRepo, APP_VERSION));
-    // Open the prefilled GitHub issue in the SYSTEM BROWSER. window.open is denied
-    // by the kiosk's window-open handler, which is why the button did nothing.
-    // GitHub itself requires the user to be signed in to actually submit the issue.
-    ipcMain.handle('errorlog:open-issue', () => {
+    // Open the repo's GitHub ISSUES page in the user's browser. The user just
+    // copies the log and makes an issue there. We open the plain issues list (not
+    // a prefilled-body URL, which can be too long to open) and launch Firefox
+    // DIRECTLY — shell.openExternal relies on xdg-open, which can silently no-op in
+    // the minimal kiosk session if no default browser is registered (that's why the
+    // button "did nothing"). Falls back to openExternal if the browser won't resolve.
+    ipcMain.handle('errorlog:open-issue', async () => {
         try {
-            const url = errorlog.issueUrl(settings.updateRepo, APP_VERSION);
-            if (!url) return { ok: false, error: 'No repository set.' };
-            shell.openExternal(url);
+            const repo = (settings.updateRepo || 'Sup095/Outlaw-Game-OS').trim();
+            if (!/^[\w.-]+\/[\w.-]+$/.test(repo)) return { ok: false, error: 'No repository set.' };
+            const url = `https://github.com/${repo}/issues`;
+            const entry = APP_REGISTRY.browser;
+            const bin = entry ? await resolveBinary(entry) : null;
+            if (bin) { launchDetached(bin, [url]); return { ok: true }; }
+            await shell.openExternal(url);
             return { ok: true };
-        } catch (e) { return { ok: false, error: e.message }; }
-    });
-    // Save the combined log to a real file — blob/anchor downloads are a no-op in
-    // the kiosk. Writes to ~/Downloads and returns the path for a toast.
-    ipcMain.handle('errorlog:save', () => {
-        try {
-            const txt = errorlog.read();
-            if (!txt || !txt.trim()) return { ok: false, error: 'The log is empty — click "Collect errors" first.' };
-            const dir = path.join(os.homedir(), 'Downloads');
-            try { fs.mkdirSync(dir, { recursive: true }); } catch {}
-            const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-            const file = path.join(dir, `outlaw-errorlog-${stamp}.log`);
-            fs.writeFileSync(file, txt, 'utf8');
-            return { ok: true, path: file };
         } catch (e) { return { ok: false, error: e.message }; }
     });
 

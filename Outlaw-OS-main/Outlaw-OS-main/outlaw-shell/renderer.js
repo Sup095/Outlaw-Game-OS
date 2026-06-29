@@ -2287,24 +2287,17 @@ async function errlogRefresh() {
     try { txt = await api.errorlog.collect(); } catch {}
     if (view) view.value = txt || '(no errors or warnings logged — nice.)';
 }
-async function errlogDownload() {
-    // Blob/anchor downloads are a no-op in the kiosk shell (no download handler),
-    // so the main process writes the file to ~/Downloads and tells us the path.
-    const r = await api.errorlog.save().catch(() => null);
-    if (r && r.ok) toast('Log saved to Downloads: ' + (r.path || '').replace(/^.*[\\/]/, ''));
-    else toast((r && r.error) || 'Could not save the log.');
-}
 async function errlogGithub() {
-    // window.open is denied by the hardened window-open handler, so the main
-    // process opens the prefilled GitHub issue in the system browser instead.
+    // Opens the repo's GitHub Issues page in Firefox (window.open is denied by the
+    // hardened window-open handler). The user copies the log + makes an issue there.
     const r = await api.errorlog.openIssue().catch(() => null);
-    if (r && r.ok) toast('Opening GitHub — sign in there to submit your report.');
-    else toast('Couldn\'t open GitHub. Set your repo in Settings → Updates, or use Copy and paste into a new issue.');
+    if (r && r.ok) toast('Opening GitHub issues — paste the copied log into a new issue.');
+    else toast('Couldn\'t open GitHub. Set your repo in Settings → Updates, then Copy the log and open github.com yourself.');
 }
 async function errlogClear() {
     try { await api.errorlog.clear(); } catch {}
     const view = $('#errlog-view'); if (view) view.value = '';
-    toast('Error log cleared.');
+    toast('Error log cleared — only new errors from here on.');
 }
 async function errlogCopy() {
     const view = $('#errlog-view');
@@ -2560,7 +2553,6 @@ function wire() {
     // F1 — error-log controls.
     { const b = $('#errlog-refresh'); if (b) b.addEventListener('click', errlogRefresh); }
     { const b = $('#errlog-github'); if (b) b.addEventListener('click', errlogGithub); }
-    { const b = $('#errlog-download'); if (b) b.addEventListener('click', errlogDownload); }
     { const b = $('#errlog-copy'); if (b) b.addEventListener('click', errlogCopy); }
     { const b = $('#errlog-clear'); if (b) b.addEventListener('click', errlogClear); }
     // 🗺 Roadmap — render + collapsible groups.

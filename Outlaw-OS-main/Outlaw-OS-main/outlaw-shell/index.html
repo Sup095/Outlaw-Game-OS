@@ -825,12 +825,11 @@
 
             <div class="card" id="report-card">
                 <h3>Report a problem</h3>
-                <p class="muted" style="margin:0 0 10px;">If something failed, crashed, or bounced you to the session picker, collect the log and send it. It gathers errors + warnings from the desktop, the dev session, Xorg and the system journal — deduplicated, no repeats.</p>
+                <p class="muted" style="margin:0 0 10px;">If something failed, crashed, or bounced you to the session picker, collect the log and report it. It gathers errors + warnings from the desktop, the dev session, Xorg and the system journal — deduplicated, no repeats. <b>Copy</b> the log, click <b>Open GitHub issues</b>, and paste it into a new issue. When you’re done reporting, <b>Clear</b> it so already-sent errors don’t pile up with new ones.</p>
                 <div class="row" style="gap:8px;flex-wrap:wrap;margin-bottom:10px;">
                     <button class="primary" id="errlog-refresh" type="button">Collect errors</button>
-                    <button id="errlog-github" type="button">Send to GitHub</button>
-                    <button id="errlog-download" type="button">Download .log</button>
                     <button id="errlog-copy" type="button">Copy</button>
+                    <button id="errlog-github" type="button">Open GitHub issues</button>
                     <button class="danger" id="errlog-clear" type="button">Clear</button>
                 </div>
                 <textarea id="errlog-view" readonly style="width:100%;height:170px;font-family:monospace;font-size:11px;background:var(--panel-2,#0d130d);color:var(--text);border:1px solid var(--line);border-radius:8px;padding:8px;" placeholder="Click “Collect errors” to gather recent errors + warnings…"></textarea>

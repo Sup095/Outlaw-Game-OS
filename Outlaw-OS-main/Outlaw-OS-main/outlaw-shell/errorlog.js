@@ -75,13 +75,31 @@ function append(level, source, message) {
     } catch { /* logging must never throw */ }
 }
 
+// A "cleared watermark" sidecar. When the user clicks Clear we record WHEN (epoch
+// seconds) + how far into the session X log we'd read, so a later collect() only
+// pulls journal/Xorg entries from AFTER the clear. Without this, collect() re-scraped
+// the whole boot journal every time and the errors the user just cleared (often ones
+// they ALREADY reported) flooded straight back in.
+const CLEAR_MARK = path.join(os.homedir(), '.outlaw-errors.cleared');
+const _xlogPath = path.join(os.homedir(), '.outlaw-x.log');
+
+function _readMark() {
+    try { return JSON.parse(fs.readFileSync(CLEAR_MARK, 'utf8')); } catch { return null; }
+}
+
 // Scrape error/warning lines out of the X/session log + the journal into the
 // combined log (so a crash that bounced the user to the picker is captured).
 function collect() {
-    // Session stderr (the .xinitrc redirects Electron/X stderr here).
+    const mark = _readMark();
+    // Session stderr (the .xinitrc redirects Electron/X stderr here). Only the part
+    // AFTER the last clear — if the file shrank since (new session / rotation), read all.
     try {
-        const xlog = path.join(os.homedir(), '.outlaw-x.log');
-        for (const line of fs.readFileSync(xlog, 'utf8').split('\n')) {
+        const buf = fs.readFileSync(_xlogPath, 'utf8');
+        let text = buf;
+        if (mark && Number.isFinite(mark.xlogOffset) && mark.xlogOffset > 0 && mark.xlogOffset <= buf.length) {
+            text = buf.slice(mark.xlogOffset);
+        }
+        for (const line of text.split('\n')) {
             if (/\b(error|fail|failed|fatal|cannot|unable|segfault|traceback|warn|denied|refused)\b/i.test(line)) {
                 append('session', 'xorg', line);
             }
@@ -89,13 +107,17 @@ function collect() {
     } catch { /* no x log */ }
     return new Promise((resolve) => {
         try {
-            execFile('journalctl', ['-b', '-p', 'warning', '--no-pager', '-n', '250', '-o', 'cat'],
-                { timeout: 6000 }, (_e, out) => {
-                    if (out) for (const line of String(out).split('\n')) {
-                        if (line.trim()) append('journal', 'system', line);
-                    }
-                    resolve(read());
-                });
+            // journalctl: since the clear watermark if we have one (@epoch is
+            // timezone-proof), else the last 250 warnings of this boot.
+            const args = ['-b', '-p', 'warning', '--no-pager', '-o', 'cat'];
+            if (mark && Number.isFinite(mark.epoch)) args.push('--since', '@' + mark.epoch);
+            else args.push('-n', '250');
+            execFile('journalctl', args, { timeout: 6000 }, (_e, out) => {
+                if (out) for (const line of String(out).split('\n')) {
+                    if (line.trim()) append('journal', 'system', line);
+                }
+                resolve(read());
+            });
         } catch { resolve(read()); }
     });
 }
@@ -105,7 +127,16 @@ function read() {
 }
 
 function clear() {
-    try { fs.writeFileSync(LOG_PATH, ''); _seen.clear(); } catch { /* ignore */ }
+    try {
+        fs.writeFileSync(LOG_PATH, '');
+        _seen.clear();
+        // Drop a watermark so a later collect() won't re-scrape pre-clear journal /
+        // Xorg lines back in — the whole point of Clear is that already-reported
+        // errors stay gone and only NEW ones show up from here on.
+        let xlogOffset = 0;
+        try { xlogOffset = fs.statSync(_xlogPath).size; } catch { /* no x log yet */ }
+        fs.writeFileSync(CLEAR_MARK, JSON.stringify({ epoch: Math.floor(Date.now() / 1000), xlogOffset }));
+    } catch { /* ignore */ }
 }
 
 // Build a prefilled GitHub "new issue" URL from the most recent log lines. No
