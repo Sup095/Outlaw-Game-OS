@@ -190,10 +190,28 @@ function mirrorThemeToHome(theme) {
     } catch { /* non-fatal — greeter falls back to green */ }
 }
 
+// Atomic write — write to a temp file in the SAME directory, then rename over the
+// target. rename(2) is atomic on a POSIX filesystem, so a crash or power-loss
+// mid-write can never leave a half-written (corrupt) file. Without this, a direct
+// writeFileSync that's interrupted leaves truncated JSON that fails to parse on the
+// next load and SILENTLY resets the user's settings/chats/PIN to defaults. On any
+// failure we clean up the temp file and rethrow so the existing (good) file is kept
+// rather than replaced with a partial one.
+function atomicWriteFileSync(file, data, opts) {
+    const tmp = `${file}.tmp-${process.pid}`;
+    try {
+        fs.writeFileSync(tmp, data, opts);
+        fs.renameSync(tmp, file);
+    } catch (e) {
+        try { fs.unlinkSync(tmp); } catch { /* nothing to clean */ }
+        throw e;
+    }
+}
+
 function saveSettings(s) {
     try {
         fs.mkdirSync(path.dirname(SETTINGS_PATH), { recursive: true });
-        fs.writeFileSync(SETTINGS_PATH, JSON.stringify(s, null, 2));
+        atomicWriteFileSync(SETTINGS_PATH, JSON.stringify(s, null, 2));
     } catch (e) {
         console.error('Could not persist settings:', e.message);
     }
@@ -221,7 +239,7 @@ function saveAiChats(store) {
     try {
         fs.mkdirSync(path.dirname(AI_CHATS_PATH), { recursive: true });
         const safe = (store && Array.isArray(store.conversations)) ? store : { activeId: null, conversations: [] };
-        fs.writeFileSync(AI_CHATS_PATH, JSON.stringify(safe, null, 2));
+        atomicWriteFileSync(AI_CHATS_PATH, JSON.stringify(safe, null, 2));
         return true;
     } catch (e) {
         console.error('Could not persist AI chats:', e.message);
@@ -252,7 +270,9 @@ function setPin(pin) {
     const hash = crypto.scryptSync(String(pin), salt, 32).toString('hex');
     try {
         fs.mkdirSync(path.dirname(AUTH_FILE), { recursive: true });
-        fs.writeFileSync(AUTH_FILE, JSON.stringify({ pinSalt: salt, pinHash: hash }), { mode: 0o600 });
+        // atomic + 0o600 on the temp file so the PIN hash is never briefly written
+        // world-readable, and a crash can't leave a corrupt auth file.
+        atomicWriteFileSync(AUTH_FILE, JSON.stringify({ pinSalt: salt, pinHash: hash }), { mode: 0o600 });
         try { fs.chmodSync(AUTH_FILE, 0o600); } catch {}
         return true;
     } catch { return false; }

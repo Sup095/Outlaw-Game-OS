@@ -82,6 +82,13 @@ if [[ "$FAILS" -ge "$MAX_FAILS" && "$PRIOR_SESSION" == "$SESSION_NAME" ]]; then
         # safe-mode marker still tells the user what happened.
         echo "$(date -Iseconds): desktop session crash-looping ($FAILS fails) — dropping to TTY." > "$SAFE_MARKER"
         echo "tty" > "$SESSION_FILE"
+        # CRITICAL (never-strand): reset the counter BEFORE dropping to TTY. The
+        # TTY drop holds via $SESSION_FILE (no auto-retry loop), but if we left the
+        # counter at >=MAX_FAILS, a later desktop retry — after a reboot, a driver
+        # settle, or a fresh install that removes the original cause — would hit
+        # this same branch and be re-dropped to TTY INSTANTLY, forever, with no GUI
+        # way back. Clearing it gives the next desktop attempt a fresh set of tries.
+        _state_write 0 "$SESSION_NAME"
         exit 0  # .xinitrc reads $SESSION_FILE and exits X
     fi
     echo "$(date -Iseconds): $SESSION_NAME crashed $FAILS times in a row — forcing $SAFE_FALLBACK." > "$SAFE_MARKER"

@@ -76,7 +76,7 @@ window.addEventListener('offline', () => { updateOnlineStatus(); if (!airplaneMo
 async function refreshAirplane() {
     const tog = document.querySelector('#airplane-toggle');
     try {
-        const r = await api.network.airplaneStatus();
+        const r = await api.net.airplaneStatus();
         if (r) { airplaneMode = !!r.airplane; if (tog) tog.checked = airplaneMode; updateOnlineStatus(); }
     } catch {}
 }
@@ -84,7 +84,7 @@ async function onAirplaneToggle(e) {
     const on = e.target.checked;
     e.target.disabled = true;
     try {
-        const r = await api.network.setAirplane(on);
+        const r = await api.net.setAirplane(on);
         if (!r || !r.ok) {
             toast('Couldn\'t change airplane mode' + (r && r.error ? ': ' + r.error.slice(0, 80) : '.'));
             e.target.checked = !on;
@@ -1132,6 +1132,7 @@ function _renderProcs() {
     for (const p of rows) {
         const tr = document.createElement('tr');
         tr.dataset.pid = p.pid;
+        tr.tabIndex = 0;   // a11y — rows are keyboard-focusable/selectable, not mouse-only
         if (String(p.pid) === String(_selectedPid)) tr.classList.add('sel');
         tr.innerHTML = `<td class="mono">${p.pid}</td><td>${escapeHtml(p.comm)}</td>`
             + `<td class="right mono">${p.cpu}</td><td class="right mono">${_fmtMem(p)}</td>`;
@@ -1150,6 +1151,8 @@ function _renderProcs() {
         const on = th.dataset.sort === _procSort.key;
         th.classList.toggle('sorted', on);
         th.classList.toggle('asc', on && _procSort.asc);
+        // a11y — announce sort state to screen readers, kept in sync with _procSort.
+        th.setAttribute('aria-sort', on ? (_procSort.asc ? 'ascending' : 'descending') : 'none');
     });
 }
 
@@ -1787,7 +1790,7 @@ async function sendAI() {
         try {
             const tog = $('#airplane-toggle');
             if (tog) { tog.checked = res.airplane; onAirplaneToggle({ target: tog }); }
-            else { await api.network.setAirplane(res.airplane); airplaneMode = res.airplane; updateOnlineStatus(); }
+            else { await api.net.setAirplane(res.airplane); airplaneMode = res.airplane; updateOnlineStatus(); }
         } catch {}
     }
     if (typeof res.swap === 'boolean') {
@@ -2305,8 +2308,20 @@ async function refreshGaming() {
 // ---------------------------------------------------------------------------
 // Power / hotswap
 // ---------------------------------------------------------------------------
-function openPower() { $('#power-modal').classList.add('show'); }
-function closePower() { $('#power-modal').classList.remove('show'); }
+// a11y — remember who opened the power menu so focus can return there on close,
+// and move focus into the menu so keyboard/screen-reader users land on an action
+// instead of staying on the now-covered topbar button.
+let _powerOpener = null;
+function openPower() {
+    _powerOpener = document.activeElement;
+    $('#power-modal').classList.add('show');
+    $('#power-modal .row button')?.focus();
+}
+function closePower() {
+    $('#power-modal').classList.remove('show');
+    try { _powerOpener?.focus(); } catch {}
+    _powerOpener = null;
+}
 async function hotswap() {
     closePower();
     const r = await api.power.hotswap();
@@ -2777,9 +2792,14 @@ function wire() {
     $('#ai-toggle').addEventListener('change', async (e) => {
         if (e.target.checked) {
             const r = await api.ai.enable();
+            // Engine-aware "not reachable yet" message — an Ollama user must not be
+            // told to start LM Studio (mirrors coreai.js _unreachableMsg).
+            const notReady = r.backend === 'ollama'
+                ? 'AI enabled — make sure Ollama is running and the model is pulled (Settings → AI).'
+                : 'AI enabled — start LM Studio and click "Start Server".';
             toast(r.backend === 'base'
                 ? (r.available ? 'AI enabled — using the built-in model.' : 'AI enabled — preparing the built-in model…')
-                : (r.available ? 'AI enabled.' : 'AI enabled — start LM Studio and click "Start Server".'));
+                : (r.available ? 'AI enabled.' : notReady));
         } else {
             await api.ai.disable();
             toast('AI disabled.');
@@ -2903,12 +2923,16 @@ function wire() {
     });
 
     // Phase 5: Task Manager — column sort + End task / End process tree.
+    const _sortByKey = (key) => {
+        if (_procSort.key === key) _procSort.asc = !_procSort.asc;
+        else _procSort = { key, asc: key === 'comm' };   // names A→Z, numbers high→low
+        _renderProcs();
+    };
     $$('#screen-tasks .proc th[data-sort]').forEach((th) => {
-        th.addEventListener('click', () => {
-            const key = th.dataset.sort;
-            if (_procSort.key === key) _procSort.asc = !_procSort.asc;
-            else _procSort = { key, asc: key === 'comm' };   // names A→Z, numbers high→low
-            _renderProcs();
+        th.addEventListener('click', () => _sortByKey(th.dataset.sort));
+        // a11y — Enter/Space sorts, so the headers are operable without a mouse.
+        th.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); _sortByKey(th.dataset.sort); }
         });
     });
     const endTaskBtn = $('#task-end');
@@ -2935,6 +2959,12 @@ function wire() {
     if (procBodyEl) procBodyEl.addEventListener('click', (e) => {
         const tr = e.target.closest('tr[data-pid]');
         if (tr) _selectProc(tr.dataset.pid);
+    });
+    // a11y — keyboard users select a row (the prerequisite for End task) with Enter/Space.
+    if (procBodyEl) procBodyEl.addEventListener('keydown', (e) => {
+        if (e.key !== 'Enter' && e.key !== ' ') return;
+        const tr = e.target.closest('tr[data-pid]');
+        if (tr) { e.preventDefault(); _selectProc(tr.dataset.pid); }
     });
     const procFilterEl = $('#proc-filter');
     if (procFilterEl) procFilterEl.addEventListener('input', () => {
