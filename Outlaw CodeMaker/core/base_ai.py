@@ -20,6 +20,7 @@ import json
 from pathlib import Path
 
 from .api_client import LMStudioClient, LMStudioConfig
+from .atomic import atomic_write
 
 # The bundled base AI: Ollama's OpenAI-compatible endpoint + the model Outlaw OS
 # ships (matches the desktop shell's BASE_AI_MODEL). Both overridable via a
@@ -88,8 +89,9 @@ def load_chats(config: dict | None) -> dict:
 
 def save_chats(config: dict | None, store: dict) -> None:
     try:
-        p = chats_path(config)
-        p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_text(json.dumps(store, indent=2), encoding="utf-8")
+        # Atomic (temp + os.replace) so a crash mid-write can't truncate the file
+        # and wipe the whole chat history — matches every other durable write in
+        # CodeMaker (config, file_controller, evolution). atomic_write also mkdirs.
+        atomic_write(chats_path(config), json.dumps(store, indent=2))
     except Exception:  # noqa: BLE001 — persistence is best-effort
         pass

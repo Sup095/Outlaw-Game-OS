@@ -145,8 +145,6 @@ const DEFAULT_SETTINGS = {
     autoCheck: true,         // background check for shell updates
     lastUpdateCheck: 0,
     lastNotifiedVersion: '', // don't re-toast the same available version
-    sponsorUrl: '',          // optional donate / sponsor URL (Ko-fi, BMC, GH Sponsors, etc.)
-    firstRunDone: false,
     // Phase 6 — first-boot Quickstart tour. Shown once on the first desktop
     // entry; set true on Skip/Finish ("don't show again"). Replayable from Help.
     quickstartSeen: false,
@@ -1296,6 +1294,11 @@ function runStreamingJob(cmd, args, phaseLabels, phaseMatchers) {
         let phase = 0, child;
         try { child = spawn(cmd, args); }
         catch (e) { send({ log: 'error: ' + e.message, done: true, ok: false }); return resolve({ ok: false, error: e.message }); }
+        // Register with trackedProcs so the emergency stop (Ctrl+Alt+K ->
+        // killAllTrackedProcs) can actually kill these long, hang-prone jobs
+        // (AI-confirmed installs, drivers:apply, ollama pulls). Without this they
+        // were invisible to the escape hatch — the exact case it exists for.
+        trackedProcs.add(child);
         const onData = (buf) => {
             for (const raw of String(buf).split('\n')) {
                 const line = raw.replace(/\s+$/, '');
@@ -1308,8 +1311,8 @@ function runStreamingJob(cmd, args, phaseLabels, phaseMatchers) {
         };
         child.stdout && child.stdout.on('data', onData);
         child.stderr && child.stderr.on('data', onData);
-        child.on('error', (e) => { send({ log: 'error: ' + e.message, done: true, ok: false }); resolve({ ok: false, error: e.message }); });
-        child.on('close', (code) => { send({ phase: phaseLabels.length - 1, done: true, ok: code === 0 }); resolve({ ok: code === 0, code }); });
+        child.on('error', (e) => { trackedProcs.delete(child); send({ log: 'error: ' + e.message, done: true, ok: false }); resolve({ ok: false, error: e.message }); });
+        child.on('close', (code) => { trackedProcs.delete(child); send({ phase: phaseLabels.length - 1, done: true, ok: code === 0 }); resolve({ ok: code === 0, code }); });
     });
 }
 
@@ -2580,8 +2583,26 @@ function registerIpc() {
         launchDetached('outlaw-term', ['Outlaw Hotswap', 'outlaw-hotswap'], { focus: false });
         return { ok: true };
     });
-    ipcMain.handle('power:reboot', async () => { if (IS_LINUX) await runShell('systemctl reboot'); return { ok: true }; });
-    ipcMain.handle('power:shutdown', async () => { if (IS_LINUX) await runShell('systemctl poweroff'); return { ok: true }; });
+    ipcMain.handle('power:reboot', async () => {
+        if (!IS_LINUX) return { ok: true };
+        const r = await runShell('systemctl reboot');
+        if (r.code !== 0) {
+            const err = (r.stderr || r.stdout || ('exit ' + r.code)).slice(-300);
+            try { errorlog.append('error', 'power', 'reboot failed: ' + err); } catch {}
+            return { ok: false, error: err };
+        }
+        return { ok: true };
+    });
+    ipcMain.handle('power:shutdown', async () => {
+        if (!IS_LINUX) return { ok: true };
+        const r = await runShell('systemctl poweroff');
+        if (r.code !== 0) {
+            const err = (r.stderr || r.stdout || ('exit ' + r.code)).slice(-300);
+            try { errorlog.append('error', 'power', 'shutdown failed: ' + err); } catch {}
+            return { ok: false, error: err };
+        }
+        return { ok: true };
+    });
 
     // --- Updates / installer ---
     ipcMain.handle('updates:check', async () => {
@@ -2690,9 +2711,12 @@ function registerIpc() {
     });
 
     ipcMain.handle('updates:install-shell', async (_e, info) => {
+        let tmp;
         try {
             if (!info || !info.assetUrl) return { ok: false, error: 'No update payload supplied.' };
-            const { tarPath, sha } = await updater.downloadShellUpdate(info);
+            const dl = await updater.downloadShellUpdate(info);
+            tmp = dl.tmp;
+            const { tarPath, sha } = dl;
             if (!IS_LINUX) {
                 return { ok: false, error: `Downloaded to ${tarPath}. Installation step only runs on Outlaw OS.` };
             }
@@ -2708,6 +2732,13 @@ function registerIpc() {
         } catch (e) {
             try { errorlog.append('error', 'updater', 'Shell update failed: ' + ((e && e.message) || e)); } catch {}
             return { ok: false, error: e.message };
+        } finally {
+            // outlaw-update-apply has fully consumed tarPath (re-verify + extract +
+            // swap, synchronously) by the time the await resolves, so the downloader's
+            // temp dir — holding the tens-of-MB tarball — is no longer needed. It was
+            // only removed on a checksum mismatch before, so every SUCCESSFUL update
+            // orphaned it in /tmp. Best-effort cleanup of a dir the code itself made.
+            if (tmp) { try { fs.rmSync(tmp, { recursive: true, force: true }); } catch { /* gone already */ } }
         }
     });
 
