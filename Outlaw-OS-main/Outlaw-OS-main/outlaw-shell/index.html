@@ -681,6 +681,30 @@
                     <button id="wifi-scan">⟳ Scan for Wi-Fi</button>
                 </div>
                 <div id="wifi-list" class="wifi-list"></div>
+                <div class="setting" id="bt-row" style="margin-top:12px;border-top:1px solid var(--line);padding-top:12px;">
+                    <div class="label">🔵 Bluetooth<small id="bt-status-sub">Checking…</small></div>
+                    <div class="row" style="gap:6px;align-items:center;">
+                        <label class="switch" title="Turn the Bluetooth adapter on or off"><input type="checkbox" id="bt-toggle" aria-label="Bluetooth power"><span class="track"></span></label>
+                        <button id="bt-manage-btn" title="Open the Bluetooth manager to pair and connect devices">Pair a device…</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card" id="region-card">
+                <h3>Region &amp; Input</h3>
+                <div class="setting">
+                    <div class="label">Keyboard layout<small>Which key mapping your keyboard uses. Applied right away and on every boot.</small></div>
+                    <select id="kb-layout" aria-label="Keyboard layout" style="width:auto;min-width:200px;"></select>
+                </div>
+                <div class="setting">
+                    <div class="label">Time zone<small id="tz-sub">Sets your clock's time zone.</small></div>
+                    <select id="tz-select" aria-label="Time zone" style="width:auto;min-width:220px;"></select>
+                </div>
+                <div class="setting">
+                    <div class="label">Set time automatically<small>Keep the clock in sync over the network (NTP).</small></div>
+                    <label class="switch"><input type="checkbox" id="ntp-toggle" aria-label="Set time automatically"><span class="track"></span></label>
+                </div>
+                <div id="region-msg" class="muted" aria-live="polite" style="font-size:12px;min-height:14px;"></div>
             </div>
 
             <div class="card" id="security-card">

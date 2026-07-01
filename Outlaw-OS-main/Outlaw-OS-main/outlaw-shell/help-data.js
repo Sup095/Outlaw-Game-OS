@@ -379,6 +379,29 @@ window.OUTLAW_HELP = [
             + 'Desktop computers with no battery don\'t show this.</p>',
     },
     {
+        id: 'sleep', cat: 'The desktop', title: 'Sleep / suspend',
+        keywords: 'sleep suspend power menu standby resume wake shutdown reboot',
+        body: '<p>Open the <b>power menu</b> (⏻ on the top bar) and choose <b>🌙 Sleep</b> to suspend the '
+            + 'computer to RAM — it powers down almost everything but keeps your session in memory. Press a '
+            + 'key or the power button to wake it back exactly where you left off. You can also just ask the '
+            + 'AI: "put the computer to sleep".</p>',
+    },
+    {
+        id: 'bluetooth', cat: 'The desktop', title: 'Bluetooth devices',
+        keywords: 'bluetooth pair connect headphones controller mouse keyboard wireless blueman device',
+        body: '<p>In <b>Settings → Network &amp; Wi-Fi</b>, the <b>🔵 Bluetooth</b> row turns the adapter on/off '
+            + 'and <b>Pair a device…</b> opens the Bluetooth manager to pair headphones, controllers, a mouse '
+            + 'and so on. Airplane mode turns Bluetooth off along with Wi-Fi. If it says "no adapter found", '
+            + 'this machine has no Bluetooth hardware.</p>',
+    },
+    {
+        id: 'region-input', cat: 'The desktop', title: 'Keyboard layout, time zone & clock',
+        keywords: 'keyboard layout language region time zone timezone clock ntp date input setxkbmap',
+        body: '<p><b>Settings → Region &amp; Input</b> lets you pick your <b>keyboard layout</b> (applied right '
+            + 'away and on every boot), your <b>time zone</b>, and whether the clock <b>sets itself '
+            + 'automatically</b> over the internet. Changing the time zone or auto-time asks for your password.</p>',
+    },
+    {
         id: 'free-up-space', cat: 'System tools', title: 'Free up disk space',
         keywords: 'storage disk space full clean cleanup cache pacman thumbnails trash reclaim low',
         body: '<p>Low on disk space? <b>Settings → Free up space</b> reclaims room safely. Click '

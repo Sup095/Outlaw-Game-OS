@@ -145,6 +145,7 @@ const DEFAULT_SETTINGS = {
     autoCheck: true,         // background check for shell updates
     lastUpdateCheck: 0,
     lastNotifiedVersion: '', // don't re-toast the same available version
+    kbLayout: '',            // keyboard layout code (setxkbmap), '' = system default (us). Applied on boot.
     // Phase 6 — first-boot Quickstart tour. Shown once on the first desktop
     // entry; set true on Skip/Finish ("don't show again"). Replayable from Help.
     quickstartSeen: false,
@@ -1318,10 +1319,131 @@ function runStreamingJob(cmd, args, phaseLabels, phaseMatchers) {
 }
 
 // ---------------------------------------------------------------------------
+// Keyboard layouts — a curated allowlist (code -> label). The renderer can only
+// pick a code from THIS list; it can never pass an arbitrary string to setxkbmap,
+// so there's no injection surface. Codes are standard XKB layout names.
+// ---------------------------------------------------------------------------
+const KB_LAYOUTS = [
+    { code: 'us', label: 'English (US)' },
+    { code: 'gb', label: 'English (UK)' },
+    { code: 'de', label: 'German' },
+    { code: 'fr', label: 'French' },
+    { code: 'es', label: 'Spanish' },
+    { code: 'it', label: 'Italian' },
+    { code: 'pt', label: 'Portuguese' },
+    { code: 'br', label: 'Portuguese (Brazil)' },
+    { code: 'latam', label: 'Spanish (Latin America)' },
+    { code: 'dk', label: 'Danish' },
+    { code: 'no', label: 'Norwegian' },
+    { code: 'se', label: 'Swedish' },
+    { code: 'fi', label: 'Finnish' },
+    { code: 'pl', label: 'Polish' },
+    { code: 'cz', label: 'Czech' },
+    { code: 'hu', label: 'Hungarian' },
+    { code: 'ru', label: 'Russian' },
+    { code: 'ua', label: 'Ukrainian' },
+    { code: 'tr', label: 'Turkish' },
+    { code: 'gr', label: 'Greek' },
+    { code: 'nl', label: 'Dutch' },
+    { code: 'be', label: 'Belgian' },
+    { code: 'ch', label: 'Swiss' },
+    { code: 'ca', label: 'Canadian' },
+];
+function _isKbLayout(code) { return KB_LAYOUTS.some((l) => l.code === code); }
+// Apply a keyboard layout for the whole X session (setxkbmap is session-global).
+// Silently no-ops off-Linux / if the code isn't in the allowlist.
+function applyKbLayout(code) {
+    if (!IS_LINUX || !code || !_isKbLayout(code)) return;
+    try { execFile('setxkbmap', [code], () => {}); } catch { /* setxkbmap absent */ }
+}
+
+// ---------------------------------------------------------------------------
 // IPC handlers
 // ---------------------------------------------------------------------------
 function registerIpc() {
     ipcMain.handle('system:info', () => systemInfo());
+
+    // ----- Keyboard layout -------------------------------------------------
+    ipcMain.handle('kb:list', () => KB_LAYOUTS);
+    ipcMain.handle('kb:status', async () => {
+        const saved = settings.kbLayout || '';
+        if (!IS_LINUX) return { current: saved || 'us', saved };
+        const r = await runShell('setxkbmap -query 2>/dev/null | awk \'/^layout:/{print $2}\'', { timeout: 3000 });
+        const current = (r.stdout || '').split(',')[0].trim() || 'us';
+        return { current, saved };
+    });
+    ipcMain.handle('kb:set', async (_e, code) => {
+        if (!_isKbLayout(code)) return { ok: false, error: 'Unknown keyboard layout.' };
+        if (IS_LINUX) {
+            const r = await runShell(`setxkbmap ${code}`, { timeout: 4000 });
+            if (r.code !== 0) return { ok: false, error: (r.stderr || 'setxkbmap failed').slice(-200) };
+        }
+        settings = saveSettings({ ...settings, kbLayout: code });
+        return { ok: true, code };
+    });
+
+    // ----- Date / time / timezone -----------------------------------------
+    // Reads are unprivileged; setting the zone / NTP goes through pkexec
+    // (polkit prompts once). The timezone is validated against the real zone
+    // list before it's handed to timedatectl, so no arbitrary argument.
+    ipcMain.handle('time:status', async () => {
+        if (!IS_LINUX) return { timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC', ntp: true, local: new Date().toString() };
+        const tz = (await runShell('timedatectl show -p Timezone --value 2>/dev/null', { timeout: 3000 })).stdout.trim() || 'UTC';
+        const ntp = (await runShell('timedatectl show -p NTP --value 2>/dev/null', { timeout: 3000 })).stdout.trim() === 'yes';
+        const local = (await runShell('date 2>/dev/null', { timeout: 3000 })).stdout.trim();
+        return { timezone: tz, ntp, local };
+    });
+    ipcMain.handle('time:zones', async () => {
+        if (!IS_LINUX) return ['UTC', 'America/Chicago', 'America/New_York', 'Europe/London'];
+        const r = await runShell('timedatectl list-timezones 2>/dev/null', { timeout: 5000 });
+        return (r.stdout || '').split('\n').map((s) => s.trim()).filter(Boolean);
+    });
+    ipcMain.handle('time:set-zone', async (_e, tz) => {
+        if (!IS_LINUX) return { ok: true };
+        // Validate against the real zone list — never pass an arbitrary string to pkexec.
+        const zones = (await runShell('timedatectl list-timezones 2>/dev/null', { timeout: 5000 })).stdout.split('\n').map((s) => s.trim());
+        if (!zones.includes(tz)) return { ok: false, error: 'Unknown timezone.' };
+        const r = await runShell(`pkexec timedatectl set-timezone ${JSON.stringify(tz)}`, { timeout: 15000 });
+        if (r.code !== 0) return { ok: false, error: (r.stderr || r.stdout || 'Could not set the timezone.').slice(-200) };
+        return { ok: true, timezone: tz };
+    });
+    ipcMain.handle('time:set-ntp', async (_e, on) => {
+        if (!IS_LINUX) return { ok: true };
+        const r = await runShell(`pkexec timedatectl set-ntp ${on ? 'true' : 'false'}`, { timeout: 15000 });
+        if (r.code !== 0) return { ok: false, error: (r.stderr || r.stdout || 'Could not change auto-time.').slice(-200) };
+        return { ok: true, ntp: !!on };
+    });
+
+    // ----- Bluetooth -------------------------------------------------------
+    // Pairing/managing devices is handled by blueman (the standard GTK Bluetooth
+    // manager) which we bundle — reimplementing the full BT stack in the shell
+    // would be fragile. Here we report status, power the adapter on/off, and open
+    // the manager. Power uses rfkill (no root needed for the user's own session).
+    ipcMain.handle('bt:status', async () => {
+        if (!IS_LINUX) return { present: false, powered: false };
+        const r = await runShell('rfkill list bluetooth 2>/dev/null', { timeout: 3000 });
+        const out = r.stdout || '';
+        const present = /bluetooth/i.test(out);
+        const powered = present && !/Soft blocked:\s*yes/i.test(out);
+        return { present, powered };
+    });
+    ipcMain.handle('bt:power', async (_e, on) => {
+        if (!IS_LINUX) return { ok: true, powered: !!on };
+        await runShell(`rfkill ${on ? 'unblock' : 'block'} bluetooth 2>/dev/null`, { timeout: 5000 });
+        if (on) await runShell('bluetoothctl power on 2>/dev/null || true', { timeout: 4000 });
+        return { ok: true, powered: !!on };
+    });
+    ipcMain.handle('bt:manage', async () => {
+        if (!IS_LINUX) return { ok: false, error: 'Bluetooth manager runs on Outlaw OS.' };
+        // Confirm the manager is actually installed before claiming success, then
+        // make sure the adapter is unblocked and open the pairing GUI (blueman).
+        const have = await runShell('command -v blueman-manager >/dev/null 2>&1 && echo yes', { timeout: 3000 });
+        if (!/yes/.test(have.stdout || '')) return { ok: false, error: 'The Bluetooth manager (blueman) isn\'t installed yet.' };
+        await runShell('rfkill unblock bluetooth 2>/dev/null || true', { timeout: 4000 });
+        try { const c = spawn('blueman-manager', [], { detached: true, stdio: 'ignore' }); c.on('error', () => {}); c.unref(); }
+        catch { return { ok: false, error: 'Could not open the Bluetooth manager.' }; }
+        return { ok: true };
+    });
 
     // Phase 8: real boot messages for the cinematic boot screen. journalctl
     // -o cat = message text only (no timestamps); falls back to dmesg. Read-only
@@ -3067,6 +3189,9 @@ app.whenReady().then(() => {
     // very next boot, even for users who set it before this feature existed (they
     // wouldn't have re-saved settings). Cheap one-shot write.
     mirrorThemeToHome(settings && settings.theme);
+    // Re-apply the user's saved keyboard layout for the session (setxkbmap is
+    // session-global and resets to the default each login).
+    applyKbLayout(settings && settings.kbLayout);
     createWindow();
     startAutoCheck();
     // SC7 — start the VRAM tier background poll now that a renderer exists.

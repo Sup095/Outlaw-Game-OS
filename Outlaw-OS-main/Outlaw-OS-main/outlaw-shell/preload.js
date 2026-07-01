@@ -158,6 +158,28 @@ contextBridge.exposeInMainWorld('outlaw', {
         suspend: () => ipcRenderer.invoke('power:suspend'),
     },
 
+    // --- Keyboard layout ---------------------------------------------------
+    kb: {
+        list: () => ipcRenderer.invoke('kb:list'),
+        status: () => ipcRenderer.invoke('kb:status'),
+        set: (code) => ipcRenderer.invoke('kb:set', code),
+    },
+
+    // --- Date / time / timezone --------------------------------------------
+    time: {
+        status: () => ipcRenderer.invoke('time:status'),
+        zones: () => ipcRenderer.invoke('time:zones'),
+        setZone: (tz) => ipcRenderer.invoke('time:set-zone', tz),
+        setNtp: (on) => ipcRenderer.invoke('time:set-ntp', on),
+    },
+
+    // --- Bluetooth ---------------------------------------------------------
+    bt: {
+        status: () => ipcRenderer.invoke('bt:status'),
+        power: (on) => ipcRenderer.invoke('bt:power', on),
+        manage: () => ipcRenderer.invoke('bt:manage'),
+    },
+
     // --- Updates / installer -----------------------------------------------
     updates: {
         check: () => ipcRenderer.invoke('updates:check'),

@@ -99,6 +99,45 @@ async function onAirplaneToggle(e) {
 }
 try { updateOnlineStatus(); } catch {}
 
+// --- Region & Input (keyboard layout, time zone, NTP) + Bluetooth -----------
+function _regionMsg(t) { const el = document.querySelector('#region-msg'); if (el) el.textContent = t || ''; }
+let _regionPopulated = false;
+async function refreshRegionUi() {
+    const kbSel = document.querySelector('#kb-layout');
+    const tzSel = document.querySelector('#tz-select');
+    const ntp = document.querySelector('#ntp-toggle');
+    try {
+        if (!_regionPopulated) {
+            const [layouts, zones] = await Promise.all([api.kb.list(), api.time.zones()]);
+            if (kbSel && Array.isArray(layouts)) kbSel.innerHTML = layouts.map((l) => `<option value="${l.code}">${l.label}</option>`).join('');
+            if (tzSel && Array.isArray(zones)) tzSel.innerHTML = zones.map((z) => `<option value="${z}">${z}</option>`).join('');
+            _regionPopulated = true;
+        }
+        const [kbSt, tSt] = await Promise.all([api.kb.status(), api.time.status()]);
+        if (kbSel && kbSt) kbSel.value = kbSt.saved || kbSt.current || 'us';
+        if (tzSel && tSt && tSt.timezone) tzSel.value = tSt.timezone;
+        if (ntp && tSt) ntp.checked = !!tSt.ntp;
+        const sub = document.querySelector('#tz-sub'); if (sub && tSt && tSt.local) sub.textContent = tSt.local;
+    } catch { /* leave defaults */ }
+}
+async function refreshBtUi() {
+    const tog = document.querySelector('#bt-toggle');
+    const sub = document.querySelector('#bt-status-sub');
+    const mng = document.querySelector('#bt-manage-btn');
+    try {
+        const r = await api.bt.status();
+        if (!r || !r.present) {
+            if (sub) sub.textContent = 'No Bluetooth adapter found.';
+            if (tog) tog.disabled = true;
+            if (mng) mng.disabled = true;
+            return;
+        }
+        if (tog) { tog.disabled = false; tog.checked = !!r.powered; }
+        if (mng) mng.disabled = false;
+        if (sub) sub.textContent = r.powered ? 'On — pair a device below.' : 'Off.';
+    } catch { if (sub) sub.textContent = 'Bluetooth unavailable.'; }
+}
+
 // QoL — live filter for the (now long) Settings screen: hide cards that don't
 // match the query. Pure show/hide, no logic touched.
 function filterSettings(q) {
@@ -373,7 +412,7 @@ function showScreen(name) {
     if (name === 'gaming') refreshGaming();
     if (name === 'apps') { loadAppsCatalog(); const as = $('#apps-search'); if (as) as.focus(); }
     if (name === 'help') { renderHelp(($('#help-search') || {}).value || ''); const hs = $('#help-search'); if (hs) hs.focus(); }
-    if (name === 'settings') { const ss = $('#settings-search'); if (ss) ss.value = ''; filterSettings(''); refreshNetStatus(); refreshDriversUi(); refreshSwapStatus(); refreshAirplane(); if (window._refreshSecurityUi) window._refreshSecurityUi(); }
+    if (name === 'settings') { const ss = $('#settings-search'); if (ss) ss.value = ''; filterSettings(''); refreshNetStatus(); refreshDriversUi(); refreshSwapStatus(); refreshAirplane(); refreshRegionUi(); refreshBtUi(); if (window._refreshSecurityUi) window._refreshSecurityUi(); }
     if (name === 'ai') $('#ai-in').focus();
     if (name === 'terminal') $('#term-in').focus();
     // System Core lifecycle — init when navigating to it, teardown otherwise.
@@ -3124,6 +3163,38 @@ function wire() {
     const airTog = $('#airplane-toggle');
     if (airTog) airTog.addEventListener('change', onAirplaneToggle);
     refreshAirplane();
+    // Tier-1 — Region & Input (keyboard layout, time zone, NTP).
+    const kbSel = $('#kb-layout');
+    if (kbSel) kbSel.addEventListener('change', async () => {
+        const r = await api.kb.set(kbSel.value);
+        _regionMsg(r && r.ok ? 'Keyboard layout applied.' : ('Couldn\'t set layout' + (r && r.error ? ': ' + r.error : '.')));
+    });
+    const tzSel = $('#tz-select');
+    if (tzSel) tzSel.addEventListener('change', async () => {
+        _regionMsg('Setting time zone…');
+        const r = await api.time.setZone(tzSel.value);
+        _regionMsg(r && r.ok ? 'Time zone updated.' : ('Couldn\'t set time zone' + (r && r.error ? ': ' + r.error : '.')));
+        if (!r || !r.ok) refreshRegionUi();
+    });
+    const ntpTog = $('#ntp-toggle');
+    if (ntpTog) ntpTog.addEventListener('change', async () => {
+        const r = await api.time.setNtp(ntpTog.checked);
+        if (!r || !r.ok) { ntpTog.checked = !ntpTog.checked; _regionMsg('Couldn\'t change auto-time' + (r && r.error ? ': ' + r.error : '.')); }
+        else _regionMsg('Auto-time ' + (ntpTog.checked ? 'on.' : 'off.'));
+    });
+    // Tier-1 — Bluetooth (power toggle + open the pairing manager).
+    const btTog = $('#bt-toggle');
+    if (btTog) btTog.addEventListener('change', async () => {
+        btTog.disabled = true;
+        try { await api.bt.power(btTog.checked); } catch {}
+        btTog.disabled = false; refreshBtUi();
+    });
+    const btMng = $('#bt-manage-btn');
+    if (btMng) btMng.addEventListener('click', async () => {
+        const r = await api.bt.manage();
+        if (!r || !r.ok) toast(r && r.error ? r.error : 'Couldn\'t open the Bluetooth manager.');
+        else toast('Opening the Bluetooth manager…');
+    });
     // QoL — Settings search/filter.
     const setSearch = $('#settings-search');
     if (setSearch) setSearch.addEventListener('input', (e) => filterSettings(e.target.value));

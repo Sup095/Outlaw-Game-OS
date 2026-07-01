@@ -118,6 +118,12 @@ ESSENTIAL_PKGS=(
   # folders (run once on first login) so the Files app and apps have real
   # user directories instead of a bare home. Lightweight, no daemon.
   xdg-user-dirs
+
+  # Bluetooth. bluez is the stack + bluetooth.service daemon (enabled below),
+  # bluez-utils gives `bluetoothctl`, and blueman is the GTK manager the shell's
+  # "Pair a device…" button opens (blueman-manager). WITHOUT these there is no
+  # Bluetooth at all — the airplane toggle only rfkills a non-existent adapter.
+  bluez bluez-utils blueman
 )
 
 # OPTIONAL_BUNDLES — installed by /usr/share/outlaw-firstboot AFTER the user
@@ -688,6 +694,9 @@ ExecStart=-/usr/bin/agetty --autologin $USERNAME --noclear %I 38400 linux
 GETTY
 
 systemctl enable NetworkManager apparmor
+# Bluetooth stack — the bluetooth.service must be enabled for adapters to work +
+# for blueman/bluetoothctl to see them. Guarded so a missing unit can't abort.
+systemctl enable bluetooth 2>/dev/null || true
 # Keep the clock correct automatically over the internet (NTP).
 systemctl enable systemd-timesyncd
 # Local AI runtime for the desktop's built-in AI (Phase 13.2). Light daemon — it
