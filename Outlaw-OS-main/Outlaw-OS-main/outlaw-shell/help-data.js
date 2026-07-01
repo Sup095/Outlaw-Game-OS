@@ -402,6 +402,28 @@ window.OUTLAW_HELP = [
             + 'automatically</b> over the internet. Changing the time zone or auto-time asks for your password.</p>',
     },
     {
+        id: 'night-light', cat: 'The desktop', title: 'Night light (warm the screen)',
+        keywords: 'night light blue light warm color temperature eye strain evening gammastep redshift dark',
+        body: '<p><b>Settings → Desktop &amp; Notifications → 🌙 Night light</b> warms the screen\'s colors to '
+            + 'cut blue light in the evening, which is easier on the eyes. Pick how warm it goes under '
+            + '<b>Warmth</b>. It re-applies itself on every boot while it\'s on, and turning it off restores '
+            + 'normal colors instantly.</p>',
+    },
+    {
+        id: 'do-not-disturb', cat: 'The desktop', title: 'Do Not Disturb (pause notifications)',
+        keywords: 'do not disturb dnd notifications pause silence quiet mute popup dunst focus',
+        body: '<p><b>Settings → Desktop &amp; Notifications → 🔕 Do Not Disturb</b> silences pop-up '
+            + 'notifications so nothing interrupts you. <b>Show last</b> re-displays the most recent one. Your '
+            + 'choice sticks across reboots.</p>',
+    },
+    {
+        id: 'auto-lock', cat: 'Settings & updates', title: 'Auto-lock when idle',
+        keywords: 'auto lock idle timeout screen lock security pin away inactivity',
+        body: '<p><b>Settings → Security &amp; sign-in → Auto-lock when idle</b> locks the desktop for you '
+            + 'after a stretch of no keyboard or mouse activity, so it\'s protected if you step away. It needs '
+            + 'a <b>PIN</b> set first, and you unlock the same way as at sign-in.</p>',
+    },
+    {
         id: 'free-up-space', cat: 'System tools', title: 'Free up disk space',
         keywords: 'storage disk space full clean cleanup cache pacman thumbnails trash reclaim low',
         body: '<p>Low on disk space? <b>Settings → Free up space</b> reclaims room safely. Click '

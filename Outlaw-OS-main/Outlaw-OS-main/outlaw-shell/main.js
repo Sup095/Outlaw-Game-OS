@@ -146,6 +146,11 @@ const DEFAULT_SETTINGS = {
     lastUpdateCheck: 0,
     lastNotifiedVersion: '', // don't re-toast the same available version
     kbLayout: '',            // keyboard layout code (setxkbmap), '' = system default (us). Applied on boot.
+    // Tier-2 desktop QOL (V2.0.171)
+    nightLight: false,       // warm color-temperature filter (gammastep). Re-applied on boot when on.
+    nightLightTemp: 4000,    // Kelvin when night light is ON (lower = warmer). Clamped 2000–6500.
+    dnd: false,              // Do Not Disturb — pause desktop notifications (dunst). Re-applied on boot.
+    autoLockMin: 0,          // auto-lock the desktop after N minutes idle (renderer timer). 0 = never.
     // Phase 6 — first-boot Quickstart tour. Shown once on the first desktop
     // entry; set true on Skip/Finish ("don't show again"). Replayable from Help.
     quickstartSeen: false,
@@ -1357,6 +1362,28 @@ function applyKbLayout(code) {
     try { execFile('setxkbmap', [code], () => {}); } catch { /* setxkbmap absent */ }
 }
 
+// ----- Tier-2 desktop QOL: night light + Do Not Disturb -----------------
+// Night light warms the screen via gammastep's one-shot manual mode: `-O TEMP`
+// sets the X gamma ramp and exits (no lingering daemon), `-x` resets to neutral.
+// This is an unprivileged, per-session gamma-ramp op — the worst case is a wrong
+// tint that `-x` (or the next login) clears, so it can NEVER strand the boot.
+function applyNightLight(on, temp) {
+    if (!IS_LINUX) return;
+    const t = Math.max(2000, Math.min(6500, Number(temp) || 4000));
+    try {
+        if (on) execFile('gammastep', ['-P', '-O', String(t)], () => {});
+        else execFile('gammastep', ['-x'], () => {});
+    } catch { /* gammastep absent — night light is a no-op until installed */ }
+}
+
+// Do Not Disturb toggles dunst's paused state. dunstctl ships with dunst (the
+// notification daemon we bundle). Best-effort — if dunst isn't up yet the call
+// no-ops and the saved state re-applies next time it's toggled.
+function applyDnd(on) {
+    if (!IS_LINUX) return;
+    try { execFile('dunstctl', ['set-paused', on ? 'true' : 'false'], () => {}); } catch { /* dunst absent */ }
+}
+
 // ---------------------------------------------------------------------------
 // IPC handlers
 // ---------------------------------------------------------------------------
@@ -1442,6 +1469,51 @@ function registerIpc() {
         await runShell('rfkill unblock bluetooth 2>/dev/null || true', { timeout: 4000 });
         try { const c = spawn('blueman-manager', [], { detached: true, stdio: 'ignore' }); c.on('error', () => {}); c.unref(); }
         catch { return { ok: false, error: 'Could not open the Bluetooth manager.' }; }
+        return { ok: true };
+    });
+
+    // ----- Night light (warm color-temperature filter) --------------------
+    ipcMain.handle('nightlight:status', () => ({
+        on: !!settings.nightLight,
+        temp: Math.max(2000, Math.min(6500, Number(settings.nightLightTemp) || 4000)),
+        supported: IS_LINUX,
+    }));
+    ipcMain.handle('nightlight:set', async (_e, payload) => {
+        const on = !!(payload && payload.on);
+        const temp = Math.max(2000, Math.min(6500,
+            Number(payload && payload.temp) || Number(settings.nightLightTemp) || 4000));
+        if (IS_LINUX && on) {
+            const have = await runShell('command -v gammastep >/dev/null 2>&1 && echo yes', { timeout: 3000 });
+            if (!/yes/.test(have.stdout || '')) return { ok: false, error: 'Night light needs the gammastep package, which isn\'t installed yet.' };
+        }
+        applyNightLight(on, temp);
+        settings = saveSettings({ ...settings, nightLight: on, nightLightTemp: temp });
+        return { ok: true, on, temp };
+    });
+
+    // ----- Notifications: Do Not Disturb ----------------------------------
+    ipcMain.handle('notif:dnd-status', async () => {
+        if (!IS_LINUX) return { paused: !!settings.dnd, supported: false };
+        const r = await runShell('dunstctl is-paused 2>/dev/null', { timeout: 3000 });
+        const out = (r.stdout || '').trim();
+        return { paused: /true/i.test(out), supported: /^(true|false)$/i.test(out) };
+    });
+    ipcMain.handle('notif:dnd-set', async (_e, on) => {
+        if (IS_LINUX) {
+            const have = await runShell('command -v dunstctl >/dev/null 2>&1 && echo yes', { timeout: 3000 });
+            if (!/yes/.test(have.stdout || '')) return { ok: false, error: 'The notification daemon (dunst) isn\'t running.' };
+            await runShell(`dunstctl set-paused ${on ? 'true' : 'false'} 2>/dev/null`, { timeout: 3000 });
+        }
+        settings = saveSettings({ ...settings, dnd: !!on });
+        return { ok: true, paused: !!on };
+    });
+    ipcMain.handle('notif:show-last', async () => {
+        if (!IS_LINUX) return { ok: false };
+        // Re-display the most recently dismissed notification (unpause first so it
+        // actually appears even while DND is on).
+        await runShell('dunstctl set-paused false 2>/dev/null && dunstctl history-pop 2>/dev/null', { timeout: 3000 });
+        // Restore the user's DND choice after popping.
+        if (settings.dnd) await runShell('dunstctl set-paused true 2>/dev/null', { timeout: 2000 });
         return { ok: true };
     });
 
@@ -3192,6 +3264,11 @@ app.whenReady().then(() => {
     // Re-apply the user's saved keyboard layout for the session (setxkbmap is
     // session-global and resets to the default each login).
     applyKbLayout(settings && settings.kbLayout);
+    // Re-apply saved night light (X gamma resets each login) and Do Not Disturb.
+    // DND is delayed a few seconds because dunst is still coming up from .xinitrc
+    // when the shell launches; night light needs no daemon so it applies at once.
+    if (settings && settings.nightLight) applyNightLight(true, settings.nightLightTemp);
+    if (settings && settings.dnd) setTimeout(() => applyDnd(true), 4000);
     createWindow();
     startAutoCheck();
     // SC7 — start the VRAM tier background poll now that a renderer exists.

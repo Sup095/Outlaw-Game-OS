@@ -138,6 +138,60 @@ async function refreshBtUi() {
     } catch { if (sub) sub.textContent = 'Bluetooth unavailable.'; }
 }
 
+// --- Tier-2 desktop QOL: night light + Do Not Disturb -----------------------
+function _desktopMsg(t) { const el = document.querySelector('#desktop-msg'); if (el) el.textContent = t || ''; }
+async function refreshDesktopUi() {
+    const nlTog = document.querySelector('#nightlight-toggle');
+    const nlTemp = document.querySelector('#nightlight-temp');
+    const nlRow = document.querySelector('#nightlight-warmth-row');
+    const dndTog = document.querySelector('#dnd-toggle');
+    try {
+        const nl = await api.nightlight.status();
+        if (nlTog) nlTog.checked = !!(nl && nl.on);
+        if (nlTemp && nl && nl.temp) nlTemp.value = String(nl.temp);
+        if (nlRow) nlRow.style.display = (nl && nl.on) ? '' : 'none';
+        const sub = document.querySelector('#nightlight-sub');
+        if (sub && nl && !nl.supported) sub.textContent = 'Runs on Outlaw OS.';
+    } catch {}
+    try {
+        const d = await api.notif.dndStatus();
+        if (dndTog) dndTog.checked = !!(d && d.paused);
+    } catch {}
+}
+
+// Auto-lock on idle. A single self-rearming timeout; user activity resets it
+// (throttled so mousemove doesn't churn). Fires lockNow() only when a PIN exists
+// and the sign-in screen isn't already up — so it can never trap the user.
+let _autoLockMs = 0;
+let _autoLockTimer = null;
+let _autoLockLastReset = 0;
+function _autoLockArm() {
+    if (_autoLockTimer) { clearTimeout(_autoLockTimer); _autoLockTimer = null; }
+    if (!_autoLockMs) return;
+    _autoLockTimer = setTimeout(async () => {
+        _autoLockTimer = null;
+        const si = document.querySelector('#signin');
+        if (si && si.style.display && si.style.display !== 'none') return; // already locked
+        try {
+            const st = await api.auth.status();
+            if (!st || st.live || !st.hasPin) return;
+            lockNow();
+        } catch {}
+    }, _autoLockMs);
+}
+function _autoLockActivity() {
+    if (!_autoLockMs) return;
+    const now = Date.now();
+    if (now - _autoLockLastReset < 5000) return; // throttle re-arms to once / 5s
+    _autoLockLastReset = now;
+    _autoLockArm();
+}
+function setAutoLock(min) {
+    _autoLockMs = (Number(min) || 0) * 60000;
+    _autoLockLastReset = Date.now();
+    _autoLockArm();
+}
+
 // QoL — live filter for the (now long) Settings screen: hide cards that don't
 // match the query. Pure show/hide, no logic touched.
 function filterSettings(q) {
@@ -412,7 +466,7 @@ function showScreen(name) {
     if (name === 'gaming') refreshGaming();
     if (name === 'apps') { loadAppsCatalog(); const as = $('#apps-search'); if (as) as.focus(); }
     if (name === 'help') { renderHelp(($('#help-search') || {}).value || ''); const hs = $('#help-search'); if (hs) hs.focus(); }
-    if (name === 'settings') { const ss = $('#settings-search'); if (ss) ss.value = ''; filterSettings(''); refreshNetStatus(); refreshDriversUi(); refreshSwapStatus(); refreshAirplane(); refreshRegionUi(); refreshBtUi(); if (window._refreshSecurityUi) window._refreshSecurityUi(); }
+    if (name === 'settings') { const ss = $('#settings-search'); if (ss) ss.value = ''; filterSettings(''); refreshNetStatus(); refreshDriversUi(); refreshSwapStatus(); refreshAirplane(); refreshRegionUi(); refreshBtUi(); refreshDesktopUi(); if (window._refreshSecurityUi) window._refreshSecurityUi(); }
     if (name === 'ai') $('#ai-in').focus();
     if (name === 'terminal') $('#term-in').focus();
     // System Core lifecycle — init when navigating to it, teardown otherwise.
@@ -2297,6 +2351,13 @@ async function loadSettings() {
         vramEl.value = s.vramSaverMode || 'auto';
         refreshVramSubText();
     }
+    // Tier-2 — auto-lock idle timer (armed at startup, independent of the
+    // Settings screen) + seed the night-light warmth select.
+    const alSel = $('#autolock-select');
+    if (alSel) alSel.value = String(s.autoLockMin || 0);
+    setAutoLock(s.autoLockMin || 0);
+    const nlTempSel = $('#nightlight-temp');
+    if (nlTempSel && s.nightLightTemp) nlTempSel.value = String(s.nightLightTemp);
 }
 
 async function refreshVramSubText() {
@@ -3195,6 +3256,42 @@ function wire() {
         if (!r || !r.ok) toast(r && r.error ? r.error : 'Couldn\'t open the Bluetooth manager.');
         else toast('Opening the Bluetooth manager…');
     });
+    // Tier-2 — Night light (warm the screen) + warmth level.
+    const nlTog = $('#nightlight-toggle');
+    const nlTemp = $('#nightlight-temp');
+    const nlRow = $('#nightlight-warmth-row');
+    const applyNl = async (on) => {
+        const temp = nlTemp ? parseInt(nlTemp.value, 10) || 4000 : 4000;
+        const r = await api.nightlight.set({ on, temp });
+        if (nlRow) nlRow.style.display = on ? '' : 'none';
+        if (!r || !r.ok) {
+            if (nlTog) nlTog.checked = false;
+            if (nlRow) nlRow.style.display = 'none';
+            _desktopMsg(r && r.error ? r.error : 'Couldn\'t change night light.');
+        } else {
+            _desktopMsg(on ? 'Night light on.' : 'Night light off.');
+        }
+    };
+    if (nlTog) nlTog.addEventListener('change', () => applyNl(nlTog.checked));
+    if (nlTemp) nlTemp.addEventListener('change', () => { if (nlTog && nlTog.checked) applyNl(true); });
+    // Tier-2 — Do Not Disturb + re-show the last notification.
+    const dndTog = $('#dnd-toggle');
+    if (dndTog) dndTog.addEventListener('change', async () => {
+        const r = await api.notif.dndSet(dndTog.checked);
+        if (!r || !r.ok) { dndTog.checked = !dndTog.checked; _desktopMsg(r && r.error ? r.error : 'Couldn\'t change Do Not Disturb.'); }
+        else _desktopMsg(dndTog.checked ? 'Do Not Disturb on.' : 'Do Not Disturb off.');
+    });
+    const dndLast = $('#dnd-show-last');
+    if (dndLast) dndLast.addEventListener('click', async () => { try { await api.notif.showLast(); } catch {} });
+    // Tier-2 — Auto-lock when idle. Persist + re-arm the idle timer live.
+    const alSel = $('#autolock-select');
+    if (alSel) alSel.addEventListener('change', () => {
+        const min = parseInt(alSel.value, 10) || 0;
+        setSetting({ autoLockMin: min });
+        setAutoLock(min);
+    });
+    ['mousemove', 'mousedown', 'keydown', 'wheel', 'touchstart'].forEach((ev) =>
+        document.addEventListener(ev, _autoLockActivity, { passive: true }));
     // QoL — Settings search/filter.
     const setSearch = $('#settings-search');
     if (setSearch) setSearch.addEventListener('input', (e) => filterSettings(e.target.value));

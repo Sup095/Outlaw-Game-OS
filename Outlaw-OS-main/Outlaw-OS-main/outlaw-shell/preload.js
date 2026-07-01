@@ -180,6 +180,19 @@ contextBridge.exposeInMainWorld('outlaw', {
         manage: () => ipcRenderer.invoke('bt:manage'),
     },
 
+    // --- Night light (warm color-temperature filter) -----------------------
+    nightlight: {
+        status: () => ipcRenderer.invoke('nightlight:status'),
+        set: (payload) => ipcRenderer.invoke('nightlight:set', payload),
+    },
+
+    // --- Notifications: Do Not Disturb -------------------------------------
+    notif: {
+        dndStatus: () => ipcRenderer.invoke('notif:dnd-status'),
+        dndSet: (on) => ipcRenderer.invoke('notif:dnd-set', on),
+        showLast: () => ipcRenderer.invoke('notif:show-last'),
+    },
+
     // --- Updates / installer -----------------------------------------------
     updates: {
         check: () => ipcRenderer.invoke('updates:check'),

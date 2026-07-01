@@ -124,6 +124,11 @@ ESSENTIAL_PKGS=(
   # "Pair a device…" button opens (blueman-manager). WITHOUT these there is no
   # Bluetooth at all — the airplane toggle only rfkills a non-existent adapter.
   bluez bluez-utils blueman
+
+  # Night light (Settings → Desktop). gammastep warms the screen's color
+  # temperature via the X gamma ramp (one-shot manual mode, no daemon). WITHOUT
+  # it the shell's night-light toggle reports "not installed" and stays a no-op.
+  gammastep
 )
 
 # OPTIONAL_BUNDLES — installed by /usr/share/outlaw-firstboot AFTER the user

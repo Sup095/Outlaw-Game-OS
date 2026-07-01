@@ -707,11 +707,46 @@
                 <div id="region-msg" class="muted" aria-live="polite" style="font-size:12px;min-height:14px;"></div>
             </div>
 
+            <div class="card" id="desktop-card">
+                <h3>Desktop &amp; Notifications</h3>
+                <div class="setting">
+                    <div class="label">🌙 Night light<small id="nightlight-sub">Warms the screen's colors to reduce blue light in the evening.</small></div>
+                    <label class="switch" title="Warm the screen to reduce blue light"><input type="checkbox" id="nightlight-toggle" aria-label="Night light"><span class="track"></span></label>
+                </div>
+                <div class="setting" id="nightlight-warmth-row">
+                    <div class="label">Warmth<small>How warm the tint is when night light is on.</small></div>
+                    <select id="nightlight-temp" aria-label="Night light warmth" style="width:auto;min-width:160px;">
+                        <option value="5000">Subtle</option>
+                        <option value="4000">Warm</option>
+                        <option value="3400">Warmer</option>
+                        <option value="2700">Warmest</option>
+                    </select>
+                </div>
+                <div class="setting" style="border-top:1px solid var(--line);padding-top:12px;">
+                    <div class="label">🔕 Do Not Disturb<small id="dnd-sub">Silence pop-up notifications. They're still collected while paused.</small></div>
+                    <div class="row" style="gap:6px;align-items:center;">
+                        <label class="switch" title="Pause notification pop-ups"><input type="checkbox" id="dnd-toggle" aria-label="Do Not Disturb"><span class="track"></span></label>
+                        <button id="dnd-show-last" title="Re-show the most recent notification">Show last</button>
+                    </div>
+                </div>
+                <div id="desktop-msg" class="muted" aria-live="polite" style="font-size:12px;min-height:14px;"></div>
+            </div>
+
             <div class="card" id="security-card">
                 <h3>Security &amp; sign-in</h3>
                 <div class="setting">
                     <div class="label">Ask to sign in on startup<small>Lock the desktop until you enter your PIN or password</small></div>
                     <label class="switch"><input type="checkbox" id="lock-toggle"><span class="track"></span></label>
+                </div>
+                <div class="setting">
+                    <div class="label">Auto-lock when idle<small id="autolock-sub">Lock the desktop automatically after a period of no activity. Needs a PIN.</small></div>
+                    <select id="autolock-select" aria-label="Auto-lock when idle" style="width:auto;min-width:160px;">
+                        <option value="0">Never</option>
+                        <option value="5">After 5 minutes</option>
+                        <option value="10">After 10 minutes</option>
+                        <option value="15">After 15 minutes</option>
+                        <option value="30">After 30 minutes</option>
+                    </select>
                 </div>
                 <div class="setting">
                     <div class="label">Unlock PIN<small id="pin-state">A 4-digit PIN you can use instead of your password</small></div>
