@@ -101,6 +101,23 @@ ESSENTIAL_PKGS=(
   # feature (Phase 13). Serves an OpenAI-compatible API on 127.0.0.1:11434; a
   # tiny model gets pulled after first boot so AI works without manual setup.
   ollama
+
+  # Desktop notifications. dunst is a tiny notification DAEMON (the freedesktop
+  # org.freedesktop.Notifications server) and libnotify provides `notify-send`.
+  # WITHOUT THESE the shell's AI `notify` action (and any notify-send) is a no-op
+  # — nothing appears on screen. dunst is autostarted (guarded) in .xinitrc.
+  dunst libnotify
+
+  # Removable media / USB drives. udisks2 is the storage daemon (D-Bus activated,
+  # no autostart needed), gvfs is the virtual-filesystem backend Thunar uses to
+  # mount/unmount, and thunar-volman auto-mounts drives when you plug them in.
+  # WITHOUT THESE, plugging in a USB stick does nothing and Thunar can't mount it.
+  udisks2 gvfs thunar-volman
+
+  # xdg-user-dirs: creates the standard ~/Downloads, ~/Documents, ~/Pictures …
+  # folders (run once on first login) so the Files app and apps have real
+  # user directories instead of a bare home. Lightweight, no daemon.
+  xdg-user-dirs
 )
 
 # OPTIONAL_BUNDLES — installed by /usr/share/outlaw-firstboot AFTER the user

@@ -1800,6 +1800,7 @@ async function sendAI() {
             else { await api.swap.set({ on: res.swap, sizeGb: 4 }); }
         } catch {}
     }
+    if (res.suspend) { try { api.power.suspend(); } catch {} }
     const t = res.text || '(no answer)';
     addMsg('ai', t);
     recordAiTurn('assistant', t);
@@ -2635,6 +2636,7 @@ function wire() {
             case 'lock': lockNow(); break;
             case 'reboot': closePower(); api.power.reboot(); break;
             case 'shutdown': closePower(); api.power.shutdown(); break;
+            case 'sleep': closePower(); api.power.suspend().then((r) => { if (r && r.ok === false) toast('Sleep failed: ' + (r.error || 'try again')); }).catch(() => {}); break;
             case 'stability-works':  setStabilityVote('works'); break;
             case 'stability-broken': setStabilityVote('broken'); break;
             case 'stability-refresh': refreshStabilityTally(); break;

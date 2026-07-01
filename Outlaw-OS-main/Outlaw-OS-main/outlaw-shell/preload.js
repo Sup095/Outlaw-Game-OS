@@ -155,6 +155,7 @@ contextBridge.exposeInMainWorld('outlaw', {
         bootTargets: () => ipcRenderer.invoke('power:boot-targets'),
         reboot: () => ipcRenderer.invoke('power:reboot'),
         shutdown: () => ipcRenderer.invoke('power:shutdown'),
+        suspend: () => ipcRenderer.invoke('power:suspend'),
     },
 
     // --- Updates / installer -----------------------------------------------

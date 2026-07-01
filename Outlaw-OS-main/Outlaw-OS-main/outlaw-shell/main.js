@@ -1153,6 +1153,7 @@ async function executeIntent(intent) {
             const a = String(intent.arg || '').trim().toLowerCase();
             switch (a) {
                 case 'lock': return { did: 'system_action', lockScreen: true, text: intent.text || 'Locking the screen.' };
+                case 'sleep': return { did: 'system_action', suspend: true, text: intent.text || 'Going to sleep — press a key or the power button to wake.' };
                 case 'airplane_on': return { did: 'system_action', airplane: true, text: intent.text || 'Airplane mode on — radios off.' };
                 case 'airplane_off': return { did: 'system_action', airplane: false, text: intent.text || 'Airplane mode off.' };
                 case 'storage_ram_on': return { did: 'system_action', swap: true, text: intent.text || 'Setting up storage as extra memory…' };
@@ -1897,11 +1898,15 @@ function registerIpc() {
                 if (IS_LINUX) {
                     // Reuse the diagnostics CLI's notify-send pattern.
                     const msg = (intent.arg || intent.text || '').slice(0, 240);
-                    spawn('notify-send', [
+                    const notifChild = spawn('notify-send', [
                         '--app-name=Outlaw Core',
                         '--urgency=normal',
                         'Outlaw Core', msg,
-                    ], { stdio: 'ignore', detached: true }).unref();
+                    ], { stdio: 'ignore', detached: true });
+                    // If notify-send is missing, the ENOENT surfaces as an 'error'
+                    // event — swallow it so it can't bubble to uncaughtException.
+                    notifChild.on('error', () => {});
+                    notifChild.unref();
                     did = 'notify';
                     detail = 'sent';
                 } else {
@@ -2599,6 +2604,19 @@ function registerIpc() {
         if (r.code !== 0) {
             const err = (r.stderr || r.stdout || ('exit ' + r.code)).slice(-300);
             try { errorlog.append('error', 'power', 'shutdown failed: ' + err); } catch {}
+            return { ok: false, error: err };
+        }
+        return { ok: true };
+    });
+    // Sleep / suspend-to-RAM. Non-destructive and instantly reversible (any key/
+    // power press wakes the machine), so no confirmation. logind normally allows
+    // an active local session to suspend without a password.
+    ipcMain.handle('power:suspend', async () => {
+        if (!IS_LINUX) return { ok: true };
+        const r = await runShell('systemctl suspend');
+        if (r.code !== 0) {
+            const err = (r.stderr || r.stdout || ('exit ' + r.code)).slice(-300);
+            try { errorlog.append('error', 'power', 'suspend failed: ' + err); } catch {}
             return { ok: false, error: err };
         }
         return { ok: true };

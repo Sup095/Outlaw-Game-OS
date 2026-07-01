@@ -74,6 +74,15 @@ else
     echo "[xinitrc] no window manager (openbox missing or OUTLAW_NO_WM=1) — kiosk mode." >&2
 fi
 
+# Ensure the standard XDG home folders exist (~/Downloads, ~/Documents, …) so the
+# Files app and cleanup tools have real directories. Idempotent + instant; guarded.
+command -v xdg-user-dirs-update >/dev/null 2>&1 && xdg-user-dirs-update >/dev/null 2>&1 || true
+
+# Notification daemon — displays desktop notifications (notify-send + the shell's
+# AI `notify` action). Guarded + backgrounded so its absence/failure never blocks
+# the session; runs regardless of the window manager.
+command -v dunst >/dev/null 2>&1 && dunst >/dev/null 2>&1 &
+
 # Electron flag set (adds --disable-gpu inside a VM). Used for greeter + shell.
 ELECTRON_FLAGS="$(outlaw-electron-flags 2>/dev/null | tr '\n' ' ')"
 [ -z "$ELECTRON_FLAGS" ] && ELECTRON_FLAGS="--no-sandbox"
