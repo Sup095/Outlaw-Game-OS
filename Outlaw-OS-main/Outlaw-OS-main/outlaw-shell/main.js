@@ -10,7 +10,7 @@
 // Degrades gracefully on non-Linux hosts so the UI can be previewed anywhere.
 // ============================================================================
 
-const { app, BrowserWindow, ipcMain, shell, screen, powerMonitor } = require('electron');
+const { app, BrowserWindow, ipcMain, shell, screen, powerMonitor, net } = require('electron');
 const { spawn, execFile } = require('child_process');
 
 // Phase 10: give the shell a stable WM_CLASS so the window manager (openbox)
@@ -3392,6 +3392,10 @@ function createWindow() {
 // ---------------------------------------------------------------------------
 async function backgroundUpdateCheck() {
     if (!settings.autoCheck || !settings.updateRepo) return;
+    // C11 offline mode — don't attempt background network while offline /
+    // airplane mode. Chromium's connectivity signal is free to read; manual
+    // "Check now" still tries regardless (the user asked, so show the error).
+    try { if (!net.online) return; } catch { /* older Electron — just try */ }
     try {
         const info = await updater.checkShellUpdate({ repo: settings.updateRepo, currentVersion: APP_VERSION, channel: settings.updateChannel || 'stable' });
         settings = saveSettings({ ...settings, lastUpdateCheck: Date.now() });
