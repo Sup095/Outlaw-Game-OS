@@ -69,9 +69,10 @@
         <span class="stat pill" id="stat-cpu">CPU --%</span>
         <span class="stat pill" id="stat-ram">RAM --</span>
         <span class="stat pill" id="stat-ai">AI OFF</span>
+        <button class="stat pill" id="quick-toggle" title="Quick settings" aria-label="Quick settings" style="padding:4px 8px;">☰</button>
         <button class="stat pill" id="stat-volume" title="Volume" hidden style="padding:4px 8px;">🔊</button>
         <span class="stat pill" id="stat-battery" title="Battery" hidden></span>
-        <span class="stat" id="stat-clock">--:--:--</span>
+        <button class="stat pill" id="stat-clock" title="Calendar" aria-label="Open the calendar" style="padding:4px 8px;">--:--:--</button>
         <button class="nav-item" data-action="hotswap" title="Switch OS / boot menu" style="width:auto;padding:6px 10px;">⇄ HOTSWAP</button>
         <button data-action="power-menu" title="Power — lock, restart or shut down" aria-label="Power menu — lock, restart or shut down" style="padding:6px 10px;">⏻</button>
     </header>
@@ -125,6 +126,8 @@
             </div>
             <h3>Launchers</h3>
             <div class="grid apps" id="launchers"></div>
+            <h3 id="recent-title" hidden>Recent</h3>
+            <div class="grid apps" id="recent-apps"></div>
         </section>
 
         <!-- System Core (SC1 scaffold — SC2 fills readouts, SC3+ runs diagnostics, SC5/6 add voice/AI) -->
@@ -729,7 +732,37 @@
                         <button id="dnd-show-last" title="Re-show the most recent notification">Show last</button>
                     </div>
                 </div>
+                <div class="setting">
+                    <div class="label">Recent notifications<small>The latest pop-ups, so a missed toast isn't lost.</small></div>
+                    <button id="notif-history-btn" title="Show the most recent notifications">Show recent</button>
+                </div>
+                <div id="notif-history" class="muted" style="display:none;font-size:12px;max-height:220px;overflow:auto;border:1px solid var(--line);border-radius:6px;padding:8px 10px;margin-top:6px;"></div>
                 <div id="desktop-msg" class="muted" aria-live="polite" style="font-size:12px;min-height:14px;"></div>
+            </div>
+
+            <div class="card" id="power-card">
+                <h3>Power</h3>
+                <div class="setting">
+                    <div class="label">Turn off the screen when idle<small>Blanks the display after a period of no activity. Any key wakes it.</small></div>
+                    <select id="screenblank-select" aria-label="Turn off the screen when idle" style="width:auto;min-width:170px;">
+                        <option value="-1">System default</option>
+                        <option value="0">Never</option>
+                        <option value="5">After 5 minutes</option>
+                        <option value="10">After 10 minutes</option>
+                        <option value="15">After 15 minutes</option>
+                        <option value="30">After 30 minutes</option>
+                    </select>
+                </div>
+                <div class="setting">
+                    <div class="label">Sleep when idle<small>Suspends the whole computer after a period of no keyboard/mouse activity — press a key or the power button to wake. Heads up: controller-only play can look idle, so pick a long timeout (or Never) if you game with a gamepad.</small></div>
+                    <select id="autosleep-select" aria-label="Sleep when idle" style="width:auto;min-width:170px;">
+                        <option value="0">Never</option>
+                        <option value="15">After 15 minutes</option>
+                        <option value="30">After 30 minutes</option>
+                        <option value="60">After 1 hour</option>
+                        <option value="120">After 2 hours</option>
+                    </select>
+                </div>
             </div>
 
             <div class="card" id="security-card">
@@ -755,7 +788,8 @@
                         <button id="pin-remove-btn" class="danger" hidden>Remove PIN</button>
                     </div>
                 </div>
-                <div id="pin-form" hidden style="margin-top:8px;display:flex;flex-direction:column;gap:8px;max-width:320px;">
+                <!-- display comes from CSS (not inline) so the [hidden] attribute actually hides it -->
+                <div id="pin-form" hidden>
                     <input id="pin-current" type="password" inputmode="numeric" maxlength="4" placeholder="Current PIN" hidden>
                     <input id="pin-new" type="password" inputmode="numeric" maxlength="4" placeholder="New 4-digit PIN">
                     <input id="pin-confirm" type="password" inputmode="numeric" maxlength="4" placeholder="Confirm new PIN">
@@ -963,6 +997,53 @@
         <button id="vol-mute" title="Mute / unmute" aria-label="Mute or unmute" style="padding:6px 9px;">🔊</button>
         <input type="range" id="vol-slider" min="0" max="100" value="50" aria-label="Volume" style="flex:1;min-width:130px;">
         <span id="vol-pct" class="mono" style="min-width:38px;text-align:right;">50%</span>
+    </div>
+</div>
+
+<!-- QOL batch — quick-settings popover (topbar ☰): the everyday toggles in one place. -->
+<div id="quick-popover" role="dialog" aria-label="Quick settings" hidden>
+    <div class="qk-grid">
+        <button class="qk-tile" id="qk-nightlight" aria-pressed="false" title="Warm the screen's colors">🌙<span>Night light</span></button>
+        <button class="qk-tile" id="qk-dnd" aria-pressed="false" title="Pause notification pop-ups">🔕<span>Do Not Disturb</span></button>
+        <button class="qk-tile" id="qk-airplane" aria-pressed="false" title="Turn Wi-Fi and Bluetooth off">✈<span>Airplane</span></button>
+        <button class="qk-tile" id="qk-perf" aria-pressed="false" title="Gaming performance mode">🚀<span>Performance</span></button>
+    </div>
+    <div class="row" id="qk-vol-row" style="gap:8px;margin-top:10px;align-items:center;" hidden>
+        <span aria-hidden="true">🔊</span>
+        <input type="range" id="qk-vol" min="0" max="100" aria-label="Volume" style="flex:1;min-width:120px;">
+        <span id="qk-vol-pct" class="mono" style="min-width:38px;text-align:right;">--%</span>
+    </div>
+    <div class="row" style="gap:6px;margin-top:10px;flex-wrap:wrap;">
+        <button id="qk-screenshot" title="Take a screenshot (PrtSc)" aria-label="Take a screenshot" style="padding:7px 10px;">📷</button>
+        <button id="qk-lock" title="Lock the screen" aria-label="Lock the screen" style="padding:7px 10px;">🔒</button>
+        <button id="qk-sleep" title="Put the computer to sleep" aria-label="Sleep" style="padding:7px 10px;">💤</button>
+        <span class="spacer"></span>
+        <button id="qk-settings" title="Open all settings">⚙ All settings</button>
+    </div>
+</div>
+
+<!-- QOL batch — calendar popover (topbar clock). Pure client-side month view. -->
+<div id="cal-popover" role="dialog" aria-label="Calendar" hidden>
+    <div class="row" style="gap:6px;align-items:center;margin-bottom:8px;">
+        <button id="cal-prev" title="Previous month" aria-label="Previous month" style="padding:4px 10px;">‹</button>
+        <span id="cal-title" class="mono" style="flex:1;text-align:center;"></span>
+        <button id="cal-next" title="Next month" aria-label="Next month" style="padding:4px 10px;">›</button>
+    </div>
+    <div id="cal-grid" class="cal-grid"></div>
+    <div class="row" style="margin-top:8px;">
+        <span class="spacer"></span>
+        <button id="cal-today" title="Back to the current month" style="padding:4px 10px;">Today</button>
+    </div>
+</div>
+
+<!-- QOL batch — command palette (Ctrl+Space): search screens, settings, help,
+     apps and actions from anywhere. -->
+<div id="palette" hidden>
+    <div class="pal-card" role="dialog" aria-modal="true" aria-label="Command palette">
+        <input id="pal-input" placeholder="Search apps, settings, help topics, actions…"
+               aria-label="Search everything" autocomplete="off" spellcheck="false">
+        <div id="pal-list" role="listbox" aria-label="Results"></div>
+        <div class="dim" style="font-size:11px;padding:6px 12px;border-top:1px solid var(--line);">↑↓ choose · Enter run · Esc close</div>
     </div>
 </div>
 

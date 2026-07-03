@@ -289,13 +289,39 @@ window.OUTLAW_HELP = [
     },
     {
         id: 'shortcuts', cat: 'The desktop', title: 'Keyboard shortcuts',
-        keywords: 'keyboard shortcut hotkey keys ctrl alt esc quick ask navigate switch screen settings terminal history',
-        body: '<p><b>Ctrl + K</b> — jump to the AI assistant and start typing (a quick ask), from anywhere. '
+        keywords: 'keyboard shortcut hotkey keys ctrl alt esc space palette quick ask navigate switch screen settings terminal history',
+        body: '<p><b>Ctrl + Space</b> — the command palette: search apps, settings, help and actions from anywhere. '
+            + '<b>Ctrl + K</b> — jump to the AI assistant and start typing (a quick ask). '
             + '<b>Ctrl + ,</b> — open Settings. '
             + '<b>Alt + 1…9</b> — jump to the matching sidebar screen (1 = Dashboard, 2 = System Core, and so on). '
-            + '<b>Esc</b> — close the power menu, or a finished loading screen. '
+            + '<b>Esc</b> — close the palette, any popover, the power menu, or a finished loading screen. '
             + '<b>PrtSc</b> — save a screenshot to Pictures (<b>Shift+PrtSc</b> to drag-select a region). '
             + 'In the assistant, press <b>Enter</b> to send. In the Terminal, <b>↑ / ↓</b> recall previous commands.</p>',
+    },
+    {
+        id: 'command-palette', cat: 'The desktop', title: 'Command palette (search everything)',
+        keywords: 'command palette search everything launcher spotlight find quick open ctrl space',
+        body: '<p>Press <b>Ctrl + Space</b> anywhere to open the <b>command palette</b> — one search box over '
+            + 'every screen, settings section, help topic, app and common action (screenshot, lock, sleep, '
+            + 'night light…). Type a few letters, pick with <b>↑ ↓</b>, run with <b>Enter</b>. It\'s the fastest '
+            + 'way to get anywhere in Outlaw OS.</p>',
+    },
+    {
+        id: 'quick-settings', cat: 'The desktop', title: 'Quick settings (topbar ☰)',
+        keywords: 'quick settings control center panel toggles topbar volume night light dnd airplane performance popover',
+        body: '<p>Click the <b>☰</b> button in the top bar for <b>quick settings</b>: night light, Do Not '
+            + 'Disturb, airplane mode and performance mode as one-tap tiles, plus volume, screenshot, lock and '
+            + 'sleep — without opening the full Settings screen. Click the <b>clock</b> for a calendar.</p>',
+    },
+    {
+        id: 'power-management', cat: 'Settings & updates', title: 'Screen blanking & automatic sleep',
+        keywords: 'power management screen blank turn off display sleep idle automatic suspend timeout energy',
+        body: '<p><b>Settings → Power</b> controls what happens when you step away: <b>Turn off the screen '
+            + 'when idle</b> blanks the display (any key wakes it), and <b>Sleep when idle</b> suspends the whole '
+            + 'computer. Keyboard and mouse activity in <i>any</i> app counts. <b>Heads up:</b> controller-only '
+            + 'play can look idle to the system — if you game with a gamepad, use a long sleep timeout or leave it '
+            + 'on Never. Sleep also waits for any running install or download to finish. Pair these with '
+            + '<b>Auto-lock when idle</b> (Settings → Security) to lock the desktop too.</p>',
     },
     {
         id: 'gaming', cat: 'Apps & games', title: 'Gaming (Steam, Lutris, GameMode)',
@@ -413,8 +439,9 @@ window.OUTLAW_HELP = [
         id: 'do-not-disturb', cat: 'The desktop', title: 'Do Not Disturb (pause notifications)',
         keywords: 'do not disturb dnd notifications pause silence quiet mute popup dunst focus',
         body: '<p><b>Settings → Desktop &amp; Notifications → 🔕 Do Not Disturb</b> silences pop-up '
-            + 'notifications so nothing interrupts you. <b>Show last</b> re-displays the most recent one. Your '
-            + 'choice sticks across reboots.</p>',
+            + 'notifications so nothing interrupts you. <b>Show last</b> re-displays the most recent one, and '
+            + '<b>Show recent</b> lists the latest notifications so a missed pop-up isn\'t lost. Your '
+            + 'choice sticks across reboots. DND is also a one-tap tile in the topbar <b>☰</b> quick settings.</p>',
     },
     {
         id: 'auto-lock', cat: 'Settings & updates', title: 'Auto-lock when idle',

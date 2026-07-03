@@ -384,6 +384,12 @@ input:focus, textarea:focus, select:focus { outline: none; border-color: var(--t
 .muted { opacity: .7; }
 .right { text-align: right; }
 .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+/* A .row's flex display would otherwise beat the UA's [hidden] rule. */
+.row[hidden] { display: none; }
+/* PIN form (Settings → Security). Was an inline display:flex, which silently
+   beat the [hidden] attribute and left the form permanently expanded. */
+#pin-form { display: flex; flex-direction: column; gap: 8px; max-width: 320px; margin-top: 8px; }
+#pin-form[hidden] { display: none; }
 .spacer { flex: 1; }
 h2, h3 { color: var(--term); font-weight: 600; letter-spacing: .05em; margin: 0 0 12px; }
 h3 { font-size: 13px; text-transform: uppercase; color: var(--term-dim); }
@@ -1207,6 +1213,48 @@ table.proc td { padding: 5px 8px; border-bottom: 1px solid rgba(20,61,13,0.4); }
 }
 #volume-popover[hidden] { display: none; }
 #stat-volume { cursor: pointer; }
+
+/* QOL batch — quick-settings + calendar popovers (same anchor as the volume one). */
+#quick-popover, #cal-popover {
+    position: fixed; top: 46px; right: 14px; z-index: 1100;
+    background: var(--panel); border: 1px solid var(--term-dim); border-radius: 8px;
+    padding: 12px; width: 300px; box-shadow: 0 6px 22px rgba(0,0,0,0.5);
+}
+#quick-popover[hidden], #cal-popover[hidden] { display: none; }
+.qk-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.qk-tile {
+    display: flex; flex-direction: column; gap: 4px; align-items: flex-start;
+    padding: 10px 11px; font-size: 12px; text-transform: none; letter-spacing: 0;
+}
+.qk-tile.on { background: var(--term); color: #001400; border-color: var(--term); }
+.qk-tile.on:hover { background: var(--term); color: #001400; }
+#stat-clock { cursor: pointer; font: inherit; }
+.cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; text-align: center; font-size: 12px; }
+.cal-grid .cal-dow { color: var(--term-dim); padding: 3px 0; }
+.cal-grid .cal-day { padding: 5px 0; border-radius: 4px; }
+.cal-grid .cal-day.other { opacity: .3; }
+.cal-grid .cal-day.today { background: var(--term); color: #001400; font-weight: 700; }
+
+/* QOL batch — command palette (Ctrl+Space). */
+#palette {
+    position: fixed; inset: 0; z-index: 1200; background: rgba(0, 0, 0, 0.55);
+    display: flex; align-items: flex-start; justify-content: center; padding-top: 12vh;
+}
+#palette[hidden] { display: none; }
+.pal-card {
+    width: 580px; max-width: 92vw; background: var(--panel);
+    border: 1px solid var(--term-dim); border-radius: 8px; overflow: hidden;
+    box-shadow: 0 10px 34px rgba(0,0,0,0.6);
+}
+#pal-input { border: 0; border-bottom: 1px solid var(--line); border-radius: 0; background: transparent; padding: 13px 14px; font-size: 15px; }
+#pal-input:focus { border-color: var(--term-dim); }
+#pal-list { max-height: 46vh; overflow: auto; }
+.pal-item { padding: 9px 14px; cursor: pointer; display: flex; gap: 10px; align-items: baseline; }
+.pal-item .pal-kind { font-size: 10px; color: var(--term-dim); text-transform: uppercase; letter-spacing: .06em; min-width: 58px; }
+.pal-item.sel, .pal-item:hover { background: rgba(var(--term-rgb), 0.12); }
+.pal-item.sel { border-left: 3px solid var(--term); padding-left: 11px; }
+.pal-empty { padding: 14px; color: var(--term-dim); }
+
 /* C11 — offline/airplane state surfaces via the topbar #offline-pill (driven by
    updateOnlineStatus + refreshNetStatus); no separate badge. */
 .badge { font-size: 11px; padding: 1px 7px; border-radius: 999px; border: 1px solid var(--line); }

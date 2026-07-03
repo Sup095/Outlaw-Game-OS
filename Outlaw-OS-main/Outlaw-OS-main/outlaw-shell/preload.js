@@ -13,6 +13,7 @@ const EVENT_CHANNELS = ['toast',
     'diagnostics-progress',
     'vram-tier-changed',  // SC7 — fires on tier transitions only
     'job-progress',       // Phase 12 — live phase/log for the loading screen
+    'idle-lock',          // power mgmt — main's system-wide idle watch says "lock now"
 ];
 
 contextBridge.exposeInMainWorld('outlaw', {
@@ -186,11 +187,12 @@ contextBridge.exposeInMainWorld('outlaw', {
         set: (payload) => ipcRenderer.invoke('nightlight:set', payload),
     },
 
-    // --- Notifications: Do Not Disturb -------------------------------------
+    // --- Notifications: Do Not Disturb + history ----------------------------
     notif: {
         dndStatus: () => ipcRenderer.invoke('notif:dnd-status'),
         dndSet: (on) => ipcRenderer.invoke('notif:dnd-set', on),
         showLast: () => ipcRenderer.invoke('notif:show-last'),
+        history: () => ipcRenderer.invoke('notif:history'),
     },
 
     // --- Updates / installer -----------------------------------------------

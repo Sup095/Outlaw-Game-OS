@@ -10,7 +10,7 @@
 // Degrades gracefully on non-Linux hosts so the UI can be previewed anywhere.
 // ============================================================================
 
-const { app, BrowserWindow, ipcMain, shell, screen } = require('electron');
+const { app, BrowserWindow, ipcMain, shell, screen, powerMonitor } = require('electron');
 const { spawn, execFile } = require('child_process');
 
 // Phase 10: give the shell a stable WM_CLASS so the window manager (openbox)
@@ -150,7 +150,10 @@ const DEFAULT_SETTINGS = {
     nightLight: false,       // warm color-temperature filter (gammastep). Re-applied on boot when on.
     nightLightTemp: 4000,    // Kelvin when night light is ON (lower = warmer). Clamped 2000–6500.
     dnd: false,              // Do Not Disturb — pause desktop notifications (dunst). Re-applied on boot.
-    autoLockMin: 0,          // auto-lock the desktop after N minutes idle (renderer timer). 0 = never.
+    autoLockMin: 0,          // auto-lock the desktop after N minutes idle. 0 = never.
+    autoSleepMin: 0,         // suspend the machine after N minutes idle. 0 = never.
+    screenBlankMin: -1,      // blank the screen (X screensaver/DPMS) after N min. -1 = system default, 0 = never.
+    recentApps: [],          // MRU list of launched app ids for the Dashboard "Recent" row (max 8).
     // Phase 6 — first-boot Quickstart tour. Shown once on the first desktop
     // entry; set true on Skip/Finish ("don't show again"). Replayable from Help.
     quickstartSeen: false,
@@ -1164,6 +1167,22 @@ async function executeIntent(intent) {
                 case 'airplane_off': return { did: 'system_action', airplane: false, text: intent.text || 'Airplane mode off.' };
                 case 'storage_ram_on': return { did: 'system_action', swap: true, text: intent.text || 'Setting up storage as extra memory…' };
                 case 'storage_ram_off': return { did: 'system_action', swap: false, text: intent.text || 'Turning off storage-as-memory.' };
+                case 'night_light_on': case 'night_light_off': {
+                    const on = a === 'night_light_on';
+                    if (IS_LINUX && on) {
+                        const have = await runShell('command -v gammastep >/dev/null 2>&1 && echo yes', { timeout: 3000 });
+                        if (!/yes/.test(have.stdout || '')) return { did: 'system_action', text: 'Night light needs the gammastep package, which isn\'t installed yet.' };
+                    }
+                    applyNightLight(on, settings.nightLightTemp);
+                    settings = saveSettings({ ...settings, nightLight: on });
+                    return { did: 'system_action', text: intent.text || ('Night light ' + (on ? 'on — warmer colors.' : 'off.')) };
+                }
+                case 'dnd_on': case 'dnd_off': {
+                    const on = a === 'dnd_on';
+                    applyDnd(on);
+                    settings = saveSettings({ ...settings, dnd: on });
+                    return { did: 'system_action', text: intent.text || (on ? 'Do Not Disturb on — notifications paused.' : 'Do Not Disturb off.') };
+                }
                 case 'report_problem':
                     return { did: 'system_action', openReport: true, text: intent.text || 'Opening the problem reporter — collect the log and send it.' };
                 case 'check_updates': {
@@ -1182,7 +1201,7 @@ async function executeIntent(intent) {
                         return { did: 'system_action', text: 'Update check failed — ' + ((e && e.message) || e) + ' (are you online?)' };
                     }
                 }
-                default: return { did: 'none', text: 'I can lock the screen, toggle airplane mode, toggle storage-as-memory, or check for updates — which one?' };
+                default: return { did: 'none', text: 'I can lock the screen, sleep, toggle airplane mode, night light, Do Not Disturb, or storage-as-memory, or check for updates — which one?' };
             }
         }
         case 'install_app': {
@@ -1384,6 +1403,90 @@ function applyDnd(on) {
     try { execFile('dunstctl', ['set-paused', on ? 'true' : 'false'], () => {}); } catch { /* dunst absent */ }
 }
 
+// ----- Power management: screen blank + system-wide idle watch ------------
+// Screen blanking uses the X screensaver + DPMS timers (xset). -1 = leave the
+// X defaults alone (~10 min blank), 0 = never blank, N = blank after N minutes.
+// Session-scoped and unprivileged: a wrong value blanks a screen that any key
+// press wakes, so this can never strand the machine.
+function applyScreenBlank(min) {
+    if (!IS_LINUX) return;
+    const m = Number(min);
+    if (!Number.isFinite(m) || m < 0) return;          // -1 / unset — don't touch X
+    try {
+        if (m === 0) {
+            execFile('xset', ['s', 'off'], () => {});
+            execFile('xset', ['-dpms'], () => {});
+        } else {
+            const sec = String(Math.round(m * 60));
+            execFile('xset', ['s', sec, sec], () => {});
+            execFile('xset', ['dpms', sec, sec, sec], () => {});
+        }
+    } catch { /* xset absent (non-X session) — no-op */ }
+}
+
+// Reverting to "System default" (-1) mid-session: applyScreenBlank(-1) is a
+// no-op by design (boot must not clobber any session defaults), so an explicit
+// restore puts back the X stock behavior (~10-min blank, DPMS on) right away
+// instead of waiting for the next login.
+function restoreScreenBlankDefaults() {
+    if (!IS_LINUX) return;
+    try {
+        execFile('xset', ['s', 'default'], () => {});
+        execFile('xset', ['+dpms'], () => {});
+        execFile('xset', ['dpms', '600', '600', '600'], () => {});
+    } catch { /* xset absent — no-op */ }
+}
+
+// System-wide idle watch for auto-lock and auto-sleep. Uses Electron's
+// powerMonitor.getSystemIdleTime() — X-server-wide idle, so activity in ANY
+// window (a fullscreen game, a terminal) counts, not just activity inside the
+// shell window. Design constraints:
+//   * zero-idle-cost: the interval only exists while a timeout is enabled;
+//     both disabled (the default) = no timer at all.
+//   * fire-once + re-arm-on-activity: each action fires at most once per idle
+//     stretch and re-arms only after idle drops back under 30s. Even a stuck
+//     or bogus idle counter can therefore never lock/suspend-loop the machine.
+//   * lock is delegated to the renderer (it owns the PIN/sign-in overlay and
+//     re-checks hasPin/live/already-locked before acting).
+let idleWatchTimer = null;
+let _idleLockFired = false;
+let _idleSleepFired = false;
+function syncIdleWatch() {
+    const lockMin = Math.max(0, Number(settings.autoLockMin) || 0);
+    const sleepMin = Math.max(0, Number(settings.autoSleepMin) || 0);
+    if (idleWatchTimer) { clearInterval(idleWatchTimer); idleWatchTimer = null; }
+    _idleLockFired = false; _idleSleepFired = false;
+    if (!lockMin && !sleepMin) return;
+    idleWatchTimer = setInterval(() => {
+        let idle = 0;
+        try { idle = powerMonitor.getSystemIdleTime(); } catch { return; }
+        if (idle < 30) { _idleLockFired = false; _idleSleepFired = false; return; }
+        if (lockMin && !_idleLockFired && idle >= lockMin * 60) {
+            _idleLockFired = true;
+            if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('idle-lock');
+        }
+        if (sleepMin && !_idleSleepFired && idle >= sleepMin * 60) {
+            // Never suspend under a live tracked job — an install / update /
+            // model download would lose its network connections overnight.
+            // Not marked fired, so it re-checks each tick until the job ends.
+            if (trackedProcs.size > 0) return;
+            _idleSleepFired = true;
+            // Standard OS behavior: wake up to a lock screen. Fire the lock
+            // now (if the user has auto-lock on) so the desktop is covered
+            // before + after the suspend, regardless of which timeout is longer.
+            if (lockMin && !_idleLockFired && mainWindow && !mainWindow.isDestroyed()) {
+                _idleLockFired = true;
+                mainWindow.webContents.send('idle-lock');
+            }
+            if (IS_LINUX) {
+                runShell('systemctl suspend', { timeout: 10000 }).then((r) => {
+                    if (r.code !== 0) errorlog.append('warn', 'power', 'auto-sleep suspend failed: ' + (r.stderr || r.stdout || 'unknown').slice(-160));
+                }).catch(() => {});
+            }
+        }
+    }, 30000);
+}
+
 // ---------------------------------------------------------------------------
 // IPC handlers
 // ---------------------------------------------------------------------------
@@ -1515,6 +1618,26 @@ function registerIpc() {
         // Restore the user's DND choice after popping.
         if (settings.dnd) await runShell('dunstctl set-paused true 2>/dev/null', { timeout: 2000 });
         return { ok: true };
+    });
+    ipcMain.handle('notif:history', async () => {
+        if (!IS_LINUX) return { supported: false, items: [] };
+        // dunstctl history returns {"data": [[ {appname:{data}, summary:{data}, ...} ]]}.
+        // Read-only; body text is renderer-escaped before display.
+        const r = await runShell('dunstctl history 2>/dev/null', { timeout: 3000 });
+        try {
+            const j = JSON.parse(r.stdout || '');
+            const arr = (j && Array.isArray(j.data) && Array.isArray(j.data[0])) ? j.data[0] : [];
+            // Cap every field (a hostile local notify-send can carry multi-MB
+            // strings) and skip malformed entries instead of failing the lot.
+            const items = arr.slice(0, 20)
+                .filter((n) => n && typeof n === 'object')
+                .map((n) => ({
+                    app: String((n.appname && n.appname.data) || '').slice(0, 80),
+                    summary: String((n.summary && n.summary.data) || '').slice(0, 200),
+                    body: String((n.body && n.body.data) || '').slice(0, 300),
+                })).filter((n) => n.summary || n.body);
+            return { supported: true, items };
+        } catch { return { supported: false, items: [] }; }
     });
 
     // Phase 8: real boot messages for the cinematic boot screen. journalctl
@@ -2281,19 +2404,28 @@ function registerIpc() {
         Object.entries(APP_REGISTRY).map(([id, v]) => ({ id, label: v.label })));
 
     ipcMain.handle('apps:launch', async (_e, id) => {
+        // Own-property lookup only — a plain index would let ids like
+        // '__proto__' pull junk off the prototype chain.
+        const key = String(id || '').slice(0, 64);
         // Primary lookup: the curated quick-launch registry (the OS's "always
         // there" apps the AI is allowed to open).
-        let entry = APP_REGISTRY[id];
+        let entry = Object.prototype.hasOwnProperty.call(APP_REGISTRY, key) ? APP_REGISTRY[key] : undefined;
         // Fallback: the on-demand catalog — apps installed via the Apps panel
         // may not be in APP_REGISTRY but still have a `bin` we can launch.
         if (!entry) {
-            const cat = APP_CATALOG.find((a) => a.id === id && a.bin);
+            const cat = APP_CATALOG.find((a) => a.id === key && a.bin);
             if (cat) entry = { label: cat.label, bin: cat.bin, args: [] };
         }
         if (!entry) return { ok: false, error: 'Unknown app.' };
         const bin = await resolveBinary(entry);
         if (!bin) return { ok: false, error: `${entry.label} is not installed.` };
         launchDetached(bin, entry.args || []);
+        // QoL — remember successful launches for the Dashboard's "Recent" row
+        // (MRU, deduped, capped at 8).
+        try {
+            const recent = [key, ...(Array.isArray(settings.recentApps) ? settings.recentApps : []).filter((r) => r !== key)].slice(0, 8);
+            settings = saveSettings({ ...settings, recentApps: recent });
+        } catch { /* non-fatal — launch already happened */ }
         return { ok: true, label: entry.label };
     });
 
@@ -2466,10 +2598,24 @@ function registerIpc() {
 
     ipcMain.handle('settings:get', () => settings);
     ipcMain.handle('settings:set', (_e, patch) => {
+        // Harden the patch before merging: IPC structured clone can deliver
+        // values JSON can't serialize (BigInt, cyclic graphs). Merging one of
+        // those would poison the in-memory settings object and silently break
+        // ALL settings persistence for the rest of the session, so round-trip
+        // the patch through JSON first (with a size cap) and reject it whole
+        // on failure — the current settings are returned unchanged.
+        try {
+            const raw = JSON.stringify(patch || {});
+            if (raw.length > 200000) return settings;
+            patch = JSON.parse(raw);
+        } catch { return settings; }
         const before = {
             autoCheck: settings.autoCheck,
             updateRepo: settings.updateRepo,
             vramSaverMode: settings.vramSaverMode,
+            autoLockMin: settings.autoLockMin,
+            autoSleepMin: settings.autoSleepMin,
+            screenBlankMin: settings.screenBlankMin,
         };
         const merged = { ...settings, ...(patch || {}) };
         // Phase 16 — keep the legacy baseAiEnabled flag in step with the chosen
@@ -2486,6 +2632,16 @@ function registerIpc() {
         if (before.vramSaverMode !== settings.vramSaverMode) {
             try { vramTier.setMode(settings.vramSaverMode); }
             catch (e) { console.warn('vramTier.setMode rejected:', e.message); }
+        }
+        // Power management — re-sync the idle watch / X blanking timers as soon
+        // as the user changes them (no restart needed).
+        if (before.autoLockMin !== settings.autoLockMin || before.autoSleepMin !== settings.autoSleepMin) {
+            syncIdleWatch();
+        }
+        if (before.screenBlankMin !== settings.screenBlankMin) {
+            const m = Number(settings.screenBlankMin);
+            if (Number.isFinite(m) && m >= 0) applyScreenBlank(m);
+            else restoreScreenBlankDefaults();
         }
         return settings;
     });
@@ -3269,6 +3425,10 @@ app.whenReady().then(() => {
     // when the shell launches; night light needs no daemon so it applies at once.
     if (settings && settings.nightLight) applyNightLight(true, settings.nightLightTemp);
     if (settings && settings.dnd) setTimeout(() => applyDnd(true), 4000);
+    // Power management — restore the saved screen-blank timers and start the
+    // idle watch (a no-op interval-wise when both timeouts are 0/off).
+    applyScreenBlank(settings && settings.screenBlankMin);
+    syncIdleWatch();
     createWindow();
     startAutoCheck();
     // SC7 — start the VRAM tier background poll now that a renderer exists.

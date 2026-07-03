@@ -159,37 +159,232 @@ async function refreshDesktopUi() {
     } catch {}
 }
 
-// Auto-lock on idle. A single self-rearming timeout; user activity resets it
-// (throttled so mousemove doesn't churn). Fires lockNow() only when a PIN exists
-// and the sign-in screen isn't already up — so it can never trap the user.
-let _autoLockMs = 0;
-let _autoLockTimer = null;
-let _autoLockLastReset = 0;
-function _autoLockArm() {
-    if (_autoLockTimer) { clearTimeout(_autoLockTimer); _autoLockTimer = null; }
-    if (!_autoLockMs) return;
-    _autoLockTimer = setTimeout(async () => {
-        _autoLockTimer = null;
-        const si = document.querySelector('#signin');
-        if (si && si.style.display && si.style.display !== 'none') return; // already locked
-        try {
-            const st = await api.auth.status();
-            if (!st || st.live || !st.hasPin) return;
-            lockNow();
-        } catch {}
-    }, _autoLockMs);
+// Recent-notifications list (read-only view over the daemon's history).
+async function renderNotifHistory() {
+    const box = document.querySelector('#notif-history');
+    if (!box) return;
+    if (box.style.display !== 'none') { box.style.display = 'none'; return; }  // toggle closed
+    box.style.display = '';
+    box.textContent = 'Loading…';
+    try {
+        const h = await api.notif.history();
+        if (!h || !h.supported) { box.textContent = 'Notification history is available on Outlaw OS (needs the dunst daemon).'; return; }
+        if (!h.items.length) { box.textContent = 'No recent notifications.'; return; }
+        box.innerHTML = h.items.map((n) =>
+            `<div style="padding:4px 0;border-bottom:1px solid var(--line);">`
+            + `<b>${_escapeHtml(n.summary || '(no title)')}</b>`
+            + (n.app ? ` <span class="dim">· ${_escapeHtml(n.app)}</span>` : '')
+            + (n.body ? `<br><span class="dim">${_escapeHtml(n.body)}</span>` : '')
+            + `</div>`).join('');
+    } catch { box.textContent = 'Couldn\'t read the notification history.'; }
 }
-function _autoLockActivity() {
-    if (!_autoLockMs) return;
-    const now = Date.now();
-    if (now - _autoLockLastReset < 5000) return; // throttle re-arms to once / 5s
-    _autoLockLastReset = now;
-    _autoLockArm();
+
+// --- QOL batch: quick-settings popover (topbar ☰) ---------------------------
+// The everyday toggles in one place. Every control reuses an EXISTING IPC
+// surface — this popover adds no new privileges, just faster reach.
+function _qkSet(sel, on) {
+    const b = document.querySelector(sel);
+    if (b) { b.classList.toggle('on', !!on); b.setAttribute('aria-pressed', on ? 'true' : 'false'); }
 }
-function setAutoLock(min) {
-    _autoLockMs = (Number(min) || 0) * 60000;
-    _autoLockLastReset = Date.now();
-    _autoLockArm();
+function _qkOn(sel) { const b = document.querySelector(sel); return !!(b && b.classList.contains('on')); }
+async function refreshQuickUi() {
+    await Promise.all([
+        api.nightlight.status().then((nl) => _qkSet('#qk-nightlight', !!(nl && nl.on))).catch(() => {}),
+        api.notif.dndStatus().then((d) => _qkSet('#qk-dnd', !!(d && d.paused))).catch(() => {}),
+        api.net.airplaneStatus().then((a) => _qkSet('#qk-airplane', !!(a && a.airplane))).catch(() => {}),
+        api.settings.get().then((s) => _qkSet('#qk-perf', !!(s && s.performanceMode))).catch(() => {}),
+        api.audio.get().then((a) => {
+            const row = document.querySelector('#qk-vol-row');
+            if (row) row.hidden = !(a && a.available);
+            if (a && a.available) {
+                const sl = document.querySelector('#qk-vol'); if (sl) sl.value = a.volume;
+                const pct = document.querySelector('#qk-vol-pct'); if (pct) pct.textContent = a.volume + '%';
+            }
+        }).catch(() => { const row = document.querySelector('#qk-vol-row'); if (row) row.hidden = true; }),
+    ]);
+}
+function closeQuickPopover() { const p = document.querySelector('#quick-popover'); if (p) p.hidden = true; }
+function toggleQuickPopover() {
+    const pop = document.querySelector('#quick-popover'); if (!pop) return;
+    if (pop.hidden) { closeCalPopover(); refreshQuickUi(); pop.hidden = false; } else pop.hidden = true;
+}
+
+// --- QOL batch: calendar popover (topbar clock) ------------------------------
+let _calYear = 0, _calMonth = 0;   // currently displayed month
+function renderCal() {
+    const title = document.querySelector('#cal-title');
+    const grid = document.querySelector('#cal-grid');
+    if (!title || !grid) return;
+    const now = new Date();
+    const first = new Date(_calYear, _calMonth, 1);
+    title.textContent = first.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+    const cells = [];
+    ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].forEach((d) => cells.push(`<div class="cal-dow">${d}</div>`));
+    const startDow = first.getDay();
+    const daysInMonth = new Date(_calYear, _calMonth + 1, 0).getDate();
+    const daysInPrev = new Date(_calYear, _calMonth, 0).getDate();
+    for (let i = startDow - 1; i >= 0; i--) cells.push(`<div class="cal-day other">${daysInPrev - i}</div>`);
+    for (let d = 1; d <= daysInMonth; d++) {
+        const isToday = d === now.getDate() && _calMonth === now.getMonth() && _calYear === now.getFullYear();
+        cells.push(`<div class="cal-day${isToday ? ' today' : ''}">${d}</div>`);
+    }
+    const rem = (7 - (cells.length % 7)) % 7;
+    for (let d = 1; d <= rem; d++) cells.push(`<div class="cal-day other">${d}</div>`);
+    grid.innerHTML = cells.join('');
+}
+function closeCalPopover() { const p = document.querySelector('#cal-popover'); if (p) p.hidden = true; }
+function toggleCalPopover() {
+    const pop = document.querySelector('#cal-popover'); if (!pop) return;
+    if (pop.hidden) {
+        closeQuickPopover();
+        const now = new Date(); _calYear = now.getFullYear(); _calMonth = now.getMonth();
+        renderCal(); pop.hidden = false;
+    } else pop.hidden = true;
+}
+
+// --- QOL batch: command palette (Ctrl+Space) ---------------------------------
+// One search box over screens, settings cards, help topics, apps and common
+// actions. Entries only call existing UI paths (showScreen/launchApp/…), so the
+// palette adds reach, not privileges.
+let _palStatic = null;     // built once per session (screens/settings/help/actions)
+let _palSel = 0;
+let _palShown = [];        // currently rendered entries
+function _palBuildStatic() {
+    const items = [];
+    document.querySelectorAll('.nav-item[data-screen]').forEach((b) => {
+        const name = b.dataset.screen;
+        const label = b.textContent.trim();
+        items.push({ label, kind: 'screen', kw: name + ' open go', run: () => showScreen(name) });
+    });
+    document.querySelectorAll('#screen-settings .card h3').forEach((h) => {
+        const card = h.closest('.card');
+        const label = h.textContent.trim();
+        if (!card || !label) return;
+        items.push({ label, kind: 'settings', kw: 'settings ' + label, run: () => {
+            showScreen('settings');
+            requestAnimationFrame(() => { try { card.scrollIntoView({ block: 'start' }); } catch {} });
+        } });
+    });
+    (window.OUTLAW_HELP || []).forEach((t) => items.push({
+        label: t.title, kind: 'help', kw: (t.keywords || '') + ' help how',
+        run: () => { showScreen('help'); const hs = document.querySelector('#help-search'); if (hs) hs.value = t.title; try { renderHelp(t.title); } catch {} },
+    }));
+    const actions = [
+        ['📷 Take a screenshot', 'screenshot capture print screen picture', () => takeScreenshot('full')],
+        ['📷 Screenshot a region', 'screenshot region area select crop', () => takeScreenshot('region')],
+        ['🔒 Lock the screen', 'lock secure away pin', () => lockNow()],
+        ['💤 Sleep', 'sleep suspend standby power', () => { api.power.suspend().then((r) => { if (r && r.ok === false) toast('Sleep failed: ' + (r.error || 'try again')); }).catch(() => {}); }],
+        ['🌙 Toggle night light', 'night light blue warm color', async () => { try { const s = await api.nightlight.status(); const r = await api.nightlight.set({ on: !(s && s.on) }); toast(r && r.ok ? ('Night light ' + (r.on ? 'on.' : 'off.')) : ((r && r.error) || 'Couldn\'t change night light.')); } catch {} }],
+        ['🔕 Toggle Do Not Disturb', 'dnd do not disturb notifications quiet mute', async () => { try { const d = await api.notif.dndStatus(); const r = await api.notif.dndSet(!(d && d.paused)); toast(r && r.ok ? ('Do Not Disturb ' + (r.paused ? 'on.' : 'off.')) : ((r && r.error) || 'Couldn\'t change Do Not Disturb.')); } catch {} }],
+        ['✦ Ask the AI', 'ai assistant ask chat question', () => { showScreen('ai'); const i = document.querySelector('#ai-in'); if (i) i.focus(); }],
+    ];
+    actions.forEach(([label, kw, run]) => items.push({ label, kind: 'action', kw, run }));
+    return items;
+}
+async function _palAllItems() {
+    if (!_palStatic) _palStatic = _palBuildStatic();
+    let apps = [];
+    try {
+        const reg = await api.apps.list();
+        apps = (reg || []).map((a) => ({ label: '▸ Launch ' + a.label, kind: 'app', kw: 'launch open run app ' + a.id, run: () => launchApp(a.id) }));
+    } catch {}
+    return _palStatic.concat(apps);
+}
+function _palScore(item, q) {
+    const l = item.label.toLowerCase(), k = (item.kw || '').toLowerCase();
+    if (l.startsWith(q)) return 3;
+    if (l.includes(q)) return 2;
+    if (k.includes(q)) return 1;
+    return 0;
+}
+function _palRender(items) {
+    _palShown = items;
+    _palSel = 0;
+    const list = document.querySelector('#pal-list');
+    if (!list) return;
+    if (!items.length) { list.innerHTML = '<div class="pal-empty">No matches.</div>'; return; }
+    list.innerHTML = items.map((it, i) =>
+        `<div class="pal-item${i === 0 ? ' sel' : ''}" role="option" aria-selected="${i === 0}" data-pal-idx="${i}">`
+        + `<span class="pal-kind">${it.kind}</span><span>${_escapeHtml(it.label)}</span></div>`).join('');
+}
+function _palMove(dir) {
+    if (!_palShown.length) return;
+    _palSel = Math.max(0, Math.min(_palShown.length - 1, _palSel + dir));
+    document.querySelectorAll('#pal-list .pal-item').forEach((el, i) => {
+        el.classList.toggle('sel', i === _palSel);
+        el.setAttribute('aria-selected', i === _palSel ? 'true' : 'false');
+        if (i === _palSel) el.scrollIntoView({ block: 'nearest' });
+    });
+}
+function _palRun(idx) {
+    const it = _palShown[idx];
+    closePalette();
+    if (it) { try { it.run(); } catch {} }
+}
+let _palFilterSeq = 0;
+async function _palFilter() {
+    const seq = ++_palFilterSeq;
+    const q = (document.querySelector('#pal-input') || { value: '' }).value.trim().toLowerCase();
+    const all = await _palAllItems();
+    if (seq !== _palFilterSeq) return;   // a newer keystroke superseded this query
+    if (!q) { _palRender(all.filter((i) => i.kind === 'screen' || i.kind === 'action').slice(0, 12)); return; }
+    const scored = all.map((it) => ({ it, s: _palScore(it, q) })).filter((x) => x.s > 0);
+    scored.sort((a, b) => b.s - a.s);
+    _palRender(scored.slice(0, 12).map((x) => x.it));
+}
+function openPalette() {
+    const pal = document.querySelector('#palette'); if (!pal) return;
+    // Never open behind a full-screen overlay (lock screen, running-job
+    // loading screen, quickstart tour) — actions could run invisibly.
+    const si = document.querySelector('#signin');
+    if (si && si.style.display && si.style.display !== 'none') return;
+    const ls = document.querySelector('#loadscreen');
+    if (ls && ls.classList.contains('show')) return;
+    const qs = document.querySelector('#quickstart');
+    if (qs && qs.style.display === 'flex') return;
+    closeQuickPopover(); closeCalPopover();
+    pal.hidden = false;
+    const inp = document.querySelector('#pal-input');
+    if (inp) { inp.value = ''; inp.focus(); }
+    _palFilter();
+}
+function closePalette() { const pal = document.querySelector('#palette'); if (pal) pal.hidden = true; }
+
+// --- QOL batch: recent apps on the Dashboard ---------------------------------
+const _RECENT_ICONS = { browser: '🌐', steam: '🎮', godot: '🤖', files: '📁', terminal: '>_', lutris: '🍷', blender: '🧊', gimp: '🎨', code: '💻' };
+async function renderRecentApps() {
+    const box = document.getElementById('recent-apps');
+    const title = document.getElementById('recent-title');
+    if (!box || !title) return;
+    try {
+        const [s, registry] = await Promise.all([api.settings.get(), api.apps.list()]);
+        const ids = (Array.isArray(s.recentApps) ? s.recentApps : []).filter((id) => registry.some((r) => r.id === id));
+        title.hidden = ids.length === 0;
+        box.innerHTML = '';
+        for (const id of ids) {
+            const label = (registry.find((r) => r.id === id) || {}).label || id;
+            const b = document.createElement('button');
+            b.className = 'tile';
+            b.dataset.launch = id;
+            b.innerHTML = `<span class="t-ico">${_RECENT_ICONS[id] || '📦'}</span><span class="t-label">${_escapeHtml(label)}</span><span class="t-sub">launch</span>`;
+            box.appendChild(b);
+        }
+    } catch { title.hidden = true; }
+}
+
+// Auto-lock on idle — main watches SYSTEM-WIDE idle (powerMonitor) and sends
+// 'idle-lock'; the renderer just owns the guards + the sign-in overlay. The
+// system-wide source matters: window-local activity tracking would think the
+// machine is idle while the user plays a fullscreen game. Fires only when a
+// PIN exists and the sign-in screen isn't already up — never traps the user.
+async function onIdleLock() {
+    const si = document.querySelector('#signin');
+    if (si && si.style.display && si.style.display !== 'none') return; // already locked
+    try {
+        const st = await api.auth.status();
+        if (!st || st.live || !st.hasPin) return;
+        lockNow();
+    } catch {}
 }
 
 // QoL — live filter for the (now long) Settings screen: hide cards that don't
@@ -239,6 +434,12 @@ function showSigninMode(m) {
     if (m === 'pin') { _pinBuf = ''; renderPinDots(); }
 }
 function openSignin({ reauth, user, hasPin }) {
+    // Close every floating surface and drop focus first — otherwise a still-
+    // focused palette input behind the overlay would keep receiving keystrokes
+    // (Enter could run actions "through" the lock screen).
+    try { closePalette(); closeQuickPopover(); closeCalPopover(); } catch {}
+    try { const vp = $('#volume-popover'); if (vp) vp.hidden = true; } catch {}
+    try { if (document.activeElement && document.activeElement.blur) document.activeElement.blur(); } catch {}
     _signinReauth = !!reauth;
     _signinHasPin = !!hasPin;
     _pinBuf = '';
@@ -463,6 +664,7 @@ function showScreen(name) {
     }
     if (name === 'files') { _fsFilter = ''; const ff = $('#fs-filter'); if (ff) ff.value = ''; loadFiles(currentDir || null); }
     if (name === 'tasks') { refreshTasks(); startTasksPoll(); } else { stopTasksPoll(); }
+    if (name === 'dashboard') renderRecentApps();
     if (name === 'gaming') refreshGaming();
     if (name === 'apps') { loadAppsCatalog(); const as = $('#apps-search'); if (as) as.focus(); }
     if (name === 'help') { renderHelp(($('#help-search') || {}).value || ''); const hs = $('#help-search'); if (hs) hs.focus(); }
@@ -1113,6 +1315,8 @@ async function rollbackShell() {
 async function launchApp(id) {
     const r = await api.apps.launch(id);
     toast(r.ok ? `Launching ${r.label}…` : (r.error || 'Could not launch.'));
+    // Keep the Dashboard's "Recent" row current when launching from it.
+    if (r.ok && currentScreen === 'dashboard') renderRecentApps();
 }
 
 // ---------------------------------------------------------------------------
@@ -2351,11 +2555,14 @@ async function loadSettings() {
         vramEl.value = s.vramSaverMode || 'auto';
         refreshVramSubText();
     }
-    // Tier-2 — auto-lock idle timer (armed at startup, independent of the
-    // Settings screen) + seed the night-light warmth select.
+    // Tier-2 — seed the power-management selects + night-light warmth (the
+    // idle watch itself lives in main and starts with the app).
     const alSel = $('#autolock-select');
     if (alSel) alSel.value = String(s.autoLockMin || 0);
-    setAutoLock(s.autoLockMin || 0);
+    const asSel = $('#autosleep-select');
+    if (asSel) asSel.value = String(s.autoSleepMin || 0);
+    const sbSel = $('#screenblank-select');
+    if (sbSel) sbSel.value = String(s.screenBlankMin == null ? -1 : s.screenBlankMin);
     const nlTempSel = $('#nightlight-temp');
     if (nlTempSel && s.nightLightTemp) nlTempSel.value = String(s.nightLightTemp);
 }
@@ -3283,15 +3490,21 @@ function wire() {
     });
     const dndLast = $('#dnd-show-last');
     if (dndLast) dndLast.addEventListener('click', async () => { try { await api.notif.showLast(); } catch {} });
-    // Tier-2 — Auto-lock when idle. Persist + re-arm the idle timer live.
+    const nhBtn = $('#notif-history-btn');
+    if (nhBtn) nhBtn.addEventListener('click', renderNotifHistory);
+    // Tier-2 — power management. Persisting the setting is enough: main's
+    // settings:set hook re-syncs the idle watch / X blanking immediately.
     const alSel = $('#autolock-select');
-    if (alSel) alSel.addEventListener('change', () => {
-        const min = parseInt(alSel.value, 10) || 0;
-        setSetting({ autoLockMin: min });
-        setAutoLock(min);
+    if (alSel) alSel.addEventListener('change', () => setSetting({ autoLockMin: parseInt(alSel.value, 10) || 0 }));
+    const asSel = $('#autosleep-select');
+    if (asSel) asSel.addEventListener('change', () => setSetting({ autoSleepMin: parseInt(asSel.value, 10) || 0 }));
+    const sbSel = $('#screenblank-select');
+    if (sbSel) sbSel.addEventListener('change', () => {
+        const v = parseInt(sbSel.value, 10);
+        setSetting({ screenBlankMin: Number.isFinite(v) ? v : -1 });
     });
-    ['mousemove', 'mousedown', 'keydown', 'wheel', 'touchstart'].forEach((ev) =>
-        document.addEventListener(ev, _autoLockActivity, { passive: true }));
+    // Main's system-wide idle watch says it's time to lock.
+    api.on('idle-lock', onIdleLock);
     // QoL — Settings search/filter.
     const setSearch = $('#settings-search');
     if (setSearch) setSearch.addEventListener('input', (e) => filterSettings(e.target.value));
@@ -3310,14 +3523,100 @@ function wire() {
         if (e.target.closest('#volume-popover') || e.target.closest('#stat-volume')) return;
         pop.hidden = true;
     });
+    // QOL batch — quick-settings popover (topbar ☰).
+    { const qt = $('#quick-toggle'); if (qt) qt.addEventListener('click', toggleQuickPopover); }
+    const _qkToggle = (sel, doSet) => {
+        const b = $(sel);
+        if (!b) return;
+        b.addEventListener('click', async () => {
+            const next = !_qkOn(sel);
+            b.disabled = true;
+            try { await doSet(next); } catch {}
+            b.disabled = false;
+        });
+    };
+    _qkToggle('#qk-nightlight', async (on) => {
+        const r = await api.nightlight.set({ on });
+        if (r && r.ok) { _qkSet('#qk-nightlight', on); refreshDesktopUi(); }
+        else toast((r && r.error) || 'Couldn\'t change night light.');
+    });
+    _qkToggle('#qk-dnd', async (on) => {
+        const r = await api.notif.dndSet(on);
+        if (r && r.ok) { _qkSet('#qk-dnd', on); refreshDesktopUi(); }
+        else toast((r && r.error) || 'Couldn\'t change Do Not Disturb.');
+    });
+    _qkToggle('#qk-airplane', async (on) => {
+        const r = await api.net.setAirplane(on);
+        if (r && r.ok) _qkSet('#qk-airplane', on);
+        else toast('Couldn\'t change airplane mode' + (r && r.error ? ': ' + r.error.slice(0, 80) : '.'));
+        refreshAirplane();   // keep the Settings toggle + offline pill in sync either way
+    });
+    _qkToggle('#qk-perf', async (on) => {
+        await api.gaming.setPerformance(on);
+        _qkSet('#qk-perf', on);
+        const pt = $('#perf-toggle'); if (pt) pt.checked = on;
+        toast('Performance mode ' + (on ? 'ON' : 'OFF'));
+    });
+    { const sl = $('#qk-vol'); if (sl) sl.addEventListener('input', async (e) => {
+        const v = parseInt(e.target.value, 10) || 0;
+        const pct = $('#qk-vol-pct'); if (pct) pct.textContent = v + '%';
+        _setVolIcon(v, false);
+        try { await api.audio.set(v); } catch {}
+    }); }
+    { const b = $('#qk-screenshot'); if (b) b.addEventListener('click', () => { closeQuickPopover(); takeScreenshot('full'); }); }
+    { const b = $('#qk-lock'); if (b) b.addEventListener('click', () => { closeQuickPopover(); lockNow(); }); }
+    { const b = $('#qk-sleep'); if (b) b.addEventListener('click', () => {
+        closeQuickPopover();
+        api.power.suspend().then((r) => { if (r && r.ok === false) toast('Sleep failed: ' + (r.error || 'try again')); }).catch(() => {});
+    }); }
+    { const b = $('#qk-settings'); if (b) b.addEventListener('click', () => { closeQuickPopover(); showScreen('settings'); }); }
+    document.addEventListener('click', (e) => {
+        const pop = $('#quick-popover');
+        if (!pop || pop.hidden) return;
+        if (e.target.closest('#quick-popover') || e.target.closest('#quick-toggle')) return;
+        closeQuickPopover();
+    });
+    // QOL batch — calendar popover (topbar clock).
+    { const ck = $('#stat-clock'); if (ck) ck.addEventListener('click', toggleCalPopover); }
+    { const b = $('#cal-prev'); if (b) b.addEventListener('click', () => { _calMonth--; if (_calMonth < 0) { _calMonth = 11; _calYear--; } renderCal(); }); }
+    { const b = $('#cal-next'); if (b) b.addEventListener('click', () => { _calMonth++; if (_calMonth > 11) { _calMonth = 0; _calYear++; } renderCal(); }); }
+    { const b = $('#cal-today'); if (b) b.addEventListener('click', () => { const now = new Date(); _calYear = now.getFullYear(); _calMonth = now.getMonth(); renderCal(); }); }
+    document.addEventListener('click', (e) => {
+        const pop = $('#cal-popover');
+        if (!pop || pop.hidden) return;
+        if (e.target.closest('#cal-popover') || e.target.closest('#stat-clock')) return;
+        closeCalPopover();
+    });
+    // QOL batch — command palette.
+    { const pi = $('#pal-input'); if (pi) {
+        pi.addEventListener('input', () => _palFilter());
+        pi.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowDown') { e.preventDefault(); _palMove(1); }
+            else if (e.key === 'ArrowUp') { e.preventDefault(); _palMove(-1); }
+            else if (e.key === 'Enter') { e.preventDefault(); _palRun(_palSel); }
+        });
+    } }
+    { const pl = $('#pal-list'); if (pl) pl.addEventListener('click', (e) => {
+        const item = e.target.closest('[data-pal-idx]');
+        if (item) _palRun(parseInt(item.dataset.palIdx, 10));
+    }); }
+    { const pal = $('#palette'); if (pal) pal.addEventListener('click', (e) => { if (e.target === pal) closePalette(); }); }
     // QoL — Esc and click-outside close the power menu (expected desktop behavior).
     document.addEventListener('keydown', (e) => {
-        // Esc — close the volume popover, a FINISHED loading screen (never
-        // mid-operation; the X stays disabled until done), then the power menu.
+        // Esc — close (in order): the palette, any topbar popover, a FINISHED
+        // loading screen (never mid-operation; the X stays disabled until
+        // done), then the power menu.
         if (e.key === 'Escape') {
-            const vp = $('#volume-popover'); if (vp && !vp.hidden) { vp.hidden = true; return; }
+            // One Esc dismisses ONE surface. This listener runs FIRST (earlier
+            // registration), so after consuming the key it must stop the later
+            // document-level listener — that one would see the surface already
+            // closed and close the power menu / cancel a confirm dialog too.
+            const pal = $('#palette'); if (pal && !pal.hidden) { closePalette(); e.stopImmediatePropagation(); return; }
+            const qp = $('#quick-popover'); if (qp && !qp.hidden) { closeQuickPopover(); e.stopImmediatePropagation(); return; }
+            const cp = $('#cal-popover'); if (cp && !cp.hidden) { closeCalPopover(); e.stopImmediatePropagation(); return; }
+            const vp = $('#volume-popover'); if (vp && !vp.hidden) { vp.hidden = true; e.stopImmediatePropagation(); return; }
             const ls = $('#loadscreen'), lsClose = $('#ls-close');
-            if (ls && ls.classList.contains('show') && lsClose && !lsClose.disabled) { loadingScreen.hide(); return; }
+            if (ls && ls.classList.contains('show') && lsClose && !lsClose.disabled) { loadingScreen.hide(); e.stopImmediatePropagation(); return; }
             const pm = $('#power-modal');
             if (pm && pm.classList.contains('show')) closePower();
             return;
@@ -3331,6 +3630,13 @@ function wire() {
         if ((e.ctrlKey || e.metaKey) && (e.key === 'k' || e.key === 'K')) {
             e.preventDefault();
             try { showScreen('ai'); const i = $('#ai-in'); if (i) i.focus(); } catch {}
+            return;
+        }
+        // Ctrl/Cmd+Space — the command palette (search everything).
+        if ((e.ctrlKey || e.metaKey) && (e.code === 'Space' || e.key === ' ')) {
+            e.preventDefault();
+            const pal = $('#palette');
+            if (pal && !pal.hidden) closePalette(); else openPalette();
             return;
         }
         // Ctrl/Cmd+, — open Settings (the conventional shortcut).
@@ -3381,8 +3687,22 @@ function wire() {
             })();
             return;
         }
-        if (e.key === 'Escape') { closePower(); if (confirmResolver) closeConfirm(false); }
+        // One Esc dismisses ONE surface. This listener registered first, so it
+        // must defer while a palette/popover/loading screen is open — the later
+        // Esc-chain listener owns closing those; without this guard the same
+        // keypress would ALSO close the power menu, cancel a pending confirm
+        // dialog, and wipe the calculator behind them.
+        const _escSurfaceOpen = ['#palette', '#quick-popover', '#cal-popover', '#volume-popover']
+            .some((s) => { const el = $(s); return el && !el.hidden; })
+            || (($('#loadscreen') || {}).classList || { contains: () => false }).contains('show');
+        if (e.key === 'Escape' && !_escSurfaceOpen) { closePower(); if (confirmResolver) closeConfirm(false); }
         if ($('#screen-calc').classList.contains('active') && $('#app').classList.contains('ready')) {
+            // Don't drive the calculator while the user is typing in a text
+            // field (e.g. the command palette opened over the Calculator screen)
+            // or dismissing an overlay with Esc.
+            const ae = document.activeElement;
+            if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA')) return;
+            if (_escSurfaceOpen && e.key === 'Escape') return;
             if (/[0-9.+\-*/]/.test(e.key)) calcKey(e.key);
             else if (e.key === 'Enter' || e.key === '=') calcKey('=');
             else if (e.key === 'Escape' || e.key.toLowerCase() === 'c') calcKey('C');
@@ -3427,6 +3747,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     enhanceSelects();   // replace native <select> popups (broken with no WM)
     initAiChats().catch(() => {});   // Phase 15b — load persistent Cr1tt3r chats
     await renderTiles();
+    renderRecentApps();   // QOL — "Recent" row on the Dashboard (hidden when empty)
     await loadSysInfo();
     // Probe whether a previous shell version exists on disk so the Rollback
     // button reflects reality on Settings open instead of waiting for a click.
@@ -3473,7 +3794,7 @@ function applyLiveLocks() {
     const badge = $('#live-badge'); if (badge) badge.hidden = false;
     const reason = 'Locked in the live demo — install Outlaw OS to unlock this.';
     // Controls that don't make sense on a throwaway live system.
-    ['#perf-toggle'].forEach((sel) => {
+    ['#perf-toggle', '#qk-perf'].forEach((sel) => {
         const el = $(sel); if (el) { el.disabled = true; el.title = reason; }
     });
     const dev = $('#session-switch-dev');
