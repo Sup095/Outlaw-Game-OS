@@ -2488,11 +2488,106 @@ document.addEventListener('click', () => {
 // P1 — apply a visual theme by toggling a body class. The actual palette lives
 // in styles.css (body.theme-gold { --term: …; }), so this is a zero-cost swap
 // of CSS custom properties; nothing re-renders beyond a repaint.
+// Phase 11+ — Broken-mode "live faults" theatre. Purely cosmetic: random glitch
+// bursts, fake SYSTEM FAULT cards, brand/stat corruption and a rare SIGNAL LOST
+// flash, so the machine feels like it's genuinely struggling. Constraints:
+//   * runs ONLY while the Broken theme is active (user opt-in) — zero idle cost
+//     on the other themes; Reduce motion disables it entirely.
+//   * NEVER touches the real error log or the real #toast — fakes live in their
+//     own aria-hidden containers so screen readers don't announce them.
+//   * skips a beat while a real overlay owns the screen (sign-in, loading
+//     screen) so theatre never mixes with a genuine operation.
+//   * compositor-cheap: filter/transform/opacity + tiny text swaps only.
+const BRK_FAULTS = [
+    'ERR 0x2F: phosphor decay above threshold — compensating',
+    'MEMORY PARITY FAULT at 0x0000F3A2 (recovered)',
+    'I/O: sector 8,102 remapped after 3 retries',
+    'thermal sensor 2: NO RESPONSE — using last known value',
+    'CRT deflection coil drift detected (auto-corrected)',
+    'WARN: capacitor C41 out of tolerance',
+    'bus fault: PCI-3 timeout — bus re-armed',
+    'checksum mismatch in cluster 0x11C — retry OK',
+    'voltage rail 3.3V sagging (3.06V)',
+    'display sync lost — resynced in 12 ms',
+    'FAULT: fan 1 spindown, thermal margin shrinking',
+    'watchdog: heartbeat missed ×1 (tolerated)',
+    'EMI burst on line-in — shielding degraded',
+    'kernel: soft lockup recovered on CPU2',
+];
+const BRK_BRANDS = ['▓UTLAW_0S', 'OU7L4W_OS', 'OUT▚AW_O5', 'OUTLAW_▓S'];
+const BRK_STATS = ['▓▓', 'ERR', '0xFF', '─ ─'];
+let _brkTimer = null;
+function _brkRand(min, max) { return min + Math.random() * (max - min); }
+function _brkFakeError() {
+    const box = document.querySelector('#brk-toasts');
+    if (!box) return;
+    while (box.children.length >= 3) box.removeChild(box.firstChild);
+    const card = document.createElement('div');
+    card.className = 'brk-toast';
+    const line = BRK_FAULTS[Math.floor(Math.random() * BRK_FAULTS.length)];
+    card.innerHTML = `<b>⚠ SYSTEM FAULT</b><br>${_escapeHtml(line)}`;
+    box.appendChild(card);
+    setTimeout(() => { try { card.remove(); } catch {} }, 4500);
+}
+function _brkBurst() {
+    document.body.classList.add('brk-burst');
+    setTimeout(() => document.body.classList.remove('brk-burst'), 320);
+}
+function _brkScrambleBrand() {
+    const el = document.querySelector('.topbar .brand');
+    if (!el) return;
+    el.textContent = BRK_BRANDS[Math.floor(Math.random() * BRK_BRANDS.length)];
+    setTimeout(() => { el.textContent = BRK_BRANDS[Math.floor(Math.random() * BRK_BRANDS.length)]; }, 140);
+    setTimeout(() => { el.textContent = 'OUTLAW_OS'; }, 380);
+}
+function _brkStatCorrupt() {
+    const el = document.querySelector(Math.random() < 0.5 ? '#stat-cpu' : '#stat-ram');
+    if (!el) return;
+    const prev = el.textContent;
+    const label = prev.split(' ')[0] || 'CPU';
+    el.textContent = label + ' ' + BRK_STATS[Math.floor(Math.random() * BRK_STATS.length)];
+    setTimeout(() => { if (el.textContent.includes('▓') || /ERR|0xFF|─/.test(el.textContent)) el.textContent = prev; }, 1200);
+}
+function _brkSignalLost() {
+    const el = document.querySelector('#brk-flash');
+    if (!el) return;
+    el.hidden = false;
+    setTimeout(() => { el.hidden = true; }, 240);
+}
+function _brkFire() {
+    const ls = document.querySelector('#loadscreen');
+    const si = document.querySelector('#signin');
+    if ((ls && ls.classList.contains('show')) || (si && si.style.display === 'flex')) return;
+    const r = Math.random();
+    if (r < 0.30) _brkBurst();
+    else if (r < 0.60) _brkFakeError();
+    else if (r < 0.75) _brkScrambleBrand();
+    else if (r < 0.90) _brkStatCorrupt();
+    else _brkSignalLost();
+}
+function _brkSchedule() {
+    _brkTimer = setTimeout(() => { try { _brkFire(); } catch {} _brkSchedule(); }, _brkRand(7000, 16000));
+}
+function syncBrokenFx() {
+    const on = document.body.classList.contains('theme-broken') && !document.body.classList.contains('reduce-motion');
+    if (on && !_brkTimer) _brkSchedule();
+    if (!on && _brkTimer) {
+        clearTimeout(_brkTimer);
+        _brkTimer = null;
+        const bt = document.querySelector('#brk-toasts'); if (bt) bt.innerHTML = '';
+        const bf = document.querySelector('#brk-flash'); if (bf) bf.hidden = true;
+        document.body.classList.remove('brk-burst');
+        const brand = document.querySelector('.topbar .brand'); if (brand) brand.textContent = 'OUTLAW_OS';
+    }
+}
+
 function applyTheme(theme) {
     document.body.classList.toggle('theme-gold', theme === 'gold');
     // Phase 11 — "Broken" mode: a third theme (palette + CSS glitch FX). Mutually
     // exclusive with gold; both classes are driven off the single theme value.
     document.body.classList.toggle('theme-broken', theme === 'broken');
+    // Start/stop the Broken-mode live-faults theatre with the theme.
+    syncBrokenFx();
 }
 
 async function loadSettings() {
@@ -3020,7 +3115,7 @@ function wire() {
     // Settings toggles
     $('#crt-toggle').addEventListener('change', (e) => { document.body.classList.toggle('crt', e.target.checked); setSetting({ crtFx: e.target.checked }); });
     $('#glow-toggle').addEventListener('change', (e) => { document.body.classList.toggle('glow', e.target.checked); setSetting({ glow: e.target.checked }); });
-    { const rm = $('#reduce-motion-toggle'); if (rm) rm.addEventListener('change', (e) => { document.body.classList.toggle('reduce-motion', e.target.checked); setSetting({ reduceMotion: e.target.checked }); }); }
+    { const rm = $('#reduce-motion-toggle'); if (rm) rm.addEventListener('change', (e) => { document.body.classList.toggle('reduce-motion', e.target.checked); setSetting({ reduceMotion: e.target.checked }); syncBrokenFx(); }); }
     { const hc = $('#contrast-toggle'); if (hc) hc.addEventListener('change', (e) => { document.body.classList.toggle('high-contrast', e.target.checked); setSetting({ highContrast: e.target.checked }); }); }
     { const us = $('#ui-scale'); if (us) us.addEventListener('change', (e) => { const f = parseFloat(e.target.value) || 1; if (api.setZoom) api.setZoom(f); setSetting({ uiScale: f }); }); }
     // QoL — reset appearance (theme/effects/motion/text size) to defaults.

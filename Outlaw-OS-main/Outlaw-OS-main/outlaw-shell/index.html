@@ -995,6 +995,11 @@
 </div>
 
 <div id="toast" role="status" aria-live="polite" aria-atomic="true"></div>
+
+<!-- Broken-mode fake fault theatre (cosmetic only — never real errors, never
+     logged; aria-hidden so screen readers don't announce the fakes). -->
+<div id="brk-toasts" aria-hidden="true"></div>
+<div id="brk-flash" aria-hidden="true" hidden><span>◧ SIGNAL LOST ◧</span></div>
 <!-- Round-2 QOL — volume slider popover (opened from the topbar speaker). -->
 <div id="volume-popover" hidden>
     <div class="row" style="gap:10px;align-items:center;">

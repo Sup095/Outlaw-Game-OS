@@ -85,6 +85,42 @@ body.theme-broken h1, body.theme-broken h2, body.theme-broken h3 {
     52% { transform: translate(-2px, 0); }
     54% { transform: translate(2px, 1px); }
 }
+/* --- Broken-mode live-faults theatre (renderer-driven, broken theme only) ---
+ * A short hard glitch spasm: compositor-only filter/transform, applied for
+ * ~320ms by renderer.js then removed. */
+body.theme-broken.brk-burst {
+    animation: brk-burst-fx .32s steps(3) 1;
+}
+@keyframes brk-burst-fx {
+    0%   { filter: hue-rotate(18deg) saturate(1.6) contrast(1.2); transform: translateX(2px); }
+    33%  { filter: invert(0.08) contrast(1.35); transform: translateX(-3px) skewX(0.4deg); }
+    66%  { filter: hue-rotate(-14deg) brightness(1.25); transform: translateX(1px); }
+    100% { filter: none; transform: none; }
+}
+/* Fake SYSTEM FAULT cards — bottom-right stack, under the REAL toast (z 1100)
+ * so genuine messages always win. pointer-events none = can't block clicks. */
+#brk-toasts {
+    position: fixed; right: 14px; bottom: 16px; z-index: 1050;
+    display: flex; flex-direction: column; gap: 8px;
+    max-width: 380px; pointer-events: none;
+}
+.brk-toast {
+    background: #140505; border: 1px solid var(--danger); border-left: 4px solid var(--danger);
+    color: #ffb0a8; padding: 8px 12px; border-radius: 5px; font-size: 12px; line-height: 1.45;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+    animation: brk-toast-in .18s steps(2);
+}
+.brk-toast b { color: var(--danger); letter-spacing: .06em; }
+@keyframes brk-toast-in { from { transform: translateX(20px); opacity: 0; } }
+/* Rare full-screen SIGNAL LOST flash (~240ms). Below the loading screen
+ * (z 9000) — and the renderer skips firing while real overlays are up anyway. */
+#brk-flash {
+    position: fixed; inset: 0; z-index: 8500; background: #000;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--danger); font-size: 22px; letter-spacing: .2em;
+}
+#brk-flash[hidden] { display: none; }
+
 /* Both the OS "Reduce motion" setting and the OS-level preference calm it down to
  * just the palette (no flicker/tear/jitter). */
 @media (prefers-reduced-motion: reduce) {

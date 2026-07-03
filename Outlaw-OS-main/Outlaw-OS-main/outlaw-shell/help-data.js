@@ -61,11 +61,14 @@ window.OUTLAW_HELP = [
     },
     {
         id: 'themes', cat: 'The desktop', title: 'Themes & the retro look',
-        keywords: 'theme appearance green phosphor gold gunmetal crt scanline color',
+        keywords: 'theme appearance green phosphor gold gunmetal broken glitch crt scanline color fault',
         body: '<p><b>Settings → Appearance</b> switches between <b>Green Phosphor</b> (classic '
-            + 'terminal green) and <b>Gold Gunmetal</b> (the sci-fi-fortress look that matches '
-            + 'CodeMaker). There’s also an optional <b>CRT</b> effect. The whole UI recolors '
-            + 'instantly — no restart.</p>',
+            + 'terminal green), <b>Gold Gunmetal</b> (the sci-fi-fortress look that matches '
+            + 'CodeMaker) and <b>Broken</b> — a machine barely holding together: washed-out '
+            + 'phosphor, flicker, glitch bursts and fake <b>SYSTEM FAULT</b> pop-ups (pure '
+            + 'theatre — nothing is actually wrong, and they never touch the real error log). '
+            + 'There’s also an optional <b>CRT</b> effect. <b>Reduce motion</b> stills all of it. '
+            + 'The whole UI recolors instantly — no restart.</p>',
     },
 
     // ---- Apps & games ------------------------------------------------------
