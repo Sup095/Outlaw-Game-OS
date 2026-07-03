@@ -299,6 +299,16 @@ window.OUTLAW_HELP = [
             + 'In the assistant, press <b>Enter</b> to send. In the Terminal, <b>↑ / ↓</b> recall previous commands.</p>',
     },
     {
+        id: 'accessibility', cat: 'Settings & updates', title: 'Accessibility options',
+        keywords: 'accessibility a11y high contrast text size zoom reduce motion keyboard navigation screen reader legibility focus',
+        body: '<p><b>Settings → Appearance</b> has the comfort and legibility options: <b>Text size</b> scales '
+            + 'the whole interface, <b>High contrast</b> brightens text and strengthens borders and focus '
+            + 'outlines, and <b>Reduce motion</b> turns off decorative animation. The desktop is fully '
+            + 'keyboard-navigable — <b>Tab</b> moves between controls, toggles flip with <b>Space</b>, and '
+            + '<b>Esc</b> backs out of any popover or dialog. See the <i>Keyboard shortcuts</i> topic for the '
+            + 'global keys (Ctrl+Space command palette, Alt+1…9 screens, and more).</p>',
+    },
+    {
         id: 'command-palette', cat: 'The desktop', title: 'Command palette (search everything)',
         keywords: 'command palette search everything launcher spotlight find quick open ctrl space',
         body: '<p>Press <b>Ctrl + Space</b> anywhere to open the <b>command palette</b> — one search box over '

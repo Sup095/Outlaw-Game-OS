@@ -1696,7 +1696,9 @@ async function runTerminal(cmd) {
 // ---------------------------------------------------------------------------
 // Confirm modal (shared by terminal + AI run_command)
 // ---------------------------------------------------------------------------
+let _confirmOpener = null;   // a11y — restore focus to whatever opened the dialog
 function askConfirm({ title, reason, cmd }) {
+    _confirmOpener = document.activeElement;
     $('#confirm-title').textContent = title || 'Confirm dangerous action';
     $('#confirm-reason').textContent = reason || '';
     $('#confirm-cmd').textContent = cmd || '';
@@ -1708,6 +1710,8 @@ function askConfirm({ title, reason, cmd }) {
 }
 function closeConfirm(result) {
     $('#confirm-modal').classList.remove('show');
+    try { if (_confirmOpener && _confirmOpener.focus) _confirmOpener.focus(); } catch {}
+    _confirmOpener = null;
     if (confirmResolver) { confirmResolver(result); confirmResolver = null; }
 }
 
@@ -2497,6 +2501,7 @@ async function loadSettings() {
     document.body.classList.toggle('crt', !!s.crtFx);
     document.body.classList.toggle('glow', !!s.glow);
     document.body.classList.toggle('reduce-motion', !!s.reduceMotion);
+    document.body.classList.toggle('high-contrast', !!s.highContrast);
     // C6 — show the AI's self-chosen name on a user-loaded model; base stays Cr1tt3r.
     try {
         const nameEl = document.querySelector('#ai-name');
@@ -2514,6 +2519,8 @@ async function loadSettings() {
     $('#glow-toggle').checked = !!s.glow;
     const rmToggle = $('#reduce-motion-toggle');
     if (rmToggle) rmToggle.checked = !!s.reduceMotion;
+    const hcToggle = $('#contrast-toggle');
+    if (hcToggle) hcToggle.checked = !!s.highContrast;
     // QoL/accessibility — whole-UI zoom (text size).
     if (api.setZoom) api.setZoom(Number(s.uiScale) || 1);
     const scaleSel = $('#ui-scale');
@@ -3014,12 +3021,13 @@ function wire() {
     $('#crt-toggle').addEventListener('change', (e) => { document.body.classList.toggle('crt', e.target.checked); setSetting({ crtFx: e.target.checked }); });
     $('#glow-toggle').addEventListener('change', (e) => { document.body.classList.toggle('glow', e.target.checked); setSetting({ glow: e.target.checked }); });
     { const rm = $('#reduce-motion-toggle'); if (rm) rm.addEventListener('change', (e) => { document.body.classList.toggle('reduce-motion', e.target.checked); setSetting({ reduceMotion: e.target.checked }); }); }
+    { const hc = $('#contrast-toggle'); if (hc) hc.addEventListener('change', (e) => { document.body.classList.toggle('high-contrast', e.target.checked); setSetting({ highContrast: e.target.checked }); }); }
     { const us = $('#ui-scale'); if (us) us.addEventListener('change', (e) => { const f = parseFloat(e.target.value) || 1; if (api.setZoom) api.setZoom(f); setSetting({ uiScale: f }); }); }
     // QoL — reset appearance (theme/effects/motion/text size) to defaults.
     { const ar = $('#appearance-reset'); if (ar) ar.addEventListener('click', async () => {
         try {
-            await setSetting({ theme: 'green', crtFx: false, glow: false, reduceMotion: false, uiScale: 1 });
-            await loadSettings();   // re-applies theme, effects, motion + zoom
+            await setSetting({ theme: 'green', crtFx: false, glow: false, reduceMotion: false, highContrast: false, uiScale: 1 });
+            await loadSettings();   // re-applies theme, effects, motion, contrast + zoom
             toast('Appearance reset to defaults.');
         } catch { toast('Couldn\'t reset appearance.'); }
     }); }
@@ -3617,6 +3625,10 @@ function wire() {
             const vp = $('#volume-popover'); if (vp && !vp.hidden) { vp.hidden = true; e.stopImmediatePropagation(); return; }
             const ls = $('#loadscreen'), lsClose = $('#ls-close');
             if (ls && ls.classList.contains('show') && lsClose && !lsClose.disabled) { loadingScreen.hide(); e.stopImmediatePropagation(); return; }
+            // Esc leaves the quickstart tour (same as Skip — it can be replayed
+            // from Help any time).
+            const qt = $('#quickstart');
+            if (qt && qt.style.display === 'flex') { endQuickstart(); e.stopImmediatePropagation(); return; }
             const pm = $('#power-modal');
             if (pm && pm.classList.contains('show')) closePower();
             return;

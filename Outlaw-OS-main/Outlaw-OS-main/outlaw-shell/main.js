@@ -133,6 +133,7 @@ const DEFAULT_SETTINGS = {
     crtFx: false,            // CRT scanline/flicker effect OFF by default (crisp + readable)
     glow: false,             // text glow OFF by default (no discoloration)
     reduceMotion: false,     // QoL — off decorative animations/transitions (a11y + low-end perf)
+    highContrast: false,     // a11y — brighter text, no faded elements, stronger borders/focus
     uiScale: 1,              // QoL/accessibility — whole-UI zoom (text size). 0.9–1.3.
     // P1 — visual theme. 'green' = classic green-phosphor terminal (default,
     // unchanged for existing users). 'gold' = retro gold-on-gunmetal "sci-fi
