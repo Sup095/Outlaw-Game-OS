@@ -35,8 +35,9 @@ Settings. Effects shrink every model input per turn:
 
 That trades wall-clock for survival — the agent loop runs more iterations with
 smaller chunks, and the user's still building their game. Pairs with the
-existing :class:`HardwareMonitor` (NVML-backed; non-NVIDIA hosts get the FULL
-default since we can't measure free VRAM there).
+existing :class:`HardwareMonitor` (NVML for NVIDIA, DRM sysfs counters for
+AMD/Intel discrete GPUs; only hosts with NO readable VRAM fall back to
+available-RAM tiering).
 
 Three tiers:
 

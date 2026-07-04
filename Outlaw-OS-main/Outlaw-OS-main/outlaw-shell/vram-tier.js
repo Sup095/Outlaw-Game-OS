@@ -32,11 +32,14 @@
 //                  knows to back off where it can (badges turn amber).
 //   - `minimal`  — red; renderer gates voice + animations + Live AI.
 //
-// Non-NVIDIA machines: NVML fails, `auto` collapses to `free` cleanly.
-// Off-Linux: `nvidia-smi` invocation no-ops; same result.
+// Non-NVIDIA machines: nvidia-smi fails → fall back to the DRM sysfs VRAM
+// counters (amdgpu + some Intel discrete expose mem_info_vram_total/_used), so
+// AMD/Intel cards get REAL tiering too. Only when no probe works does `auto`
+// collapse to `free`. Off-Linux: both probes no-op; same result.
 // ============================================================================
 'use strict';
 
+const fs = require('fs');
 const { execFile } = require('child_process');
 const { EventEmitter } = require('events');
 
@@ -58,6 +61,30 @@ const SUBSCRIBED_POLL_MS = 10_000;
 const VALID_MODES = new Set(['auto', 'off', 'lean', 'minimal']);
 
 
+// AMD (amdgpu) and some Intel discrete GPUs expose VRAM byte counters in the
+// DRM sysfs node. Direct file reads — cheaper than the nvidia-smi fork. Picks
+// the card with the largest total (the discrete one on hybrid laptops).
+// Integrated GPUs share system RAM and have no node → null → "no probe".
+function _probeDrmSysfs(base = '/sys/class/drm') {
+    try {
+        let best = null;
+        for (const entry of fs.readdirSync(base)) {
+            if (!/^card\d+$/.test(entry)) continue;
+            const dev = `${base}/${entry}/device`;
+            try {
+                const total = Number(fs.readFileSync(`${dev}/mem_info_vram_total`, 'utf8').trim());
+                const used = Number(fs.readFileSync(`${dev}/mem_info_vram_used`, 'utf8').trim());
+                if (!isFinite(total) || total <= 0 || !isFinite(used)) continue;
+                if (!best || total > best.total) best = { total, used };
+            } catch { /* this card has no VRAM counters (integrated / other driver) */ }
+        }
+        if (!best) return null;
+        const totalMb = Math.round(best.total / (1024 * 1024));
+        const freeMb = Math.max(0, Math.round((best.total - best.used) / (1024 * 1024)));
+        return { available: true, freeMb, totalMb };
+    } catch { return null; /* no /sys (off-Linux) or unreadable */ }
+}
+
 function _probe() {
     return new Promise((resolve) => {
         execFile(
@@ -66,16 +93,17 @@ function _probe() {
             { timeout: 3000 },
             (err, stdout) => {
                 if (err) {
-                    // No NVIDIA driver, or nvidia-smi not in PATH — treat as
-                    // "free" tier in auto mode. We never fail loud here; the
-                    // shell must keep working on AMD/Intel/no-GPU systems.
-                    resolve({ available: false, freeMb: 0, totalMb: 0 });
+                    // No NVIDIA driver / not in PATH — try the AMD/Intel DRM
+                    // sysfs counters before giving up, so non-NVIDIA machines
+                    // get real tiering instead of a permanent "free". We never
+                    // fail loud here; the shell must keep working on any GPU.
+                    resolve(_probeDrmSysfs() || { available: false, freeMb: 0, totalMb: 0 });
                     return;
                 }
                 const line = (stdout || '').split('\n')[0] || '';
                 const parts = line.split(',').map((s) => Number(s.trim()));
                 if (parts.length < 2 || !isFinite(parts[0]) || !isFinite(parts[1])) {
-                    resolve({ available: false, freeMb: 0, totalMb: 0 });
+                    resolve(_probeDrmSysfs() || { available: false, freeMb: 0, totalMb: 0 });
                     return;
                 }
                 resolve({ available: true, freeMb: parts[0], totalMb: parts[1] });
@@ -214,7 +242,7 @@ function _tierLabel(tier, mode, probe) {
         return prefix + ' (forced)';
     }
     if (mode === 'auto' && tier === 'free' && probe && !probe.available) {
-        return prefix + ' (no NVML)';
+        return prefix + ' (no GPU probe)';
     }
     return prefix;
 }
@@ -224,6 +252,7 @@ module.exports = {
     VramTierMonitor,
     // Re-exported for tests / direct consumers
     _probe,
+    _probeDrmSysfs,
     _tierLabel,
     MINIMAL_BELOW_MB,
     LEAN_BELOW_MB,

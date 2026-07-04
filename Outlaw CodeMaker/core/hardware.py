@@ -1,20 +1,34 @@
 """Hardware Awareness — real-time VRAM/RAM, with OOM-avoidance hints.
 
-VRAM via NVIDIA's NVML (pynvml); RAM via psutil. Both degrade gracefully: on a
-non-NVIDIA box or if a library is missing, VRAM reads as unavailable and the app
-keeps working.
+VRAM via NVIDIA's NVML (pynvml) when present, else via the Linux DRM sysfs
+counters (AMD amdgpu + some Intel discrete GPUs expose
+``mem_info_vram_total`` / ``mem_info_vram_used``), so non-NVIDIA machines get
+real VRAM numbers too. RAM via psutil. Everything degrades gracefully: with no
+readable GPU counters, VRAM reads as unavailable and the app keeps working
+(the VRAM saver then tiers on available RAM instead).
 
-Why it matters here: Qwen3 already fills your VRAM. We can't resize LM Studio's
-loaded KV-cache remotely, but we CAN shrink the `max_tokens` we *request* when
-free VRAM is low — fewer generated tokens means a smaller peak KV cache, which is
-the usual trigger for an OOM mid-generation. `suggest_max_tokens()` does that.
+Why it matters here: a loaded model already fills your VRAM. We can't resize
+LM Studio's loaded KV-cache remotely, but we CAN shrink the `max_tokens` we
+*request* when free VRAM is low — fewer generated tokens means a smaller peak
+KV cache, which is the usual trigger for an OOM mid-generation.
+`suggest_max_tokens()` does that.
 """
 
 from __future__ import annotations
 
+import glob
 import logging
+import os
 
 logger = logging.getLogger(__name__)
+
+# Friendlier GPU names keyed by the DRM driver in the device's uevent.
+_DRM_DRIVER_NAMES = {
+    "amdgpu": "AMD GPU",
+    "radeon": "AMD GPU",
+    "i915": "Intel GPU",
+    "xe": "Intel GPU",
+}
 
 
 def _mb(byts: int) -> int:
@@ -26,7 +40,10 @@ class HardwareMonitor:
         self._nvml_ok = False
         self._handle = None
         self._gpu_name = ""
+        self._drm_dev: str | None = None
         self._init_nvml()
+        if not self._nvml_ok:
+            self._init_drm_sysfs()
         try:
             import psutil  # noqa: F401
             self._psutil_ok = True
@@ -46,6 +63,41 @@ class HardwareMonitor:
             logger.info("NVML unavailable (non-NVIDIA or driver missing): %s", exc)
             self._nvml_ok = False
 
+    def _init_drm_sysfs(self) -> None:
+        """Find an AMD/Intel GPU with DRM VRAM counters (Linux only).
+
+        Picks the card with the largest VRAM total (the discrete GPU on hybrid
+        laptops). Integrated GPUs share system RAM and expose no counters, so
+        they're correctly skipped — the RAM-tier fallback covers them.
+        """
+        try:
+            best: tuple[str, int] | None = None
+            for path in glob.glob("/sys/class/drm/card*/device/mem_info_vram_total"):
+                try:
+                    total = int(open(path).read().strip())
+                except (OSError, ValueError):
+                    continue
+                if total > 0 and (best is None or total > best[1]):
+                    best = (os.path.dirname(path), total)
+            if best is None:
+                return
+            self._drm_dev = best[0]
+            driver = ""
+            try:
+                with open(os.path.join(best[0], "uevent")) as f:
+                    for ln in f:
+                        if ln.startswith("DRIVER="):
+                            driver = ln.strip().split("=", 1)[1]
+                            break
+            except OSError:
+                pass
+            self._gpu_name = _DRM_DRIVER_NAMES.get(driver, "GPU") + (f" ({driver})" if driver else " (DRM)")
+            logger.info("VRAM via DRM sysfs: %s at %s (%d MB)",
+                        self._gpu_name, self._drm_dev, best[1] // (1024 * 1024))
+        except Exception as exc:  # noqa: BLE001 — never let a probe break startup
+            logger.info("DRM sysfs VRAM probe unavailable: %s", exc)
+            self._drm_dev = None
+
     def snapshot(self) -> dict:
         snap: dict = {
             "gpu_name": self._gpu_name,
@@ -62,6 +114,20 @@ class HardwareMonitor:
                 snap["vram_pct"] = round(mem.used / mem.total * 100, 1) if mem.total else None
             except Exception:  # noqa: BLE001
                 self._nvml_ok = False
+        elif self._drm_dev:
+            # AMD/Intel: live byte counters from the DRM sysfs node.
+            try:
+                with open(os.path.join(self._drm_dev, "mem_info_vram_total")) as f:
+                    total = int(f.read().strip())
+                with open(os.path.join(self._drm_dev, "mem_info_vram_used")) as f:
+                    used = int(f.read().strip())
+                if total > 0:
+                    snap["vram_used_mb"] = _mb(used)
+                    snap["vram_total_mb"] = _mb(total)
+                    snap["vram_free_mb"] = _mb(max(0, total - used))
+                    snap["vram_pct"] = round(used / total * 100, 1)
+            except (OSError, ValueError):
+                pass  # transient read failure — this snapshot just has no VRAM
         if self._psutil_ok:
             try:
                 import psutil
