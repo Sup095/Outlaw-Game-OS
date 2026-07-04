@@ -217,10 +217,28 @@ window.OUTLAW_HELP = [
     },
     {
         id: 'trouble-wifi', cat: 'Troubleshooting', title: 'No internet / Wi-Fi',
-        keywords: 'wifi internet network offline connect nmcli download fails',
+        keywords: 'wifi internet network offline connect nmcli download fails forget saved password changed',
         body: '<p>Go to <b>Settings → Network &amp; Wi-Fi</b>, scan, pick your network and enter '
             + 'the password. A wired cable works automatically. Most “install failed” or '
-            + '“can’t download” errors are simply no connection — check here first.</p>',
+            + '“can’t download” errors are simply no connection — check here first. If a network\'s '
+            + 'password <b>changed</b> and it keeps failing, hit <b>Forget</b> on its row in the scan '
+            + 'list (deletes the stale saved profile), then connect fresh with the new password.</p>',
+    },
+    {
+        id: 'screen-recording', cat: 'The desktop', title: 'Screen recording',
+        keywords: 'screen record recording video capture clip movie ffmpeg rec videos',
+        body: '<p>Record the screen from the topbar <b>☰ quick settings → 🎥</b> (or the command '
+            + 'palette). A red <b>⏺ REC</b> pill appears in the top bar while recording — click it to '
+            + 'stop. Clips save to <b>~/Videos</b> as MP4 (video-only). Needs the <b>ffmpeg</b> package '
+            + '— if it\'s missing, install it from <b>Apps</b> (search “ffmpeg”). The OS won\'t '
+            + 'auto-sleep while a recording is running.</p>',
+    },
+    {
+        id: 'sound-output', cat: 'The desktop', title: 'Volume & sound output device',
+        keywords: 'volume sound audio output device speakers headphones headset hdmi sink mute',
+        body: '<p>Click the <b>🔊 speaker</b> in the top bar for the volume slider and mute. When more '
+            + 'than one output exists (speakers, a headset, HDMI audio), an <b>Output device</b> list '
+            + 'appears underneath — click one to switch the default output instantly.</p>',
     },
     {
         id: 'trouble-ai', cat: 'Troubleshooting', title: 'LM Studio won’t connect',

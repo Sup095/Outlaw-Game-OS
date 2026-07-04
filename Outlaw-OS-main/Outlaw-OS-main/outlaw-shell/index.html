@@ -69,6 +69,7 @@
         <span class="stat pill" id="stat-cpu">CPU --%</span>
         <span class="stat pill" id="stat-ram">RAM --</span>
         <span class="stat pill" id="stat-ai">AI OFF</span>
+        <button class="stat pill" id="rec-pill" title="Recording the screen — click to stop" aria-label="Stop screen recording" hidden style="padding:4px 8px;">⏺ REC</button>
         <button class="stat pill" id="quick-toggle" title="Quick settings" aria-label="Quick settings" style="padding:4px 8px;">☰</button>
         <button class="stat pill" id="stat-volume" title="Volume" hidden style="padding:4px 8px;">🔊</button>
         <span class="stat pill" id="stat-battery" title="Battery" hidden></span>
@@ -1007,6 +1008,8 @@
         <input type="range" id="vol-slider" min="0" max="100" value="50" aria-label="Volume" style="flex:1;min-width:130px;">
         <span id="vol-pct" class="mono" style="min-width:38px;text-align:right;">50%</span>
     </div>
+    <!-- Output device picker — only shown when there's more than one sink. -->
+    <div id="vol-sinks" hidden></div>
 </div>
 
 <!-- QOL batch — quick-settings popover (topbar ☰): the everyday toggles in one place. -->
@@ -1024,6 +1027,7 @@
     </div>
     <div class="row" style="gap:6px;margin-top:10px;flex-wrap:wrap;">
         <button id="qk-screenshot" title="Take a screenshot (PrtSc)" aria-label="Take a screenshot" style="padding:7px 10px;">📷</button>
+        <button id="qk-record" title="Record the screen (saves to Videos)" aria-label="Record the screen" style="padding:7px 10px;">🎥</button>
         <button id="qk-lock" title="Lock the screen" aria-label="Lock the screen" style="padding:7px 10px;">🔒</button>
         <button id="qk-sleep" title="Put the computer to sleep" aria-label="Sleep" style="padding:7px 10px;">💤</button>
         <span class="spacer"></span>

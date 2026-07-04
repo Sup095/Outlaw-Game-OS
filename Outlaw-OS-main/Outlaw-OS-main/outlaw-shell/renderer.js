@@ -272,6 +272,7 @@ function _palBuildStatic() {
     const actions = [
         ['📷 Take a screenshot', 'screenshot capture print screen picture', () => takeScreenshot('full')],
         ['📷 Screenshot a region', 'screenshot region area select crop', () => takeScreenshot('region')],
+        ['🎥 Start / stop screen recording', 'record screen video capture movie clip', () => toggleRecording()],
         ['🔒 Lock the screen', 'lock secure away pin', () => lockNow()],
         ['💤 Sleep', 'sleep suspend standby power', () => { api.power.suspend().then((r) => { if (r && r.ok === false) toast('Sleep failed: ' + (r.error || 'try again')); }).catch(() => {}); }],
         ['🌙 Toggle night light', 'night light blue warm color', async () => { try { const s = await api.nightlight.status(); const r = await api.nightlight.set({ on: !(s && s.on) }); toast(r && r.ok ? ('Night light ' + (r.on ? 'on.' : 'off.')) : ((r && r.error) || 'Couldn\'t change night light.')); } catch {} }],
@@ -1069,7 +1070,22 @@ async function scanWifi() {
             row.innerHTML =
                 `<span class="wifi-name">${n.inUse ? '✔ ' : ''}${_escapeHtml(n.ssid)}</span>` +
                 `<span class="wifi-meta">${n.security ? '🔒' : 'open'} ${bars}</span>` +
+                // Saved (but not connected) networks can be forgotten — fixes the
+                // "stale profile after a password change" trap without a terminal.
+                (n.saved && !n.inUse
+                    ? `<button class="wifi-forget" title="Forget this network (delete the saved profile)" aria-label="Forget ${_escapeHtml(n.ssid)}">Forget</button>`
+                    : '') +
                 `<button class="wifi-join" ${n.inUse ? 'disabled' : ''}>${n.inUse ? 'Connected' : 'Connect'}</button>`;
+            const forgetBtn = row.querySelector('.wifi-forget');
+            if (forgetBtn) forgetBtn.addEventListener('click', async () => {
+                forgetBtn.disabled = true;
+                try {
+                    const fr = await api.net.wifiForget(n.ssid);
+                    toast(fr && fr.ok ? `Forgot ${n.ssid}.` : ((fr && fr.error) || 'Couldn\'t forget that network.'));
+                    if (fr && fr.ok) scanWifi();
+                    else forgetBtn.disabled = false;
+                } catch { forgetBtn.disabled = false; }
+            });
             const joinBtn = row.querySelector('.wifi-join');
             joinBtn.addEventListener('click', () => {
                 // Collapse any other open password form first.
@@ -1629,6 +1645,22 @@ async function refreshVolumeUi() {
         const pct = $('#vol-pct'); if (pct) pct.textContent = a.volume + '%';
         const mb = $('#vol-mute'); if (mb) mb.textContent = a.muted ? '🔇' : '🔊';
     } catch { btn.hidden = true; }
+    // QOL — output device picker (headset / HDMI / speakers). Shown only when
+    // there's actually a choice (>1 sink); simple buttons, no dropdown quirks.
+    try {
+        const s = await api.audio.sinks();
+        const box = $('#vol-sinks');
+        if (box) {
+            if (s && s.ok && Array.isArray(s.sinks) && s.sinks.length > 1) {
+                box.hidden = false;
+                box.innerHTML = '<div class="dim" style="font-size:11px;margin:8px 0 4px;">Output device</div>'
+                    + s.sinks.map((k) =>
+                        `<button class="vol-sink-btn${k.current ? ' on' : ''}" data-sink="${_escapeHtml(k.name)}"`
+                        + ` title="${_escapeHtml(k.label)}" aria-pressed="${k.current}">`
+                        + `${k.current ? '● ' : '○ '}${_escapeHtml(k.label)}</button>`).join('');
+            } else { box.hidden = true; box.innerHTML = ''; }
+        }
+    } catch { const box = $('#vol-sinks'); if (box) { box.hidden = true; } }
 }
 function toggleVolumePopover() {
     const pop = $('#volume-popover'); if (!pop) return;
@@ -1646,6 +1678,31 @@ async function takeScreenshot(mode) {
     } catch (e) { toast('Screenshot failed: ' + e.message); }
 }
 window.takeScreenshot = takeScreenshot;   // so System Core (or the AI) can trigger it
+
+// QOL — screen recording (ffmpeg, video-only, saves to ~/Videos). One at a
+// time; a red ⏺ REC pill in the topbar shows it's live and stops it on click.
+function _setRecPill(on) {
+    const p = document.querySelector('#rec-pill');
+    if (p) p.hidden = !on;
+}
+async function toggleRecording() {
+    try {
+        const st = await api.record.status();
+        if (!st || !st.supported) { toast('Screen recording runs on Outlaw OS.'); return; }
+        if (st.recording) {
+            const r = await api.record.stop();
+            _setRecPill(false);
+            toast(r && r.ok
+                ? '🎥 Saved to Videos: ' + (r.path || '').replace(/^.*\//, '') + (r.sizeMb ? ` (${r.sizeMb} MB)` : '')
+                : ((r && r.error) || 'Couldn\'t stop the recording.'));
+        } else {
+            if (!st.haveFfmpeg) { toast('Screen recording needs ffmpeg — install it from Apps (search "ffmpeg").'); return; }
+            const r = await api.record.start();
+            if (r && r.ok) { _setRecPill(true); toast('⏺ Recording the screen — click the red REC pill to stop.'); }
+            else toast((r && r.error) || 'Couldn\'t start recording.');
+        }
+    } catch (e) { toast('Recording error: ' + ((e && e.message) || e)); }
+}
 
 function startStats() {
     const tick = async () => {
@@ -3653,6 +3710,19 @@ function wire() {
         try { await api.audio.set(v); } catch {}
     }); }
     { const mb = $('#vol-mute'); if (mb) mb.addEventListener('click', async () => { try { await api.audio.toggleMute(); } catch {} refreshVolumeUi(); }); }
+    // QOL — output-device buttons in the volume popover (delegated once).
+    { const vs = $('#vol-sinks'); if (vs) vs.addEventListener('click', async (e) => {
+        const b = e.target.closest('[data-sink]'); if (!b) return;
+        b.disabled = true;
+        try {
+            const r = await api.audio.setSink(b.dataset.sink);
+            if (!r || !r.ok) toast((r && r.error) || 'Couldn\'t switch the output device.');
+        } catch {}
+        refreshVolumeUi();
+    }); }
+    // QOL — screen recording: quick-settings button + the topbar REC pill.
+    { const b = $('#qk-record'); if (b) b.addEventListener('click', () => { closeQuickPopover(); toggleRecording(); }); }
+    { const p = $('#rec-pill'); if (p) p.addEventListener('click', toggleRecording); }
     document.addEventListener('click', (e) => {
         const pop = $('#volume-popover');
         if (!pop || pop.hidden) return;

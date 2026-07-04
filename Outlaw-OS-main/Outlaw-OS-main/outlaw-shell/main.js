@@ -1854,6 +1854,43 @@ function registerIpc() {
         return { ok: r.code === 0 || r.code === undefined };
     });
 
+    // QOL — sound OUTPUT device picker. pactl ships with libpulse (a
+    // pipewire-pulse dependency), and its JSON output keeps parsing robust.
+    // Gracefully returns an empty list when pactl is absent (ALSA-only setups),
+    // which hides the picker in the UI.
+    ipcMain.handle('audio:sinks', async () => {
+        if (!IS_LINUX) return { ok: false, sinks: [] };
+        const r = await runShell('pactl -f json list sinks 2>/dev/null', { timeout: 4000 });
+        const def = await runShell('pactl get-default-sink 2>/dev/null', { timeout: 3000 });
+        try {
+            const arr = JSON.parse(r.stdout || '[]');
+            if (!Array.isArray(arr)) return { ok: false, sinks: [] };
+            const cur = (def.stdout || '').trim();
+            const sinks = arr.map((s) => ({
+                name: String((s && s.name) || ''),
+                label: String((s && (s.description || s.name)) || '').slice(0, 80),
+                current: !!(s && s.name === cur),
+            })).filter((s) => s.name);
+            return { ok: true, sinks };
+        } catch { return { ok: false, sinks: [] }; }
+    });
+    ipcMain.handle('audio:set-sink', async (_e, name) => {
+        if (!IS_LINUX) return { ok: false };
+        const n = String(name || '');
+        if (!n || n.length > 200) return { ok: false, error: 'Bad device name.' };
+        // Validate against the real sink list, then set via execFile argv (no shell).
+        const r = await runShell('pactl -f json list sinks 2>/dev/null', { timeout: 4000 });
+        let names = [];
+        try { names = JSON.parse(r.stdout || '[]').map((s) => String((s && s.name) || '')); } catch {}
+        if (!names.includes(n)) return { ok: false, error: 'Unknown output device.' };
+        const set = await new Promise((resolve) => {
+            execFile('pactl', ['set-default-sink', n], { timeout: 5000 },
+                (err, so, se) => resolve({ err, out: (se || so || '').trim() }));
+        });
+        if (set.err) return { ok: false, error: set.out.slice(0, 200) || 'Could not switch the output device.' };
+        return { ok: true };
+    });
+
     // Round-2 QOL — screenshots via scrot (already bundled for CodeMaker OCR).
     // mode 'region' = interactive drag-select; otherwise full screen with a 1s
     // delay so any open menu/popover can close. Saves to ~/Pictures.
@@ -1870,6 +1907,62 @@ function registerIpc() {
         const fname = ((r.stdout || '').trim().split('\n').filter(Boolean).pop() || '').replace(/^.*\//, '');
         if ((r.code === 0 || r.code === undefined) && fname) return { ok: true, path: path.join(dir, fname) };
         return { ok: false, error: region ? 'Screenshot cancelled.' : (r.stderr || 'Capture failed.').slice(-160) };
+    });
+
+    // QOL — screen RECORDING (ffmpeg x11grab → ~/Videos, video-only, H.264).
+    // One recording at a time. The child is added to trackedProcs, which gives
+    // it emergency-stop (Ctrl+Alt+K) coverage for free AND makes the auto-sleep
+    // idle watch treat an active recording as "busy" (it skips suspending while
+    // any tracked job runs). ffmpeg is NOT bundled — the start handler reports
+    // a friendly "install it from Apps" error when absent.
+    let recProc = null;
+    let recPath = '';
+    ipcMain.handle('record:status', async () => {
+        if (!IS_LINUX) return { supported: false, recording: false, haveFfmpeg: false };
+        const have = await runShell('command -v ffmpeg >/dev/null 2>&1 && echo yes', { timeout: 3000 });
+        return { supported: true, haveFfmpeg: /yes/.test(have.stdout || ''), recording: !!recProc, path: recPath };
+    });
+    ipcMain.handle('record:start', async () => {
+        if (!IS_LINUX) return { ok: false, error: 'Screen recording runs on Outlaw OS.' };
+        if (recProc) return { ok: false, error: 'Already recording — stop the current recording first.' };
+        const have = await runShell('command -v ffmpeg >/dev/null 2>&1 && echo yes', { timeout: 3000 });
+        if (!/yes/.test(have.stdout || '')) {
+            return { ok: false, error: 'Screen recording needs the ffmpeg package — install it from Apps (search "ffmpeg").' };
+        }
+        // x11grab defaults to 640x480 without an explicit size — read the real one.
+        const dim = await runShell("xdpyinfo 2>/dev/null | awk '/dimensions:/{print $2; exit}'", { timeout: 3000 });
+        const size = /^\d+x\d+$/.test((dim.stdout || '').trim()) ? (dim.stdout || '').trim() : '1920x1080';
+        const dir = path.join(os.homedir(), 'Videos');
+        try { fs.mkdirSync(dir, { recursive: true }); } catch {}
+        const stamp = new Date().toISOString().replace(/[:T]/g, '-').slice(0, 19);
+        const file = path.join(dir, `outlaw-rec-${stamp}.mp4`);
+        let child;
+        try {
+            child = spawn('ffmpeg', ['-hide_banner', '-loglevel', 'error',
+                '-f', 'x11grab', '-framerate', '30', '-video_size', size,
+                '-i', process.env.DISPLAY || ':0',
+                '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '28', '-pix_fmt', 'yuv420p',
+                file]);
+        } catch (e) { return { ok: false, error: 'Could not start ffmpeg: ' + e.message }; }
+        recProc = child;
+        recPath = file;
+        trackedProcs.add(child);
+        const drop = () => { trackedProcs.delete(child); if (recProc === child) recProc = null; };
+        child.on('error', drop);
+        child.on('close', drop);
+        return { ok: true, path: file };
+    });
+    ipcMain.handle('record:stop', async () => {
+        const p = recProc;
+        if (!p) return { ok: false, error: 'Not recording.' };
+        // SIGINT lets ffmpeg write the MP4 trailer so the file is playable;
+        // the close handler (above) clears recProc. 6s grace, then report.
+        const done = new Promise((resolve) => { p.once('close', resolve); setTimeout(resolve, 6000); });
+        try { p.kill('SIGINT'); } catch {}
+        await done;
+        let sizeMb = 0;
+        try { sizeMb = Math.round(fs.statSync(recPath).size / (1024 * 1024) * 10) / 10; } catch {}
+        return { ok: true, path: recPath, sizeMb };
     });
 
     ipcMain.handle('system:net', () => {
@@ -2325,7 +2418,35 @@ function registerIpc() {
             });
         }
         networks.sort((a, b) => (b.inUse - a.inUse) || (b.signal - a.signal));
+        // Mark networks that have a saved profile so the UI can offer "Forget".
+        try {
+            const conns = await runShell('nmcli -t -f NAME connection show 2>/dev/null', { timeout: 5000 });
+            const savedSet = new Set((conns.stdout || '').split('\n').map((l) => splitTerse(l)[0]).filter(Boolean));
+            networks.forEach((n) => { n.saved = savedSet.has(n.ssid); });
+        } catch { /* no flag — UI just doesn't show Forget */ }
         return { ok: true, networks };
+    });
+
+    // QOL — forget a saved Wi-Fi network (deletes its NetworkManager profile,
+    // e.g. after a password change left a stale one). Validated: the name must
+    // match an EXISTING saved profile, and both calls use execFile argv — an
+    // SSID with spaces/quotes can't inject anything.
+    ipcMain.handle('net:wifi-forget', async (_e, ssid) => {
+        if (!IS_LINUX) return { ok: false, error: 'Wi-Fi runs on Outlaw OS.' };
+        const name = String(ssid || '');
+        if (!name || name.length > 64) return { ok: false, error: 'Bad network name.' };
+        const list = await new Promise((resolve) => {
+            execFile('nmcli', ['-t', '-f', 'NAME', 'connection', 'show'], { timeout: 8000 },
+                (err, stdout) => resolve(err ? '' : (stdout || '')));
+        });
+        const saved = list.split('\n').map((l) => splitTerse(l)[0]).filter(Boolean);
+        if (!saved.includes(name)) return { ok: false, error: 'No saved profile for that network.' };
+        const r = await new Promise((resolve) => {
+            execFile('nmcli', ['connection', 'delete', 'id', name], { timeout: 10000 },
+                (err, stdout, stderr) => resolve({ err, out: (stderr || stdout || '').trim() }));
+        });
+        if (r.err) return { ok: false, error: r.out.slice(0, 200) || 'Could not forget the network.' };
+        return { ok: true };
     });
 
     ipcMain.handle('net:wifi-connect', async (_e, payload) => {

@@ -92,9 +92,17 @@ contextBridge.exposeInMainWorld('outlaw', {
         get: () => ipcRenderer.invoke('audio:get'),
         set: (pct) => ipcRenderer.invoke('audio:set', pct),
         toggleMute: () => ipcRenderer.invoke('audio:toggle-mute'),
+        sinks: () => ipcRenderer.invoke('audio:sinks'),
+        setSink: (name) => ipcRenderer.invoke('audio:set-sink', name),
     },
     // Round-2 QOL — screenshots (scrot). mode 'region' | 'full'.
     screenshot: (mode) => ipcRenderer.invoke('screenshot:capture', mode),
+    // QOL — screen recording (ffmpeg x11grab → ~/Videos, video-only).
+    record: {
+        status: () => ipcRenderer.invoke('record:status'),
+        start: () => ipcRenderer.invoke('record:start'),
+        stop: () => ipcRenderer.invoke('record:stop'),
+    },
 
     // --- Local AI assistant -------------------------------------------------
     ai: {
@@ -258,6 +266,8 @@ contextBridge.exposeInMainWorld('outlaw', {
         wifiList: () => ipcRenderer.invoke('net:wifi-list'),
         // Connect to an SSID; password optional for open networks.
         wifiConnect: (ssid, password) => ipcRenderer.invoke('net:wifi-connect', { ssid, password }),
+        // Forget a saved network's profile (e.g. after a password change).
+        wifiForget: (ssid) => ipcRenderer.invoke('net:wifi-forget', ssid),
         // Airplane mode — read + toggle all radios off/on.
         airplaneStatus: () => ipcRenderer.invoke('net:airplane-status'),
         setAirplane: (on) => ipcRenderer.invoke('net:airplane-set', on),

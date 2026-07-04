@@ -1274,6 +1274,22 @@ table.proc td { padding: 5px 8px; border-bottom: 1px solid rgba(20,61,13,0.4); }
 }
 #volume-popover[hidden] { display: none; }
 #stat-volume { cursor: pointer; }
+/* QOL — output-device buttons inside the volume popover. */
+#vol-sinks[hidden] { display: none; }
+#vol-sinks .vol-sink-btn {
+    display: block; width: 100%; text-align: left; margin-top: 4px;
+    padding: 6px 9px; font-size: 12px; text-transform: none; letter-spacing: 0;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+#vol-sinks .vol-sink-btn.on { border-color: var(--term); color: var(--term); }
+/* QOL — screen-recording indicator (topbar). Blinks gently; reduce-motion
+   stills it via the global animation kill. */
+#rec-pill { color: var(--danger); border-color: var(--danger); cursor: pointer; animation: rec-blink 1.6s steps(2) infinite; }
+#rec-pill[hidden] { display: none; }
+@keyframes rec-blink { 50% { opacity: .55; } }
+/* QOL — "Forget" affordance on saved Wi-Fi rows (quiet until hovered). */
+.wifi-forget { padding: 6px 10px; font-size: 11px; border-color: var(--line); color: var(--term-dim); }
+.wifi-forget:hover { border-color: var(--danger); color: var(--danger); background: transparent; }
 
 /* QOL batch — quick-settings + calendar popovers (same anchor as the volume one). */
 #quick-popover, #cal-popover {
