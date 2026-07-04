@@ -603,6 +603,9 @@ async function runBoot() {
 }
 
 function enterOS() {
+    // Idempotent: the boot screen has two entry buttons and #boot-noai is async,
+    // so a fast second click could otherwise start a duplicate stats poller.
+    if ($('#app').classList.contains('ready')) return;
     $('#boot').style.display = 'none';
     $('#app').classList.add('ready');
     startStats();
@@ -1644,6 +1647,7 @@ function startStats() {
         } catch {}
     };
     tick();
+    if (statsTimer) clearInterval(statsTimer);   // never stack pollers (defensive)
     statsTimer = setInterval(tick, 2000);
 }
 
@@ -2037,9 +2041,18 @@ async function sendAI() {
     const log = $('#ai-log');
     log.appendChild(thinking);
     log.scrollTop = log.scrollHeight;
-    const res = await api.ai.ask(text, { history, summary, online: isOnline() });
+    let res;
+    try {
+        res = await api.ai.ask(text, { history, summary, online: isOnline() });
+    } catch (e) {
+        // The main handler rejected (backend error / handler threw). Without this
+        // the animated typing dots would stay forever and the chat looks stuck.
+        thinking.remove();
+        addMsg('sys', 'The assistant hit an error: ' + ((e && e.message) || e));
+        return;
+    }
     thinking.remove();
-    if (res.error) { addMsg('sys', res.error); return; }
+    if (!res || res.error) { addMsg('sys', (res && res.error) || 'No response from the assistant.'); return; }
     if (res.needsConfirm) {
         addMsg('ai', res.text);
         recordAiTurn('assistant', res.text);
@@ -2068,9 +2081,11 @@ async function sendAI() {
             cmd: res.action.arg,
         });
         if (!ok) { addMsg('sys', 'Cancelled.'); return; }
-        const r = await api.ai.confirmAction(res.action);
-        const t = r.text || '(done)';
-        addMsg('ai', t); recordAiTurn('assistant', t);
+        try {
+            const r = await api.ai.confirmAction(res.action);
+            const t = (r && r.text) || '(done)';
+            addMsg('ai', t); recordAiTurn('assistant', t);
+        } catch (e) { addMsg('sys', 'Command failed: ' + ((e && e.message) || e)); }
         return;
     }
     // QoL — the assistant changed a setting for the user; apply it through the
@@ -2474,6 +2489,12 @@ function enhanceSelects(root) {
         });
         sel.after(wrap);
         wrap.append(btn, list);
+        // Re-enhancing the SAME <select> (rebuildAiChatSelect/rebuildRefSelect drop
+        // the wrapper + clear data-enhanced, then re-run this) would otherwise stack
+        // a new 'change'->sync listener each time. Drop the prior one first so each
+        // element carries exactly one, no matter how many times it's rebuilt.
+        if (sel._cselectSync) sel.removeEventListener('change', sel._cselectSync);
+        sel._cselectSync = sync;
         sel.addEventListener('change', sync);  // keep label in sync with code changes
         sync();
     });

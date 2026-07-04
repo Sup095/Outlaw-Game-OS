@@ -232,6 +232,7 @@ class _AgentWorker(QThread):
         question_gate=None,
         resume_state: dict | None = None,
         history_max_messages: int = 12,
+        conv_summary_fn=None,
     ):
         super().__init__()
         self.user_task = user_task
@@ -242,6 +243,10 @@ class _AgentWorker(QThread):
         self.max_tool_iterations = max_tool_iterations
         self.question_gate = question_gate
         self.resume_state = resume_state
+        # Deferred conversation-compaction summary. It makes a BLOCKING LM Studio
+        # call, so it runs here in the worker thread (see run()) rather than on the
+        # GUI thread — a slow server would otherwise freeze the whole window.
+        self._conv_summary_fn = conv_summary_fn
         # The VRAM saver sets this — tighter slices when memory is tight.
         self.history_max_messages = history_max_messages
         self._reviewed_plan = ""
@@ -254,6 +259,18 @@ class _AgentWorker(QThread):
 
     def run(self) -> None:
         try:
+            # Compact the older conversation OFF the GUI thread (blocking network
+            # call). Fail-safe: any error just skips the summary, exactly as the
+            # windowed-only path did before. Runs before the agent loop so the
+            # gist is folded into the workspace context the reasoner receives.
+            if self._conv_summary_fn is not None:
+                try:
+                    cs = self._conv_summary_fn() or ""
+                except Exception:  # noqa: BLE001
+                    cs = ""
+                if cs:
+                    self.workspace_summary = f"{self.workspace_summary}\n\n{cs}"
+                    self.log.emit("info", "Compacted earlier conversation into context.")
             self._run_agent_loop()
         except Exception as exc:  # noqa: BLE001
             logger.exception("Agent worker crashed")
@@ -1052,11 +1069,12 @@ class Orchestrator(QObject):
 
         # Phase 14c — fold the older turns into a compacted summary so a long
         # conversation keeps its gist (only the last history_max_messages turns
-        # are sent verbatim). Cached + fail-safe.
-        conv_summary = self._conversation_summary(budget.history_max_messages)
-        if conv_summary:
-            workspace_summary = f"{workspace_summary}\n\n{conv_summary}"
-            self.log.emit("info", "Compacted earlier conversation into context.")
+        # are sent verbatim). Deferred into the worker thread: _conversation_summary
+        # makes a BLOCKING LM Studio call, so computing it here (on the GUI thread)
+        # could freeze the window for up to the request timeout. The conversation
+        # state can't change while busy, so computing it a beat later is equivalent.
+        _hist_max = budget.history_max_messages
+        conv_summary_fn = lambda: self._conversation_summary(_hist_max)  # noqa: E731
 
         worker = _AgentWorker(
             user_task=task,
@@ -1068,6 +1086,7 @@ class Orchestrator(QObject):
             question_gate=self.questions,
             resume_state=resume_state,
             history_max_messages=budget.history_max_messages,
+            conv_summary_fn=conv_summary_fn,
         )
         worker.stage_chunk.connect(self.stage_chunk)
         worker.stage_done.connect(self.stage_done)

@@ -32,6 +32,14 @@ from .styles import COLORS
 
 HELPER = "/usr/local/bin/outlaw-pkg-install"
 
+# Keep-alive for install workers whose dialog was closed mid-run. The dialog
+# deliberately doesn't kill pacman (interrupting a transaction is unsafe), so the
+# QThread keeps running after the dialog is gone. Without a strong reference here,
+# Python would GC the running QThread and Qt aborts the whole app with
+# "QThread: Destroyed while thread is still running". Workers remove themselves
+# on `done`.
+_ALIVE_WORKERS: set = set()
+
 
 class _InstallWorker(QThread):
     """Runs the privileged installer, streaming its output line by line."""
@@ -143,9 +151,18 @@ class _InstallDialog(QDialog):
         if w is not None and w.isRunning():
             try:
                 w.line.disconnect()
+            except (TypeError, RuntimeError):
+                pass
+            # Hand the still-running thread to a module-level keep-alive so Python
+            # can't GC it (which would abort the app). It drops itself once the
+            # pacman process exits. Reconnect `done` to the cleanup only.
+            try:
                 w.done.disconnect()
             except (TypeError, RuntimeError):
                 pass
+            _ALIVE_WORKERS.add(w)
+            w.done.connect(lambda _code, _w=w: _ALIVE_WORKERS.discard(_w))
+            w.finished.connect(lambda _w=w: _ALIVE_WORKERS.discard(_w))
         super().closeEvent(e)
 
 

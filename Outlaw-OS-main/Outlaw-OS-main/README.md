@@ -77,17 +77,22 @@ optional **gold-on-gunmetal** — switchable anytime in *Settings → Appearance
   - Strict Content-Security-Policy, no `eval`, external links open in the system
     browser, package signatures required (no `TrustAll`).
   - Installed systems use a real password + `wheel`/sudo (no passwordless root).
-- **Real local AI assistant (off by default)** — routes prompts to a local
-  [LM Studio](https://lmstudio.ai) server (`127.0.0.1:1234`). You pick the
-  model in LM Studio (anything from a 0.5B tiny chat model up to whatever your
-  VRAM can hold) and Outlaw uses it for OS-level tasks: open apps, search the
-  web, list/open files, answer questions. The shell ships a thin
-  `outlaw-lm-studio` launcher (in Settings → AI → *Open LM Studio*) that
-  starts LM Studio if it's installed, or opens its download page if not.
-  Nothing leaves the machine. Toggle the AI any time in Settings; OS boots
-  **without AI** by default so it runs on low-VRAM machines.
+- **Real local AI assistant (on by default, three engines)** — the assistant
+  uses it for OS-level tasks: open apps, search the web, list/open files, change
+  settings, answer questions. Pick the engine in **Settings → AI & VRAM**:
+  - **Built-in** (default) — a small bundled model run through Ollama, pulled
+    once on first boot. Zero setup; light enough for low-VRAM machines.
+  - **Ollama** — point at your own Ollama server (`127.0.0.1:11434`) and `ollama
+    pull` any model.
+  - **LM Studio** — point at [LM Studio](https://lmstudio.ai) (`127.0.0.1:1234`);
+    you load the model there. The shell ships an `outlaw-lm-studio` launcher that
+    starts it if installed, or opens its download page if not.
+
+  Nothing leaves the machine on any engine. The AI is **on by default** with the
+  lightweight built-in model; turn it off at boot (*Start without AI*) or in
+  Settings on very low-spec machines.
 - **Minimal default install** — the OS only pre-bundles what's needed to boot
-  securely, run Steam, edit Godot projects, and talk to LM Studio. Everything
+  securely, run Steam, edit Godot projects, and run the built-in AI. Everything
   else lives in the in-shell **Apps** panel and installs on demand (`pkexec
   pacman -S`, password-prompted). This keeps the ISO small and leaves more
   VRAM/RAM free for the AI.
@@ -123,9 +128,9 @@ The hard part is done — and as of **v2.0.19** it boots cleanly on BIOS **and**
 UEFI, on real hardware **and** in VMs:
 
 - ✅ Hardened Electron shell · two-session **greeter** (Dev / Desktop) · self-healing boot watchdog + safe mode
-- ✅ **Outlaw CodeMaker** AI agent (LM Studio) · VRAM saver (Full / Lean / Minimal) · context cache · past-problem recall
+- ✅ **Outlaw CodeMaker** AI agent (built-in / Ollama / LM Studio) · VRAM saver (Full / Lean / Minimal) · context cache · past-problem recall
 - ✅ Safe **optional installer** + clean uninstall · one-press **hotswap** · performance mode
-- ✅ **System Core** centerpiece (telemetry · diagnostics · voice) · **Tune-This-PC** stress test + auto-settings
+- ✅ **System Core** centerpiece (telemetry · diagnostics · voice) · AI-driven per-machine setting changes
 - ✅ **Self-updater** + stable / beta channels · community stability voting · CI package preflight
 
 ### v2.1 — Completeness & Polish
@@ -133,14 +138,14 @@ UEFI, on real hardware **and** in VMs:
 | | Phase | What you get |
 |:--:|:--|:--|
 | ✅ | **1 · Identity** | Optional **Gold Gunmetal** theme (the sci-fi-fortress look, matching CodeMaker), switchable anytime in Settings — desktop **and** dev. New source-available **license**. |
-| 🚧 | **2 · Your apps, found** | Anything you install — even something downloaded from a browser — shows up in the **Apps** page automatically, one click to launch. |
-| 🔭 | **3 · Task Manager** | A Windows-style task manager (**End task** / **End process tree**) with live **CPU · RAM · GPU + VRAM** readouts, in the Outlaw look. |
-| 🔭 | **4 · Help + Quickstart** | A **skippable first-boot tour** showing where everything is, plus a searchable **Help database** that explains the whole OS and how to troubleshoot it. |
-| 🔭 | **5 · Reviewer that works** | One-click *"it worked / it broke"* reporting per version, so testing actually feeds back to the maintainer (and the stable channel). |
-| 🔭 | **6 · Boot splash + pre-flight diagnostics** | A cinematic ~2-second boot splash on every boot — a holographic green Outlaw sigil flickering with CRT scanlines (skippable) — then optionally scan your PC for the best settings before you even enter the OS. |
-| 🔭 | **7 · Session driver profiles** | Choose the driver / package stack per session — **dev-tuned** vs **gaming / desktop** — applied safely *after* boot, never touching the bootloader. |
+| ✅ | **2 · Your apps, found** | Anything you install — even something downloaded from a browser — shows up in the **Apps** page automatically, one click to launch. |
+| ✅ | **3 · Task Manager** | A Windows-style task manager (**End task** / **End process tree**) with live **CPU · RAM · GPU + VRAM** readouts, in the Outlaw look. |
+| ✅ | **4 · Help + Quickstart** | A **skippable first-boot tour** showing where everything is, plus a searchable **Help database** that explains the whole OS and how to troubleshoot it. |
+| ✅ | **5 · Reviewer that works** | One-click *"it worked / it broke"* reporting per version, so testing actually feeds back to the maintainer (and the stable channel). |
+| ✅ | **6 · Boot splash + pre-flight diagnostics** | A cinematic ~2-second boot splash on every boot — a holographic green Outlaw sigil flickering with CRT scanlines (skippable) — then optionally scan your PC for the best settings before you even enter the OS. |
+| ✅ | **7 · Session driver profiles** | Choose the driver / package stack per session — **dev-tuned** vs **gaming / desktop** — applied safely *after* boot, never touching the bootloader. |
 
-`▰▱▱▱▱▱▱` **Phase 1 of 7 shipped**
+`▰▰▰▰▰▰▰` **All 7 phases shipped** — now in the release-readiness / hardening stretch toward v2.1.0 (final testing + polish).
 
 > **Why does it say "2.0.x — Beta"?** The `2.0.x` is a deliberate nod to the
 > *original* Outlaw OS this one is built on (which was never finished). And
@@ -180,12 +185,12 @@ frees its partition. Your other OS and its data stay intact.
 |------|--------------|
 | **Dashboard** | System info + quick launchers |
 | **Files** | Browse/open files (read-only listing, safe open) |
-| **Task Monitor** | Live CPU/RAM + top processes |
+| **Task Manager** | Live CPU/RAM + top processes, with **End task** / **End process tree** |
 | **Terminal** | Full shell, but destructive commands need `CONFIRM` |
 | **Gaming** | Performance mode + Steam/Lutris launchers |
 | **Game Dev** | Godot launcher + tips; install Blender/GIMP/VS Code/etc. from Apps |
 | **Apps** | Curated on-demand installer (Game Dev tools, browsers, security, productivity) — runs `pkexec pacman -S` after a password prompt |
-| **AI Assistant** | Routes prompts to local LM Studio; can open apps, search, list files |
+| **AI Assistant** | Local AI (built-in / Ollama / LM Studio); can open apps, search, list/open files, change settings |
 | **Settings** | AI toggle, appearance (CRT/glow), updates, boot/hotswap |
 
 **Hotswap:** the `⇄ HOTSWAP` button in the top bar (or `outlaw-hotswap`).
@@ -201,7 +206,7 @@ frees its partition. Your other OS and its data stay intact.
 ├── outlaw-shell/                 # The desktop (Electron app) — single source of truth
 │   ├── main.js                   #   Secure main process: IPC, command guard, AI + updater orchestration
 │   ├── preload.js                #   contextBridge — the ONLY API the UI can touch
-│   ├── ai-agent.js               #   LM Studio client (OpenAI-compatible) + tool-call parsing
+│   ├── ai-agent.js               #   Local AI client (OpenAI-compatible: built-in/Ollama/LM Studio) + tool-call parsing
 │   ├── updater.js                #   GitHub Releases OTA updater (semver + SHA256)
 │   ├── renderer.js               #   UI logic (CSP-safe, no inline handlers)
 │   ├── index.html / styles.css   #   Markup + theme
@@ -237,7 +242,7 @@ frees its partition. Your other OS and its data stay intact.
                           ▼                      ▼                      ▼
                 ┌──────────────────┐  ┌──────────────────┐    drop to TTY (rare)
                 │ outlaw-codemaker │  │  outlaw-shell    │
-                │ (PyQt + LM Studio)│  │  (Electron)      │
+                │ (PyQt + local AI) │  │  (Electron)      │
                 │  /opt/outlaw-cm/ │  │ /usr/share/      │
                 └──────────────────┘  │  outlaw-os/      │
                                       └──────────────────┘
@@ -322,8 +327,7 @@ The shell self-updates from your own GitHub repo. Tag a release; users get a
 same pattern as Windows' UAC).
 
 **Setup (once):** in **Settings → Outlaw Shell Updates**, fill in your repo as
-`owner/repo` and leave *Background auto-check* on. Optionally fill the *Sponsor
-URL* in **Support Development**.
+`owner/repo` and leave *Background auto-check* on.
 
 **Releasing a new version:**
 1. Push your changes to GitHub.
@@ -348,19 +352,18 @@ version.
 
 ## Sponsor / donate button
 
-Two complementary things:
+The repo's **GitHub "Sponsor" button**: edit
+[`.github/FUNDING.yml`](.github/FUNDING.yml) — uncomment the lines for the
+platforms you actually use. Fastest options:
+- **Ko-fi** (`ko_fi: your-handle`) — sign up at <https://ko-fi.com>, 5 minutes,
+  no business setup.
+- **Buy Me a Coffee** (`buy_me_a_coffee: your-handle`) — same idea.
+- **GitHub Sponsors** (`github: [your-username]`) — apply at
+  <https://github.com/sponsors>; requires Stripe.
+- **PayPal.me** (under `custom:`) — works with any PayPal account.
 
-1. **GitHub's "Sponsor" button** on the repo: edit
-   [`.github/FUNDING.yml`](.github/FUNDING.yml) — uncomment the lines for the
-   platforms you actually use. Fastest options:
-   - **Ko-fi** (`ko_fi: your-handle`) — sign up at <https://ko-fi.com>, 5 minutes,
-     no business setup.
-   - **Buy Me a Coffee** (`buy_me_a_coffee: your-handle`) — same idea.
-   - **GitHub Sponsors** (`github: [your-username]`) — apply at
-     <https://github.com/sponsors>; requires Stripe.
-   - **PayPal.me** (under `custom:`) — works with any PayPal account.
-2. **In-shell button**: in Settings → Support Development, paste any URL into
-   *Sponsor URL*. The "Open Sponsor Page" button in Settings opens it.
+_(There is no in-shell donate/sponsor UI — that Settings panel was removed;
+funding lives only on the GitHub repo page.)_
 
 ---
 

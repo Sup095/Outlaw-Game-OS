@@ -607,8 +607,11 @@ class SteamPanel(QWidget):
 
         # Login (only meaningful when we have steamcmd and a username)
         if status.available and status.path and cfg.build_account:
-            # Run synchronously but with a 12s timeout — it's a single HTTP-ish handshake.
-            login = check_login(status.path, cfg.build_account, timeout=12)
+            # Runs synchronously on the UI thread, so cap the wait tightly: a stale
+            # steamcmd session or a network stall would otherwise freeze the whole
+            # window for the full timeout when the Steam tab is opened. 4s bounds
+            # that; a slow handshake just shows "couldn't verify" until the next open.
+            login = check_login(status.path, cfg.build_account, timeout=4)
             d = "ok" if login.logged_in else "warn"
             bits.append(
                 f'{dot(d)} login <span style="color:{COLORS["muted"]};">'

@@ -1,11 +1,14 @@
 // ============================================================================
-// Outlaw OS - Local AI agent (LM Studio backend)
+// Outlaw OS - Local AI agent (OpenAI-compatible local client)
 // ----------------------------------------------------------------------------
-// A deliberately lightweight wrapper around a *local* LM Studio instance
-// (http://127.0.0.1:1234/v1, OpenAI-compatible). No data ever leaves the
-// machine. LM Studio handles model loading and VRAM management itself, so this
-// module never pulls weights — the user picks a model in LM Studio and clicks
-// "Start Server".
+// A deliberately lightweight wrapper around a *local*, OpenAI-compatible chat
+// endpoint. The caller (main.js `aiBackend()`) chooses which of the three
+// engines to point it at by passing `baseUrl`: the bundled built-in model
+// (Ollama, the zero-setup default), an external Ollama server
+// (127.0.0.1:11434), or LM Studio (127.0.0.1:1234 — the fallback when no
+// baseUrl is given). No data ever leaves the machine. This module doesn't
+// manage weights — the built-in model is pulled by main.js (ensureBaseModel),
+// and Ollama / LM Studio load models themselves.
 //
 // This module ONLY does model I/O + parsing. It never executes anything; the
 // main process decides which proposed tool calls are safe to run and which

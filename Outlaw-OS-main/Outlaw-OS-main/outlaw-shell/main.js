@@ -1915,9 +1915,12 @@ function registerIpc() {
             runShell('cat "$HOME/.outlaw-session-pref" 2>/dev/null', { timeout: 1000 }),
             // Best-effort snapshot disk usage — only for the installed CodeMaker
             // path. If CodeMaker isn't installed, just return 0.
+            // awk program is SINGLE-quoted so bash (via runShell's `bash -c`)
+            // doesn't expand `$1` to an empty positional param before awk sees it
+            // — a double-quoted awk body made this always fail and report 0 MB.
             runShell(
                 'find /opt/outlaw-codemaker -path "*/.outlaw/snapshots" -prune -print 2>/dev/null ' +
-                '| xargs -I{} du -sm {} 2>/dev/null | awk "{s+=$1} END {print s+0}"',
+                "| xargs -I{} du -sm {} 2>/dev/null | awk '{s+=$1} END {print s+0}'",
                 { timeout: 4000 },
             ),
             runShell('systemctl is-active apparmor 2>/dev/null', { timeout: 2000 }),
