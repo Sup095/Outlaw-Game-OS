@@ -1587,6 +1587,11 @@ async function maybeShowQuickstart() {
 // ---------------------------------------------------------------------------
 // Round-2 QOL — battery indicator (laptops; hidden on desktops / no battery).
 let _batTick = 0;
+// QOL — low-battery warnings. One toast per threshold crossing (20% heads-up,
+// 10% urgent), latched so the ~16s battery poll doesn't nag every tick;
+// plugging in (or charging back above the threshold) re-arms them.
+let _batWarned20 = false;
+let _batWarned10 = false;
 async function updateBattery() {
     const el = $('#stat-battery'); if (!el) return;
     try {
@@ -1596,6 +1601,15 @@ async function updateBattery() {
         el.textContent = (b.charging ? '⚡ ' : '🔋 ') + b.percent + '%';
         el.title = 'Battery ' + b.percent + '% · ' + b.status;
         el.classList.toggle('warn-text', !b.charging && b.percent <= 15);
+        if (b.charging || b.percent > 22) _batWarned20 = false;
+        if (b.charging || b.percent > 12) _batWarned10 = false;
+        if (!b.charging && b.percent <= 10 && !_batWarned10) {
+            _batWarned10 = true; _batWarned20 = true;   // the 10% toast covers both
+            toast('🪫 Battery critically low (' + b.percent + '%) — plug in now or the machine may shut off.');
+        } else if (!b.charging && b.percent <= 20 && !_batWarned20) {
+            _batWarned20 = true;
+            toast('🔋 Battery low (' + b.percent + '%) — consider plugging in.');
+        }
     } catch { el.hidden = true; }
 }
 

@@ -61,27 +61,48 @@ const SUBSCRIBED_POLL_MS = 10_000;
 const VALID_MODES = new Set(['auto', 'off', 'lean', 'minimal']);
 
 
-// AMD (amdgpu) and some Intel discrete GPUs expose VRAM byte counters in the
-// DRM sysfs node. Direct file reads — cheaper than the nvidia-smi fork. Picks
-// the card with the largest total (the discrete one on hybrid laptops).
-// Integrated GPUs share system RAM and have no node → null → "no probe".
+// AMD (amdgpu) and Intel discrete GPUs expose VRAM byte counters in the DRM
+// sysfs tree — but under different names:
+//   * amdgpu:        <card>/device/mem_info_vram_total + mem_info_vram_used
+//   * Intel (i915):  <card>/lmem_total_bytes + lmem_avail_bytes  ("local mem")
+// Direct file reads — cheaper than the nvidia-smi fork. Picks the card with
+// the largest total (the discrete one on hybrid laptops). Integrated GPUs
+// share system RAM and expose neither → null → "no probe". (Intel's newer
+// `xe` driver exposes no simple free counter; those cards fall through until
+// the kernel grows one.)
 function _probeDrmSysfs(base = '/sys/class/drm') {
+    const readNum = (p) => {
+        try {
+            const n = Number(fs.readFileSync(p, 'utf8').trim());
+            return isFinite(n) && n >= 0 ? n : null;
+        } catch { return null; }
+    };
     try {
         let best = null;
         for (const entry of fs.readdirSync(base)) {
             if (!/^card\d+$/.test(entry)) continue;
-            const dev = `${base}/${entry}/device`;
-            try {
-                const total = Number(fs.readFileSync(`${dev}/mem_info_vram_total`, 'utf8').trim());
-                const used = Number(fs.readFileSync(`${dev}/mem_info_vram_used`, 'utf8').trim());
-                if (!isFinite(total) || total <= 0 || !isFinite(used)) continue;
-                if (!best || total > best.total) best = { total, used };
-            } catch { /* this card has no VRAM counters (integrated / other driver) */ }
+            const card = `${base}/${entry}`;
+            // amdgpu: total + used
+            const amdTotal = readNum(`${card}/device/mem_info_vram_total`);
+            const amdUsed = readNum(`${card}/device/mem_info_vram_used`);
+            if (amdTotal > 0 && amdUsed !== null) {
+                const free = Math.max(0, amdTotal - amdUsed);
+                if (!best || amdTotal > best.total) best = { total: amdTotal, free };
+                continue;
+            }
+            // Intel i915 discrete: total + available (free directly)
+            const lmemTotal = readNum(`${card}/lmem_total_bytes`);
+            const lmemAvail = readNum(`${card}/lmem_avail_bytes`);
+            if (lmemTotal > 0 && lmemAvail !== null) {
+                if (!best || lmemTotal > best.total) best = { total: lmemTotal, free: lmemAvail };
+            }
         }
         if (!best) return null;
-        const totalMb = Math.round(best.total / (1024 * 1024));
-        const freeMb = Math.max(0, Math.round((best.total - best.used) / (1024 * 1024)));
-        return { available: true, freeMb, totalMb };
+        return {
+            available: true,
+            freeMb: Math.round(best.free / (1024 * 1024)),
+            totalMb: Math.round(best.total / (1024 * 1024)),
+        };
     } catch { return null; /* no /sys (off-Linux) or unreadable */ }
 }
 

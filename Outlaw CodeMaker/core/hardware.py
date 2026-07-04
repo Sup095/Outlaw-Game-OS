@@ -66,25 +66,38 @@ class HardwareMonitor:
     def _init_drm_sysfs(self) -> None:
         """Find an AMD/Intel GPU with DRM VRAM counters (Linux only).
 
+        Two sysfs conventions:
+          * amdgpu:       <card>/device/mem_info_vram_total + mem_info_vram_used
+          * Intel (i915): <card>/lmem_total_bytes + lmem_avail_bytes
         Picks the card with the largest VRAM total (the discrete GPU on hybrid
-        laptops). Integrated GPUs share system RAM and expose no counters, so
+        laptops). Integrated GPUs share system RAM and expose neither, so
         they're correctly skipped — the RAM-tier fallback covers them.
+        Stores (kind, dir) so snapshot() knows which counters to read.
         """
+        self._drm_kind = ""
         try:
-            best: tuple[str, int] | None = None
+            best: tuple[str, str, int] | None = None   # (kind, dir, total)
             for path in glob.glob("/sys/class/drm/card*/device/mem_info_vram_total"):
                 try:
                     total = int(open(path).read().strip())
                 except (OSError, ValueError):
                     continue
-                if total > 0 and (best is None or total > best[1]):
-                    best = (os.path.dirname(path), total)
+                if total > 0 and (best is None or total > best[2]):
+                    best = ("amd", os.path.dirname(path), total)
+            for path in glob.glob("/sys/class/drm/card*/lmem_total_bytes"):
+                try:
+                    total = int(open(path).read().strip())
+                except (OSError, ValueError):
+                    continue
+                if total > 0 and (best is None or total > best[2]):
+                    best = ("i915", os.path.dirname(path), total)
             if best is None:
                 return
-            self._drm_dev = best[0]
+            self._drm_kind, self._drm_dev = best[0], best[1]
             driver = ""
+            uevent = os.path.join(best[1] if best[0] == "amd" else os.path.join(best[1], "device"), "uevent")
             try:
-                with open(os.path.join(best[0], "uevent")) as f:
+                with open(uevent) as f:
                     for ln in f:
                         if ln.startswith("DRIVER="):
                             driver = ln.strip().split("=", 1)[1]
@@ -92,11 +105,12 @@ class HardwareMonitor:
             except OSError:
                 pass
             self._gpu_name = _DRM_DRIVER_NAMES.get(driver, "GPU") + (f" ({driver})" if driver else " (DRM)")
-            logger.info("VRAM via DRM sysfs: %s at %s (%d MB)",
-                        self._gpu_name, self._drm_dev, best[1] // (1024 * 1024))
+            logger.info("VRAM via DRM sysfs (%s): %s at %s (%d MB)",
+                        self._drm_kind, self._gpu_name, self._drm_dev, best[2] // (1024 * 1024))
         except Exception as exc:  # noqa: BLE001 — never let a probe break startup
             logger.info("DRM sysfs VRAM probe unavailable: %s", exc)
             self._drm_dev = None
+            self._drm_kind = ""
 
     def snapshot(self) -> dict:
         snap: dict = {
@@ -117,14 +131,24 @@ class HardwareMonitor:
         elif self._drm_dev:
             # AMD/Intel: live byte counters from the DRM sysfs node.
             try:
-                with open(os.path.join(self._drm_dev, "mem_info_vram_total")) as f:
-                    total = int(f.read().strip())
-                with open(os.path.join(self._drm_dev, "mem_info_vram_used")) as f:
-                    used = int(f.read().strip())
+                if self._drm_kind == "i915":
+                    # Intel local memory: total + AVAILABLE (free comes directly).
+                    with open(os.path.join(self._drm_dev, "lmem_total_bytes")) as f:
+                        total = int(f.read().strip())
+                    with open(os.path.join(self._drm_dev, "lmem_avail_bytes")) as f:
+                        free = int(f.read().strip())
+                    used = max(0, total - free)
+                else:
+                    # amdgpu: total + USED.
+                    with open(os.path.join(self._drm_dev, "mem_info_vram_total")) as f:
+                        total = int(f.read().strip())
+                    with open(os.path.join(self._drm_dev, "mem_info_vram_used")) as f:
+                        used = int(f.read().strip())
+                    free = max(0, total - used)
                 if total > 0:
                     snap["vram_used_mb"] = _mb(used)
                     snap["vram_total_mb"] = _mb(total)
-                    snap["vram_free_mb"] = _mb(max(0, total - used))
+                    snap["vram_free_mb"] = _mb(free)
                     snap["vram_pct"] = round(used / total * 100, 1)
             except (OSError, ValueError):
                 pass  # transient read failure — this snapshot just has no VRAM

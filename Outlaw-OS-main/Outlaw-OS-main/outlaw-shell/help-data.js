@@ -411,11 +411,13 @@ window.OUTLAW_HELP = [
             + 'The icon hides on machines with no audio hardware.</p>',
     },
     {
-        id: 'battery', cat: 'The desktop', title: 'Battery indicator',
-        keywords: 'battery laptop charge charging percent power topbar low',
+        id: 'battery', cat: 'The desktop', title: 'Battery indicator & low-battery warnings',
+        keywords: 'battery laptop charge charging percent power topbar low warning critical',
         body: '<p>On laptops, the top bar shows your <b>battery percentage</b> with 🔋 (on battery) or '
-            + '⚡ (charging). It turns red when the battery drops below 15% and you are not plugged in. '
-            + 'Desktop computers with no battery don\'t show this.</p>',
+            + '⚡ (charging). It turns red below 15% when unplugged, and the OS warns you once at '
+            + '<b>20%</b> and again (urgently) at <b>10%</b> so you\'re never surprised by a dead '
+            + 'battery. Plugging in resets the warnings. Desktop computers with no battery don\'t '
+            + 'show any of this.</p>',
     },
     {
         id: 'sleep', cat: 'The desktop', title: 'Sleep / suspend',

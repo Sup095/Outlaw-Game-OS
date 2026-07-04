@@ -823,11 +823,13 @@ async function gatherSpecs() {
                     { timeout: 2000 }).catch(() => ({ stdout: '' }));
                 gpuName = (lspci.stdout || '').trim();
                 // C4 — AMD / Intel (and other non-NVIDIA) discrete VRAM via the DRM
-                // sysfs node (bytes). Integrated GPUs report 0 / no node — they
-                // share system RAM — so vramGb stays 0, which correctly routes to
-                // the RAM-based recommendations + the RAM-only AI path.
+                // sysfs nodes (bytes): amdgpu = device/mem_info_vram_total, Intel
+                // i915 discrete = lmem_total_bytes. Integrated GPUs report 0 / no
+                // node — they share system RAM — so vramGb stays 0, which correctly
+                // routes to the RAM-based recommendations + the RAM-only AI path.
                 const vram = await runShell(
-                    'cat /sys/class/drm/card*/device/mem_info_vram_total 2>/dev/null | sort -rn | head -n 1',
+                    '{ cat /sys/class/drm/card*/device/mem_info_vram_total 2>/dev/null; ' +
+                    'cat /sys/class/drm/card*/lmem_total_bytes 2>/dev/null; } | sort -rn | head -n 1',
                     { timeout: 2000 }).catch(() => ({ stdout: '' }));
                 const bytes = Number((vram.stdout || '').trim());
                 if (bytes > 0) vramGb = Math.round(bytes / (1024 ** 3) * 10) / 10;
@@ -1725,10 +1727,15 @@ function registerIpc() {
             { timeout: 2000 },
         );
         const name = (lspci.stdout || '').trim() || 'GPU n/a';
+        // amdgpu exposes total+used under device/; Intel i915 discrete exposes
+        // total+AVAILABLE on the card node (used = total - avail).
         const drm = await runShell(
-            'for d in /sys/class/drm/card*/device; do ' +
-            't=$(cat "$d/mem_info_vram_total" 2>/dev/null); ' +
-            'u=$(cat "$d/mem_info_vram_used" 2>/dev/null); ' +
+            'for c in /sys/class/drm/card*; do ' +
+            't=$(cat "$c/device/mem_info_vram_total" 2>/dev/null); ' +
+            'u=$(cat "$c/device/mem_info_vram_used" 2>/dev/null); ' +
+            'if [ -z "$t" ]; then t=$(cat "$c/lmem_total_bytes" 2>/dev/null); ' +
+            'a=$(cat "$c/lmem_avail_bytes" 2>/dev/null); ' +
+            '[ -n "$t" ] && [ -n "$a" ] && u=$((t-a)); fi; ' +
             '[ -n "$t" ] && echo "$t ${u:-0}"; done | sort -rn | head -n 1',
             { timeout: 2000 },
         );
