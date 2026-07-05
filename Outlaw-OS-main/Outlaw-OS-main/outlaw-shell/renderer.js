@@ -159,6 +159,81 @@ async function refreshDesktopUi() {
     } catch {}
 }
 
+// --- Display settings (xrandr modes + brightness) ----------------------------
+// The renderer half of the safe-apply design: main owns the real 15s revert
+// timer; this code just renders the pickers and the visible countdown.
+function _dispMsg(t) { const el = document.querySelector('#display-msg'); if (el) el.textContent = t || ''; }
+async function refreshDisplayUi() {
+    const box = document.querySelector('#display-outputs');
+    if (!box) return;
+    try {
+        const d = await api.display.info();
+        if (!d || !d.supported) box.innerHTML = '<div class="muted">Display settings run on Outlaw OS.</div>';
+        else if (!d.outputs.length) box.innerHTML = '<div class="muted">No displays detected.</div>';
+        else {
+            box.innerHTML = '';
+            for (const o of d.outputs) {
+                const row = document.createElement('div');
+                row.className = 'setting';
+                const opts = [];
+                for (const m of o.modes) for (const r of m.rates) {
+                    const sel = o.current && o.current.mode === m.mode && o.current.rate === r;
+                    opts.push(`<option value="${_escapeHtml(m.mode)}|${_escapeHtml(r)}"${sel ? ' selected' : ''}>${_escapeHtml(m.mode)} @ ${_escapeHtml(r)} Hz</option>`);
+                }
+                row.innerHTML =
+                    `<div class="label">${_escapeHtml(o.name)}${o.primary ? ' <span class="dim">(primary)</span>' : ''}`
+                    + `<small>${o.current ? 'Now: ' + _escapeHtml(o.current.mode) + ' @ ' + _escapeHtml(o.current.rate) + ' Hz' : 'Current mode unknown'}</small></div>`
+                    + `<div class="row" style="gap:6px;">`
+                    + `<select data-disp-out="${_escapeHtml(o.name)}" aria-label="Resolution for ${_escapeHtml(o.name)}" style="width:auto;min-width:190px;">${opts.join('')}</select>`
+                    + `<button data-disp-apply="${_escapeHtml(o.name)}" title="Apply this mode (auto-reverts in 15s unless you keep it)">Apply</button></div>`;
+                box.appendChild(row);
+            }
+            enhanceSelects(box);   // fresh selects each render — wrappers die with them
+        }
+    } catch { box.innerHTML = '<div class="muted">Couldn\'t read display info.</div>'; }
+    try {
+        const b = await api.display.brightnessInfo();
+        const row = document.querySelector('#brightness-row');
+        const sl = document.querySelector('#brightness-slider');
+        const sub = document.querySelector('#brightness-sub');
+        if (row) row.hidden = !(b && b.present);
+        if (b && b.present && sl) sl.value = b.pct;
+        if (b && b.present && b.writable === false && sub) {
+            sub.textContent = 'Backlight found, but no permission to change it — fresh-install a current ISO to pick up the udev rule.';
+        }
+    } catch {}
+}
+// Keep/revert countdown dialog (the visible half of main's auto-revert).
+let _dispCountTimer = null;
+let _dispPending = null;
+function _closeDispConfirm() {
+    const m = document.querySelector('#disp-confirm');
+    if (m) m.classList.remove('show');
+    if (_dispCountTimer) { clearInterval(_dispCountTimer); _dispCountTimer = null; }
+    _dispPending = null;
+}
+function openDispConfirm(payload) {
+    const m = document.querySelector('#disp-confirm');
+    if (!m) return;
+    _dispPending = payload || null;
+    let left = 15;
+    const c = document.querySelector('#disp-count');
+    if (c) c.textContent = left;
+    m.classList.add('show');
+    const keep = document.querySelector('#disp-keep');
+    if (keep) keep.focus();
+    _dispCountTimer = setInterval(() => {
+        left--;
+        if (c && left >= 0) c.textContent = left;
+        if (left <= 0) {
+            // Main's timer has already reverted (or is about to) — just reflect it.
+            _closeDispConfirm();
+            _dispMsg('No confirmation — reverted to the previous mode.');
+            refreshDisplayUi();
+        }
+    }, 1000);
+}
+
 // Recent-notifications list (read-only view over the daemon's history).
 async function renderNotifHistory() {
     const box = document.querySelector('#notif-history');
@@ -201,6 +276,14 @@ async function refreshQuickUi() {
                 const pct = document.querySelector('#qk-vol-pct'); if (pct) pct.textContent = a.volume + '%';
             }
         }).catch(() => { const row = document.querySelector('#qk-vol-row'); if (row) row.hidden = true; }),
+        api.display.brightnessInfo().then((b) => {
+            const row = document.querySelector('#qk-bright-row');
+            if (row) row.hidden = !(b && b.present && b.writable !== false);
+            if (b && b.present) {
+                const sl = document.querySelector('#qk-bright'); if (sl) sl.value = b.pct;
+                const pct = document.querySelector('#qk-bright-pct'); if (pct) pct.textContent = b.pct + '%';
+            }
+        }).catch(() => { const row = document.querySelector('#qk-bright-row'); if (row) row.hidden = true; }),
     ]);
 }
 function closeQuickPopover() { const p = document.querySelector('#quick-popover'); if (p) p.hidden = true; }
@@ -672,7 +755,7 @@ function showScreen(name) {
     if (name === 'gaming') refreshGaming();
     if (name === 'apps') { loadAppsCatalog(); const as = $('#apps-search'); if (as) as.focus(); }
     if (name === 'help') { renderHelp(($('#help-search') || {}).value || ''); const hs = $('#help-search'); if (hs) hs.focus(); }
-    if (name === 'settings') { const ss = $('#settings-search'); if (ss) ss.value = ''; filterSettings(''); refreshNetStatus(); refreshDriversUi(); refreshSwapStatus(); refreshAirplane(); refreshRegionUi(); refreshBtUi(); refreshDesktopUi(); if (window._refreshSecurityUi) window._refreshSecurityUi(); }
+    if (name === 'settings') { const ss = $('#settings-search'); if (ss) ss.value = ''; filterSettings(''); refreshNetStatus(); refreshDriversUi(); refreshSwapStatus(); refreshAirplane(); refreshRegionUi(); refreshBtUi(); refreshDesktopUi(); refreshDisplayUi(); if (window._refreshSecurityUi) window._refreshSecurityUi(); }
     if (name === 'ai') $('#ai-in').focus();
     if (name === 'terminal') $('#term-in').focus();
     // System Core lifecycle — init when navigating to it, teardown otherwise.
@@ -3685,6 +3768,51 @@ function wire() {
     if (dndLast) dndLast.addEventListener('click', async () => { try { await api.notif.showLast(); } catch {} });
     const nhBtn = $('#notif-history-btn');
     if (nhBtn) nhBtn.addEventListener('click', renderNotifHistory);
+    // Display settings — apply (delegated), keep/revert, reset, brightness.
+    { const dbox = $('#display-outputs'); if (dbox) dbox.addEventListener('click', async (e) => {
+        const btn = e.target.closest('[data-disp-apply]'); if (!btn) return;
+        const name = btn.dataset.dispApply;
+        const sel = dbox.querySelector(`select[data-disp-out="${CSS.escape(name)}"]`);
+        if (!sel || !sel.value) return;
+        const [mode, rate] = sel.value.split('|');
+        btn.disabled = true;
+        try {
+            const r = await api.display.setMode({ output: name, mode, rate });
+            if (!r || !r.ok) _dispMsg((r && r.error) || 'Couldn\'t apply that mode.');
+            else openDispConfirm({ output: name, mode, rate });
+        } catch (err) { _dispMsg('Error: ' + ((err && err.message) || err)); }
+        btn.disabled = false;
+    }); }
+    { const k = $('#disp-keep'); if (k) k.addEventListener('click', async () => {
+        try { await api.display.confirmMode(_dispPending || {}); } catch {}
+        _closeDispConfirm(); _dispMsg('Display settings kept — they\'ll be restored on every boot.');
+        refreshDisplayUi();
+    }); }
+    { const rv = $('#disp-revert'); if (rv) rv.addEventListener('click', async () => {
+        try { await api.display.revertMode(); } catch {}
+        _closeDispConfirm(); _dispMsg('Reverted to the previous mode.');
+        refreshDisplayUi();
+    }); }
+    { const dr = $('#display-reset'); if (dr) dr.addEventListener('click', async () => {
+        dr.disabled = true;
+        try {
+            const r = await api.display.resetAuto();
+            _dispMsg(r && r.ok ? 'Every display is back on its native mode.' : ((r && r.error) || 'Reset failed.'));
+        } catch {}
+        dr.disabled = false;
+        refreshDisplayUi();
+    }); }
+    { const bs = $('#brightness-slider'); if (bs) bs.addEventListener('input', async (e) => {
+        try {
+            const r = await api.display.setBrightness(parseInt(e.target.value, 10));
+            if (r && !r.ok && r.error) _dispMsg(r.error);
+        } catch {}
+    }); }
+    { const sl = $('#qk-bright'); if (sl) sl.addEventListener('input', async (e) => {
+        const v = parseInt(e.target.value, 10) || 5;
+        const pct = $('#qk-bright-pct'); if (pct) pct.textContent = v + '%';
+        try { await api.display.setBrightness(v); } catch {}
+    }); }
     // Tier-2 — power management. Persisting the setting is enough: main's
     // settings:set hook re-syncs the idle watch / X blanking immediately.
     const alSel = $('#autolock-select');
@@ -3817,6 +3945,12 @@ function wire() {
             // registration), so after consuming the key it must stop the later
             // document-level listener — that one would see the surface already
             // closed and close the power menu / cancel a confirm dialog too.
+            // Display keep/revert dialog first: Esc = revert (the safe choice).
+            const dc = $('#disp-confirm');
+            if (dc && dc.classList.contains('show')) {
+                const rv = $('#disp-revert'); if (rv) rv.click();
+                e.stopImmediatePropagation(); return;
+            }
             const pal = $('#palette'); if (pal && !pal.hidden) { closePalette(); e.stopImmediatePropagation(); return; }
             const qp = $('#quick-popover'); if (qp && !qp.hidden) { closeQuickPopover(); e.stopImmediatePropagation(); return; }
             const cp = $('#cal-popover'); if (cp && !cp.hidden) { closeCalPopover(); e.stopImmediatePropagation(); return; }
@@ -3904,7 +4038,8 @@ function wire() {
         // dialog, and wipe the calculator behind them.
         const _escSurfaceOpen = ['#palette', '#quick-popover', '#cal-popover', '#volume-popover']
             .some((s) => { const el = $(s); return el && !el.hidden; })
-            || (($('#loadscreen') || {}).classList || { contains: () => false }).contains('show');
+            || (($('#loadscreen') || {}).classList || { contains: () => false }).contains('show')
+            || (($('#disp-confirm') || {}).classList || { contains: () => false }).contains('show');
         if (e.key === 'Escape' && !_escSurfaceOpen) { closePower(); if (confirmResolver) closeConfirm(false); }
         if ($('#screen-calc').classList.contains('active') && $('#app').classList.contains('ready')) {
             // Don't drive the calculator while the user is typing in a text

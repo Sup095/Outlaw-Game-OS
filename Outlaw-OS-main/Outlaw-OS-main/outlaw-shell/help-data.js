@@ -225,6 +225,18 @@ window.OUTLAW_HELP = [
             + 'list (deletes the stale saved profile), then connect fresh with the new password.</p>',
     },
     {
+        id: 'display-settings', cat: 'Settings & updates', title: 'Display resolution & brightness',
+        keywords: 'display resolution refresh rate hz monitor screen mode xrandr brightness backlight dim revert',
+        body: '<p><b>Settings → Display</b> lists every connected screen with its available '
+            + 'resolutions and refresh rates (only modes the display itself reports — nothing '
+            + 'experimental). Hit <b>Apply</b> and you get <b>15 seconds</b> to click <i>Keep '
+            + 'settings</i>; if you don\'t — say the picture went black — the OS <b>reverts on its '
+            + 'own</b>, so you can\'t get stuck. Kept modes are restored on every boot (and '
+            + 're-checked against the connected display first). <b>Reset to automatic</b> puts '
+            + 'everything back on native modes. On laptops the same card has a <b>Brightness</b> '
+            + 'slider (also in ☰ quick settings) — it dims but never goes fully dark.</p>',
+    },
+    {
         id: 'screen-recording', cat: 'The desktop', title: 'Screen recording',
         keywords: 'screen record recording video capture clip movie ffmpeg rec videos',
         body: '<p>Record the screen from the topbar <b>☰ quick settings → 🎥</b> (or the command '

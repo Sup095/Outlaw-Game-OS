@@ -741,6 +741,19 @@
                 <div id="desktop-msg" class="muted" aria-live="polite" style="font-size:12px;min-height:14px;"></div>
             </div>
 
+            <div class="card" id="display-card">
+                <h3>Display</h3>
+                <div id="display-outputs"><div class="muted">Checking displays…</div></div>
+                <div class="setting" id="brightness-row" hidden>
+                    <div class="label">Brightness<small id="brightness-sub">Screen backlight (laptops). It can dim, but never goes fully dark.</small></div>
+                    <input type="range" id="brightness-slider" min="5" max="100" aria-label="Screen brightness" style="width:200px;">
+                </div>
+                <div class="row" style="gap:8px;margin-top:6px;">
+                    <button id="display-reset" title="Back to every display's native (preferred) mode">Reset to automatic</button>
+                    <span id="display-msg" class="muted" aria-live="polite" style="font-size:12px;"></span>
+                </div>
+            </div>
+
             <div class="card" id="power-card">
                 <h3>Power</h3>
                 <div class="setting">
@@ -981,6 +994,20 @@
     </div>
 </div>
 
+<!-- Display keep/revert countdown. The REAL revert timer runs in the main
+     process — this dialog is just the visible half. If the user can't see or
+     click anything (bad mode), main restores the old mode on its own. -->
+<div class="modal-bg" id="disp-confirm">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="disp-confirm-title">
+        <h3 id="disp-confirm-title">Keep these display settings?</h3>
+        <p class="muted">Reverting to the previous mode in <b id="disp-count">15</b>s unless you keep them.</p>
+        <div class="row">
+            <button id="disp-keep" class="primary">Keep settings</button>
+            <button id="disp-revert">Revert now</button>
+        </div>
+    </div>
+</div>
+
 <div class="modal-bg" id="power-modal">
     <div class="modal" role="dialog" aria-modal="true" aria-labelledby="power-title">
         <h3 id="power-title">Power</h3>
@@ -1024,6 +1051,11 @@
         <span aria-hidden="true">🔊</span>
         <input type="range" id="qk-vol" min="0" max="100" aria-label="Volume" style="flex:1;min-width:120px;">
         <span id="qk-vol-pct" class="mono" style="min-width:38px;text-align:right;">--%</span>
+    </div>
+    <div class="row" id="qk-bright-row" style="gap:8px;margin-top:10px;align-items:center;" hidden>
+        <span aria-hidden="true">🔆</span>
+        <input type="range" id="qk-bright" min="5" max="100" aria-label="Screen brightness" style="flex:1;min-width:120px;">
+        <span id="qk-bright-pct" class="mono" style="min-width:38px;text-align:right;">--%</span>
     </div>
     <div class="row" style="gap:6px;margin-top:10px;flex-wrap:wrap;">
         <button id="qk-screenshot" title="Take a screenshot (PrtSc)" aria-label="Take a screenshot" style="padding:7px 10px;">📷</button>

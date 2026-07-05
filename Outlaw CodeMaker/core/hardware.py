@@ -41,6 +41,7 @@ class HardwareMonitor:
         self._handle = None
         self._gpu_name = ""
         self._drm_dev: str | None = None
+        self._drm_kind: str = ""   # 'amd' | 'i915' when _drm_dev is set
         self._init_nvml()
         if not self._nvml_ok:
             self._init_drm_sysfs()

@@ -155,6 +155,12 @@ const DEFAULT_SETTINGS = {
     autoSleepMin: 0,         // suspend the machine after N minutes idle. 0 = never.
     screenBlankMin: -1,      // blank the screen (X screensaver/DPMS) after N min. -1 = system default, 0 = never.
     recentApps: [],          // MRU list of launched app ids for the Dashboard "Recent" row (max 8).
+    // Display settings. Only modes the user explicitly KEPT through the 15s
+    // auto-revert confirm are stored here ({outputName: {mode, rate}}) and
+    // re-applied at boot — and even then only after re-validating against the
+    // modes xrandr lists RIGHT NOW, so a changed monitor can't get a bad mode.
+    displayModes: {},
+    brightnessPct: -1,       // backlight %, floored at 5 so it can't go black. -1 = untouched.
     // Phase 6 — first-boot Quickstart tour. Shown once on the first desktop
     // entry; set true on Skip/Finish ("don't show again"). Replayable from Help.
     quickstartSeen: false,
@@ -1440,6 +1446,88 @@ function restoreScreenBlankDefaults() {
     } catch { /* xset absent — no-op */ }
 }
 
+// ----- Display settings (xrandr) + brightness (backlight sysfs) -----------
+// THE safety design for the one feature that can black-screen a machine:
+//   * only modes the display ITSELF advertises (parsed from xrandr) can be
+//     applied — arbitrary modelines never exist here;
+//   * every apply arms a MAIN-PROCESS 15s revert timer. If the user doesn't
+//     confirm (because the screen went black / unusable), main restores the
+//     previous mode on its own — a wedged or invisible renderer can't stop it;
+//   * boot re-apply only uses modes the user explicitly KEPT, re-validated
+//     against what xrandr lists at that moment (monitor swapped = skip).
+function _parseXrandr(out) {
+    const outputs = [];
+    let cur = null;
+    for (const line of String(out || '').split('\n')) {
+        const head = line.match(/^(\S+) (connected|disconnected)\b(.*)$/);
+        if (head) {
+            if (head[2] === 'connected') {
+                cur = { name: head[1], primary: /\bprimary\b/.test(head[3]), current: null, modes: [] };
+                outputs.push(cur);
+            } else cur = null;
+            continue;
+        }
+        if (!cur) continue;
+        const m = line.match(/^\s+(\d+x\d+i?)\s+(.+)$/);
+        if (!m) continue;
+        const rates = [];
+        for (const tok of m[2].trim().split(/\s+/)) {
+            const r = tok.match(/^(\d+(?:\.\d+)?)([*+]*)$/);
+            if (!r) continue;
+            rates.push(r[1]);
+            if (r[2].includes('*')) cur.current = { mode: m[1], rate: r[1] };
+        }
+        if (rates.length) cur.modes.push({ mode: m[1], rates });
+    }
+    return outputs;
+}
+async function _displayInfo() {
+    const r = await runShell('xrandr --query 2>/dev/null', { timeout: 5000 });
+    return _parseXrandr(r.stdout);
+}
+function _xrandrApply(output, mode, rate) {
+    return new Promise((resolve) => {
+        const args = ['--output', output, '--mode', mode];
+        if (rate) args.push('--rate', rate);
+        execFile('xrandr', args, { timeout: 10000 },
+            (err, so, se) => resolve({ ok: !err, error: (se || so || (err && err.message) || '').trim().slice(0, 200) }));
+    });
+}
+let _dispRevert = null;   // { timer, output, prevMode, prevRate } while a confirm window is open
+function _dispDoRevert() {
+    const s = _dispRevert;
+    if (!s) return;
+    _dispRevert = null;
+    clearTimeout(s.timer);
+    if (s.prevMode) _xrandrApply(s.output, s.prevMode, s.prevRate);
+    else execFile('xrandr', ['--output', s.output, '--auto'], { timeout: 10000 }, () => {});
+}
+function _backlightDir() {
+    try {
+        const base = '/sys/class/backlight';
+        const first = fs.readdirSync(base).filter(Boolean)[0];
+        return first ? `${base}/${first}` : null;
+    } catch { return null; }
+}
+function applyBrightnessPct(pct) {
+    if (!IS_LINUX) return { ok: false, error: 'Brightness runs on Outlaw OS.' };
+    const dir = _backlightDir();
+    if (!dir) return { ok: false, error: 'No controllable backlight on this machine.' };
+    // Floor 5% — the slider can dim, never black the screen entirely.
+    const p = Math.max(5, Math.min(100, Math.round(Number(pct) || 0)));
+    try {
+        const max = parseInt(fs.readFileSync(`${dir}/max_brightness`, 'utf8').trim(), 10);
+        if (!isFinite(max) || max <= 0) return { ok: false, error: 'Backlight reports no range.' };
+        fs.writeFileSync(`${dir}/brightness`, String(Math.max(1, Math.round(max * p / 100))));
+        return { ok: true, pct: p };
+    } catch (e) {
+        const perm = e && (e.code === 'EACCES' || e.code === 'EPERM');
+        return { ok: false, error: perm
+            ? 'No permission to change the backlight — the udev rule is missing (fresh-install a current ISO).'
+            : 'Couldn\'t set brightness: ' + ((e && e.message) || e) };
+    }
+}
+
 // System-wide idle watch for auto-lock and auto-sleep. Uses Electron's
 // powerMonitor.getSystemIdleTime() — X-server-wide idle, so activity in ANY
 // window (a fullscreen game, a terminal) counts, not just activity inside the
@@ -1576,6 +1664,87 @@ function registerIpc() {
         try { const c = spawn('blueman-manager', [], { detached: true, stdio: 'ignore' }); c.on('error', () => {}); c.unref(); }
         catch { return { ok: false, error: 'Could not open the Bluetooth manager.' }; }
         return { ok: true };
+    });
+
+    // ----- Display settings + brightness -----------------------------------
+    ipcMain.handle('display:info', async () => {
+        if (!IS_LINUX) return { supported: false, outputs: [] };
+        const outputs = await _displayInfo();
+        return { supported: true, outputs, pending: !!_dispRevert };
+    });
+    ipcMain.handle('display:set-mode', async (_e, payload) => {
+        if (!IS_LINUX) return { ok: false, error: 'Display settings run on Outlaw OS.' };
+        if (_dispRevert) return { ok: false, error: 'Confirm or revert the pending change first.' };
+        const output = String((payload && payload.output) || '');
+        const mode = String((payload && payload.mode) || '');
+        const rate = String((payload && payload.rate) || '');
+        // Validate EVERYTHING against what xrandr itself lists right now.
+        const outputs = await _displayInfo();
+        const o = outputs.find((x) => x.name === output);
+        if (!o) return { ok: false, error: 'Unknown display output.' };
+        const mm = o.modes.find((x) => x.mode === mode);
+        if (!mm) return { ok: false, error: 'That display doesn\'t list that mode.' };
+        if (rate && !mm.rates.includes(rate)) return { ok: false, error: 'That mode doesn\'t list that refresh rate.' };
+        const prev = o.current || null;
+        const r = await _xrandrApply(output, mode, rate);
+        if (!r.ok) return { ok: false, error: r.error || 'xrandr rejected the mode.' };
+        // Arm the MAIN-SIDE auto-revert — fires even if the renderer never
+        // comes back. 15s + a little slack over the renderer's countdown.
+        _dispRevert = {
+            output,
+            prevMode: prev && prev.mode,
+            prevRate: prev && prev.rate,
+            timer: setTimeout(_dispDoRevert, 15500),
+        };
+        return { ok: true, revertSeconds: 15 };
+    });
+    ipcMain.handle('display:confirm-mode', async (_e, payload) => {
+        const s = _dispRevert;
+        if (!s) return { ok: false, error: 'Nothing to confirm.' };
+        clearTimeout(s.timer);
+        _dispRevert = null;
+        // Persist ONLY user-kept modes; boot re-applies them after re-validation.
+        const output = String((payload && payload.output) || s.output);
+        const mode = String((payload && payload.mode) || '');
+        const rate = String((payload && payload.rate) || '');
+        if (mode) {
+            const dm = { ...(settings.displayModes || {}) };
+            dm[output] = { mode, rate };
+            settings = saveSettings({ ...settings, displayModes: dm });
+        }
+        return { ok: true };
+    });
+    ipcMain.handle('display:revert-mode', async () => {
+        if (!_dispRevert) return { ok: false, error: 'Nothing to revert.' };
+        _dispDoRevert();
+        return { ok: true };
+    });
+    ipcMain.handle('display:reset-auto', async () => {
+        if (!IS_LINUX) return { ok: false, error: 'Display settings run on Outlaw OS.' };
+        if (_dispRevert) _dispDoRevert();
+        // Back to every output's preferred mode — the always-safe baseline —
+        // and stop re-applying saved modes at boot.
+        const r = await runShell('xrandr --auto 2>&1', { timeout: 10000 });
+        settings = saveSettings({ ...settings, displayModes: {} });
+        return { ok: r.code === 0, error: r.code === 0 ? '' : (r.stdout || '').slice(0, 200) };
+    });
+    ipcMain.handle('display:brightness-info', () => {
+        if (!IS_LINUX) return { present: false };
+        const dir = _backlightDir();
+        if (!dir) return { present: false };
+        try {
+            const max = parseInt(fs.readFileSync(`${dir}/max_brightness`, 'utf8').trim(), 10);
+            const cur = parseInt(fs.readFileSync(`${dir}/brightness`, 'utf8').trim(), 10);
+            if (!isFinite(max) || max <= 0) return { present: false };
+            let writable = true;
+            try { fs.accessSync(`${dir}/brightness`, fs.constants.W_OK); } catch { writable = false; }
+            return { present: true, pct: Math.max(1, Math.round(cur / max * 100)), writable };
+        } catch { return { present: false }; }
+    });
+    ipcMain.handle('display:set-brightness', async (_e, pct) => {
+        const r = applyBrightnessPct(pct);
+        if (r.ok) settings = saveSettings({ ...settings, brightnessPct: r.pct });
+        return r;
     });
 
     // ----- Night light (warm color-temperature filter) --------------------
@@ -3565,6 +3734,28 @@ app.whenReady().then(() => {
     // idle watch (a no-op interval-wise when both timeouts are 0/off).
     applyScreenBlank(settings && settings.screenBlankMin);
     syncIdleWatch();
+    // Display — re-apply modes the user explicitly KEPT, but only after
+    // re-validating each against what xrandr lists right now (monitor swapped
+    // or mode gone → skip silently, native mode stays). Never-break-boot:
+    // an invalid/failed apply changes nothing. Brightness likewise (floored).
+    if (IS_LINUX && settings && settings.displayModes && Object.keys(settings.displayModes).length) {
+        (async () => {
+            try {
+                const outputs = await _displayInfo();
+                for (const [name, m] of Object.entries(settings.displayModes)) {
+                    if (!m || !m.mode) continue;
+                    const o = outputs.find((x) => x.name === name);
+                    const mm = o && o.modes.find((x) => x.mode === m.mode);
+                    if (!mm) continue;
+                    const rate = (m.rate && mm.rates.includes(m.rate)) ? m.rate : '';
+                    await _xrandrApply(name, m.mode, rate);
+                }
+            } catch { /* display restore is best-effort */ }
+        })();
+    }
+    if (IS_LINUX && settings && Number(settings.brightnessPct) >= 5) {
+        try { applyBrightnessPct(settings.brightnessPct); } catch { /* best-effort */ }
+    }
     createWindow();
     startAutoCheck();
     // SC7 — start the VRAM tier background poll now that a renderer exists.

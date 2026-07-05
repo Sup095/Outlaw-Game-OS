@@ -189,6 +189,17 @@ contextBridge.exposeInMainWorld('outlaw', {
         manage: () => ipcRenderer.invoke('bt:manage'),
     },
 
+    // --- Display settings (xrandr, main-side auto-revert) + brightness ------
+    display: {
+        info: () => ipcRenderer.invoke('display:info'),
+        setMode: (payload) => ipcRenderer.invoke('display:set-mode', payload),
+        confirmMode: (payload) => ipcRenderer.invoke('display:confirm-mode', payload),
+        revertMode: () => ipcRenderer.invoke('display:revert-mode'),
+        resetAuto: () => ipcRenderer.invoke('display:reset-auto'),
+        brightnessInfo: () => ipcRenderer.invoke('display:brightness-info'),
+        setBrightness: (pct) => ipcRenderer.invoke('display:set-brightness', pct),
+    },
+
     // --- Night light (warm color-temperature filter) -----------------------
     nightlight: {
         status: () => ipcRenderer.invoke('nightlight:status'),
